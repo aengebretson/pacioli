@@ -1,0 +1,14 @@
+{
+  "name": "pacioli",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "dev": "pnpm --filter @pacioli/web dev",
+    "build:web": "pnpm --filter @pacioli/web build",
+    "lint": "pnpm --filter @pacioli/web lint",
+    "typecheck": "pnpm --filter @pacioli/web typecheck"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
