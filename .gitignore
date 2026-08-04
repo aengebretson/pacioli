@@ -1,0 +1,24 @@
+# CMake
+/build/
+CMakeUserPresets.json
+compile_commands.json
+
+# Node / Next.js
+node_modules/
+.pnpm-store/
+.next/
+out/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+
+# Test and coverage output
+coverage/
+Testing/
