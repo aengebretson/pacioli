@@ -1,6 +1,7 @@
 #pragma once
 
 #include "luca/core/error.hpp"
+#include "luca/core/detail/wide_integer.hpp"
 
 #include <cstdint>
 #include <expected>
@@ -9,7 +10,6 @@
 
 namespace luca::detail {
 
-using Wide = __int128_t;
 constexpr Wide pow10(unsigned scale) {
   Wide result = 1;
   while (scale--) result *= 10;

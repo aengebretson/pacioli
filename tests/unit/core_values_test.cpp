@@ -87,6 +87,6 @@ int main() {
   assert(!Money::from_scaled(std::numeric_limits<std::int64_t>::max(), usd)
               .add(Money::from_scaled(1, usd)));
 
-  assert(apply_rate(Money::from_scaled(100000000, usd), parsed<Rate>("0.0525"))
+  assert(scale(Money::from_scaled(100000000, usd), parsed<Rate>("0.0525"))
              ->scaled_value() == 5250000);
 }

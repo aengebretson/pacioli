@@ -99,7 +99,7 @@ class Money {
   return Money::from_scaled(result->scaled_value(), quote_currency);
 }
 
-[[nodiscard]] inline std::expected<Money, ValueError> apply_rate(
+[[nodiscard]] inline std::expected<Money, ValueError> scale(
     Money amount, Rate rate, RoundingMode rounding = RoundingMode::half_even) noexcept {
   auto result = detail::multiply<Money::scale>(
       detail::FixedPoint<Money::scale>::from_scaled(amount.scaled_value()), rate.fixed(), rounding);
