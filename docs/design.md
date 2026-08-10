@@ -79,6 +79,19 @@ events may have the same `effective_at` or arrive out of order, so that timestam
 alone is not a total replay order; tie-breaking and lifecycle ordering remain
 ledger concerns.
 
+### In-memory ledger
+
+The initial `Ledger` owns immutable canonical events in contiguous `LedgerEntry`
+values and assigns a local acceptance sequence beginning at 1. Event IDs are
+unique within a ledger: a duplicate is rejected without consuming a sequence or
+mutating the original entry. Acceptance order remains sequence order, while
+economic replay and half-open economic-time range queries order entries by
+`effective_at`, then sequence. The sequence is only a deterministic tie-breaker;
+it is not exchange, broker, business, or global market ordering. Out-of-order
+economic times are valid. This first ledger is in-memory, persistence-neutral,
+and not concurrently mutable; persistence and synchronization belong in later
+wrappers rather than its financial semantics.
+
 ## Deterministic computation
 
 Financial calculations should behave like pure transformations wherever practical:
