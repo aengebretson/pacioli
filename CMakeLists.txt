@@ -8,6 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_library(pacioli INTERFACE)
 target_include_directories(pacioli INTERFACE
   ${CMAKE_CURRENT_SOURCE_DIR}/libs/ledger/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/libs/portfolio/include
   ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 option(PACIOLI_BUILD_TESTS "Build tests" ON)
@@ -33,6 +34,10 @@ if(PACIOLI_BUILD_TESTS)
   add_executable(pacioli_ledger_test tests/unit/ledger_test.cpp)
   target_link_libraries(pacioli_ledger_test PRIVATE pacioli)
   add_test(NAME pacioli_ledger_test COMMAND pacioli_ledger_test)
+
+  add_executable(pacioli_position_projection_test tests/unit/position_projection_test.cpp)
+  target_link_libraries(pacioli_position_projection_test PRIVATE pacioli)
+  add_test(NAME pacioli_position_projection_test COMMAND pacioli_position_projection_test)
 
   add_test(
     NAME pacioli_conformance_test
