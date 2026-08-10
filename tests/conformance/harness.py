@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,26 @@ DATE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
 TIMESTAMP = re.compile(
     r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})$"
 )
+
+
+def _is_date(value: str) -> bool:
+    if not DATE.fullmatch(value):
+        return False
+    try:
+        date.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _is_timestamp(value: str) -> bool:
+    if not TIMESTAMP.fullmatch(value):
+        return False
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None
 
 
 class FixtureError(ValueError):
@@ -79,7 +100,7 @@ def _validate_settlement(record: dict[str, Any], context: str) -> None:
     _decimal(record, "amount", context)
     if record.get("direction") not in ("payable", "receivable"):
         raise FixtureError(f"{context}: direction must be payable or receivable")
-    if not DATE.fullmatch(_required_string(record, "settlement_date", context)):
+    if not _is_date(_required_string(record, "settlement_date", context)):
         raise FixtureError(f"{context}: settlement_date must be an ISO 8601 date")
 
 
@@ -91,10 +112,17 @@ VALIDATORS = {
 
 
 def _validate_state(document: dict[str, Any], kind: str, context: str) -> None:
-    if set(document) != {"as_of", kind}:
-        raise FixtureError(f"{context}: expected exactly as_of and {kind}")
-    if not TIMESTAMP.fullmatch(_required_string(document, "as_of", context)):
+    anchors = set(document) & {"as_of", "as_of_date"}
+    if len(anchors) != 1 or set(document) != anchors | {kind}:
+        raise FixtureError(
+            f"{context}: expected {kind} and exactly one of as_of or as_of_date"
+        )
+    anchor = anchors.pop()
+    value = _required_string(document, anchor, context)
+    if anchor == "as_of" and not _is_timestamp(value):
         raise FixtureError(f"{context}: as_of must be an ISO 8601 timestamp with timezone")
+    if anchor == "as_of_date" and not _is_date(value):
+        raise FixtureError(f"{context}: as_of_date must be an ISO 8601 date")
     for index, record in enumerate(_records(document[kind], f"{context}.{kind}")):
         VALIDATORS[kind](record, f"{context}.{kind}[{index}]")
 
@@ -126,12 +154,12 @@ def _validate_definition(definition: dict[str, Any], directory: Path) -> None:
             _decimal(event, "quantity", context)
             _currency(event, context)
             _decimal(event, "price", context)
-            if not DATE.fullmatch(_required_string(event, "settlement_date", context)):
+            if not _is_date(_required_string(event, "settlement_date", context)):
                 raise FixtureError(f"{context}: settlement_date must be an ISO 8601 date")
             timestamp_field = "trade_at"
         else:
             raise FixtureError(f"{context}: unsupported input type {event_type!r}")
-        if not TIMESTAMP.fullmatch(_required_string(event, timestamp_field, context)):
+        if not _is_timestamp(_required_string(event, timestamp_field, context)):
             raise FixtureError(f"{context}: {timestamp_field} must be an ISO 8601 timestamp with timezone")
 
     projections = definition.get("expected_projections")

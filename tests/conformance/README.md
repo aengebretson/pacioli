@@ -11,14 +11,25 @@ inputs, and maps named lifecycle phases to expected position, cash, and
 settlement files. Expected files use these shapes:
 
 - `{"as_of": ..., "positions": [...]}`
-- `{"as_of": ..., "cash": [...]}`
+- `{"as_of_date": ..., "cash": [...]}`
 - `{"as_of": ..., "settlements": [...]}`
+
+Each expected-state file has exactly one temporal anchor: `as_of` for an
+expectation at a timestamp with a timezone, or `as_of_date` for an expectation
+at date granularity. Settlement-date expectations use `as_of_date` and do not
+imply a settlement time, timezone, or market-calendar rule.
 
 The initial cases assume that equity positions change on trade date, while
 settled cash moves only on settlement. A buy creates a payable and a sell creates
 a receivable; settlement clears that obligation and updates settled cash.
 Settlement dates are supplied, not calculated. Commissions, taxes, foreign
 exchange, interest, corporate actions, and accounting policy are out of scope.
+
+Input names such as `cash_deposit` and `equity_trade` are intentionally simple
+conformance-fixture vocabulary. They do not define LUCA's future canonical
+`EconomicEvent` schema. Production event names and representations may differ,
+provided an implementation can consume the fixture semantics and produce the
+specified expected state.
 
 `harness.py` discovers scenario directories, loads every referenced file, and
 validates their implementation-neutral structure. Future projection tests should
