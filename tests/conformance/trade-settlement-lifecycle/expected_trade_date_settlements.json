@@ -1,0 +1,12 @@
+{
+  "as_of": "2026-03-16T13:45:00Z",
+  "settlements": [
+    {
+      "account": "fund-a",
+      "currency": "USD",
+      "amount": "60000.000000",
+      "direction": "payable",
+      "settlement_date": "2026-03-18"
+    }
+  ]
+}
