@@ -1,0 +1,25 @@
+{
+  "name": "cash-deposit",
+  "description": "A USD cash deposit becomes settled cash at its effective time.",
+  "initial_state": {
+    "positions": [],
+    "cash": [],
+    "settlements": []
+  },
+  "inputs": [
+    {
+      "type": "cash_deposit",
+      "account": "fund-a",
+      "currency": "USD",
+      "amount": "1000000.000000",
+      "effective_at": "2026-01-05T09:00:00Z"
+    }
+  ],
+  "expected_projections": {
+    "effective": {
+      "positions": "expected_positions.json",
+      "cash": "expected_cash.json",
+      "settlements": "expected_settlements.json"
+    }
+  }
+}

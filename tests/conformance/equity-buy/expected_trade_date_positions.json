@@ -1,0 +1,10 @@
+{
+  "as_of": "2026-01-06T14:30:00Z",
+  "positions": [
+    {
+      "account": "fund-a",
+      "instrument": "AAPL",
+      "quantity": "1000.00000000"
+    }
+  ]
+}

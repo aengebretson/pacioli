@@ -1,0 +1,10 @@
+{
+  "as_of": "2026-02-10T15:00:00Z",
+  "cash": [
+    {
+      "account": "fund-a",
+      "currency": "USD",
+      "amount": "100000.000000"
+    }
+  ]
+}

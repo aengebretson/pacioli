@@ -1,0 +1,46 @@
+{
+  "name": "equity-sell",
+  "description": "An equity sell changes position on trade date and settled cash on settlement date.",
+  "initial_state": {
+    "positions": [
+      {
+        "account": "fund-a",
+        "instrument": "AAPL",
+        "quantity": "1000.00000000"
+      }
+    ],
+    "cash": [
+      {
+        "account": "fund-a",
+        "currency": "USD",
+        "amount": "100000.000000"
+      }
+    ],
+    "settlements": []
+  },
+  "inputs": [
+    {
+      "type": "equity_trade",
+      "account": "fund-a",
+      "side": "sell",
+      "instrument": "AAPL",
+      "quantity": "400.00000000",
+      "currency": "USD",
+      "price": "250.000000",
+      "trade_at": "2026-02-10T15:00:00Z",
+      "settlement_date": "2026-02-12"
+    }
+  ],
+  "expected_projections": {
+    "trade_date": {
+      "positions": "expected_trade_date_positions.json",
+      "cash": "expected_trade_date_cash.json",
+      "settlements": "expected_trade_date_settlements.json"
+    },
+    "settlement_date": {
+      "positions": "expected_settlement_date_positions.json",
+      "cash": "expected_settlement_date_cash.json",
+      "settlements": "expected_settlement_date_settlements.json"
+    }
+  }
+}
