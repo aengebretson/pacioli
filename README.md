@@ -183,6 +183,8 @@ The detailed roadmap lives in [docs/roadmap.md](docs/roadmap.md). At a high leve
 - **v0.6 — Performance and adapters:** scale-oriented execution plus FIX, CDM, Arrow/Parquet, and selected broker/custodian formats
 - **v0.7 — Automation:** agent-assisted mapping, exception investigation, and explanation
 
+Broader applications such as hosted services, web or desktop interfaces, managed reconciliation, and broker-operations products remain possible future products rather than requirements of the core library.
+
 ## Non-goals
 
 At least initially, this project is **not**:
