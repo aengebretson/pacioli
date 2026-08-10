@@ -39,6 +39,10 @@ if(PACIOLI_BUILD_TESTS)
   target_link_libraries(pacioli_position_projection_test PRIVATE pacioli)
   add_test(NAME pacioli_position_projection_test COMMAND pacioli_position_projection_test)
 
+  add_executable(pacioli_cash_projection_test tests/unit/cash_projection_test.cpp)
+  target_link_libraries(pacioli_cash_projection_test PRIVATE pacioli)
+  add_test(NAME pacioli_cash_projection_test COMMAND pacioli_cash_projection_test)
+
   add_test(
     NAME pacioli_conformance_test
     COMMAND ${Python3_EXECUTABLE} -m unittest discover -s tests/conformance -p "test_*.py"
