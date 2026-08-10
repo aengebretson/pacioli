@@ -39,22 +39,24 @@ class SourceRecord {
   using Timestamp = std::chrono::sys_time<std::chrono::nanoseconds>;
 
   [[nodiscard]] static std::expected<SourceRecord, ValueError> create(
-      SourceId source, SourceRecordId id, std::string source_local_id,
+      SourceId source, SourceRecordId id, std::optional<std::string> external_record_id,
       Timestamp observed_at, std::optional<Timestamp> source_event_at,
       PayloadHash payload_hash, std::string kind,
       std::optional<std::string> source_reference = std::nullopt) {
     if (source.value().empty() || id.value().empty())
       return std::unexpected(ValueError::empty_identifier);
-    if (source_local_id.empty() || kind.empty())
+    if ((external_record_id && external_record_id->empty()) || kind.empty())
       return std::unexpected(ValueError::empty_required_field);
-    return SourceRecord(std::move(source), std::move(id), std::move(source_local_id),
+    return SourceRecord(std::move(source), std::move(id), std::move(external_record_id),
                         observed_at, source_event_at, std::move(payload_hash),
                         std::move(kind), std::move(source_reference));
   }
 
   [[nodiscard]] const SourceId& source() const noexcept { return source_; }
   [[nodiscard]] const SourceRecordId& id() const noexcept { return id_; }
-  [[nodiscard]] const std::string& source_local_id() const noexcept { return source_local_id_; }
+  [[nodiscard]] const std::optional<std::string>& external_record_id() const noexcept {
+    return external_record_id_;
+  }
   [[nodiscard]] Timestamp observed_at() const noexcept { return observed_at_; }
   [[nodiscard]] const std::optional<Timestamp>& source_event_at() const noexcept {
     return source_event_at_;
@@ -67,18 +69,19 @@ class SourceRecord {
   bool operator==(const SourceRecord&) const = default;
 
  private:
-  SourceRecord(SourceId source, SourceRecordId id, std::string source_local_id,
+  SourceRecord(SourceId source, SourceRecordId id,
+               std::optional<std::string> external_record_id,
                Timestamp observed_at, std::optional<Timestamp> source_event_at,
                PayloadHash payload_hash, std::string kind,
                std::optional<std::string> source_reference)
       : source_(std::move(source)), id_(std::move(id)),
-        source_local_id_(std::move(source_local_id)), observed_at_(observed_at),
+        external_record_id_(std::move(external_record_id)), observed_at_(observed_at),
         source_event_at_(source_event_at), payload_hash_(std::move(payload_hash)),
         kind_(std::move(kind)), source_reference_(std::move(source_reference)) {}
 
   SourceId source_;
   SourceRecordId id_;
-  std::string source_local_id_;
+  std::optional<std::string> external_record_id_;
   Timestamp observed_at_;
   std::optional<Timestamp> source_event_at_;
   PayloadHash payload_hash_;

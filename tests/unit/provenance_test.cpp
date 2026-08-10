@@ -29,7 +29,7 @@ int main() {
   assert(record);
   assert(record->source() == SourceId{"broker-a"});
   assert(record->id() == SourceRecordId{"record-12882"});
-  assert(record->source_local_id() == "12882");
+  assert(record->external_record_id() == "12882");
   assert(record->observed_at() == observed);
   assert(record->source_event_at() == emitted);
   assert(record->payload_hash() == *hash);
@@ -38,9 +38,10 @@ int main() {
   assert(*record == *record);
 
   const auto without_source_time = SourceRecord::create(
-      SourceId{"file-drop"}, SourceRecordId{"row-182"}, "trades.csv:182", observed,
+      SourceId{"file-drop"}, SourceRecordId{"row-182"}, std::nullopt, observed,
       std::nullopt, *hash, "trade", std::nullopt);
   assert(without_source_time && !without_source_time->source_event_at());
+  assert(!without_source_time->external_record_id());
   assert(!without_source_time->source_reference());
   assert(!SourceRecord::create(SourceId{""}, SourceRecordId{"id"}, "key", observed,
                                std::nullopt, *hash, "trade"));

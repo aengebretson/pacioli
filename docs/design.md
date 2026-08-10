@@ -49,7 +49,11 @@ LUCA separates three layers of truth:
 3. **Derived state** — positions, cash, settlement, lots, journals, P&L, and other state computed deterministically from events.
 
 A source record is immutable evidence identity and audit context, not a payload
-container: raw bytes remain in adapter-managed or external storage. Provenance
+container: `SourceRecordId` is LUCA's evidence identity, `SourceId` identifies
+the originating system or feed, and `external_record_id` is the optional
+source-native identity. `PayloadHash` verifies payload identity, while
+`source_reference` is an optional opaque location or debugging reference. Raw
+bytes remain in adapter-managed or external storage. Provenance
 links canonical data to one or more source-record identifiers and records the
 name, version, and small optional audit metadata of the normalization that
 produced it. Neither type defines storage or serialization behavior.
