@@ -26,6 +26,10 @@ if(PACIOLI_BUILD_TESTS)
   target_link_libraries(pacioli_provenance_test PRIVATE pacioli)
   add_test(NAME pacioli_provenance_test COMMAND pacioli_provenance_test)
 
+  add_executable(pacioli_economic_event_test tests/unit/economic_event_test.cpp)
+  target_link_libraries(pacioli_economic_event_test PRIVATE pacioli)
+  add_test(NAME pacioli_economic_event_test COMMAND pacioli_economic_event_test)
+
   add_test(
     NAME pacioli_conformance_test
     COMMAND ${Python3_EXECUTABLE} -m unittest discover -s tests/conformance -p "test_*.py"

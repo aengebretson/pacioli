@@ -12,6 +12,8 @@ enum class ValueError {
   empty_required_field,
   empty_source_records,
   metadata_too_large,
+  zero_quantity,
+  invalid_date,
 };
 
 enum class RoundingMode { toward_zero, floor, ceiling, half_up, half_even };
