@@ -30,6 +30,10 @@ if(PACIOLI_BUILD_TESTS)
   target_link_libraries(pacioli_economic_event_test PRIVATE pacioli)
   add_test(NAME pacioli_economic_event_test COMMAND pacioli_economic_event_test)
 
+  add_executable(pacioli_ledger_test tests/unit/ledger_test.cpp)
+  target_link_libraries(pacioli_ledger_test PRIVATE pacioli)
+  add_test(NAME pacioli_ledger_test COMMAND pacioli_ledger_test)
+
   add_test(
     NAME pacioli_conformance_test
     COMMAND ${Python3_EXECUTABLE} -m unittest discover -s tests/conformance -p "test_*.py"
