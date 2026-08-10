@@ -95,6 +95,16 @@ Economic-time range queries filter acceptance-order entries first and sort only
 the matching subset; a dedicated time index may be added later without changing
 query semantics.
 
+### Position projection
+
+Positions are sparse derived values replayed from explicit ledger entries, not
+authoritative mutable ledger data. The as-of projection internally orders input
+by `effective_at`, then ledger sequence, and includes events whose effective time
+is equal to the requested timestamp. Equity trades change the account/instrument
+quantity at `effective_at`; cash movements have no position effect, and settlement
+dates do not affect this projection. Output is ordered by account then instrument,
+with exactly zero quantities omitted, and checked aggregation reports overflow.
+
 ## Deterministic computation
 
 Financial calculations should behave like pure transformations wherever practical:
