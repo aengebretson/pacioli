@@ -60,6 +60,25 @@ produced it. Neither type defines storage or serialization behavior.
 
 External balances and snapshots are **observations**, not automatically ledger truth. They are reconciled against derived state.
 
+### Canonical economic events
+
+The initial closed `EconomicEvent` sum contains cash movements and equity
+trades. Each immutable value carries a common header: event identity, account,
+`effective_at`, and provenance referencing (rather than embedding) source-record
+evidence. `effective_at` is the economic time at which the event affects LUCA's
+portfolio state; it is distinct from source observation and source-event times.
+LUCA value objects validate their own invariants at construction; successfully
+constructed nested values are trusted by higher-level domain types.
+
+Cash amounts are signed (positive increases cash), and equity quantities are
+signed (positive buys and negative sells). An equity trade keeps its
+currency-neutral price beside an explicit quote currency. Its contractually
+supplied settlement date has date granularity and is separate from the economic
+timestamp, with no implied clock, timezone, or calendar calculation. Multiple
+events may have the same `effective_at` or arrive out of order, so that timestamp
+alone is not a total replay order; tie-breaking and lifecycle ordering remain
+ledger concerns.
+
 ## Deterministic computation
 
 Financial calculations should behave like pure transformations wherever practical:
