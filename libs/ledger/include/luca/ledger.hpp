@@ -45,13 +45,62 @@ class LedgerEntry {
 
 enum class LedgerError { duplicate_event, sequence_overflow };
 
+using LedgerEntryReference = std::reference_wrapper<const LedgerEntry>;
+using LedgerEntryView = std::vector<LedgerEntryReference>;
+
+namespace detail {
+
+[[nodiscard]] inline bool economic_entry_less(LedgerEntryReference lhs,
+                                               LedgerEntryReference rhs) noexcept {
+  const auto left_time = header(lhs.get().event()).effective_at();
+  const auto right_time = header(rhs.get().event()).effective_at();
+  if (left_time != right_time) return left_time < right_time;
+  return lhs.get().sequence() < rhs.get().sequence();
+}
+
+template <class Predicate>
+[[nodiscard]] LedgerEntryView select_economic_entries(
+    std::span<const LedgerEntry> entries, Predicate selected) {
+  LedgerEntryView result;
+  for (const auto& entry : entries)
+    if (selected(header(entry.event()).effective_at()))
+      result.emplace_back(std::cref(entry));
+  std::sort(result.begin(), result.end(), economic_entry_less);
+  return result;
+}
+
+}  // namespace detail
+
+// Returns all supplied entries in economic replay order.
+[[nodiscard]] inline LedgerEntryView economic_entries(
+    std::span<const LedgerEntry> entries) {
+  return detail::select_economic_entries(entries, [](Timestamp) { return true; });
+}
+
+// Returns entries effective at or before as_of in economic replay order.
+[[nodiscard]] inline LedgerEntryView economic_entries_through(
+    std::span<const LedgerEntry> entries, Timestamp as_of) {
+  return detail::select_economic_entries(
+      entries, [as_of](Timestamp effective_at) { return effective_at <= as_of; });
+}
+
+// Returns [from, to) in economic replay order. Empty and reversed intervals
+// produce an empty view.
+[[nodiscard]] inline LedgerEntryView economic_entries_between(
+    std::span<const LedgerEntry> entries, Timestamp from, Timestamp to) {
+  if (from >= to) return {};
+  return detail::select_economic_entries(entries, [from, to](Timestamp effective_at) {
+    return effective_at >= from && effective_at < to;
+  });
+}
+
 // An append-only, in-memory ledger. A Ledger is not safe for concurrent mutation.
 // Spans and reference views may be invalidated when a later append reallocates
 // storage; callers should request a fresh view after mutation.
 class Ledger {
  public:
-  using EntryReference = std::reference_wrapper<const LedgerEntry>;
-  using EntryView = std::vector<EntryReference>;
+  using EntryReference = LedgerEntryReference;
+  using EntryView = LedgerEntryView;
 
   [[nodiscard]] bool empty() const noexcept { return entries_.empty(); }
   [[nodiscard]] std::size_t size() const noexcept { return entries_.size(); }
@@ -81,35 +130,16 @@ class Ledger {
   // Sequence is only a deterministic tie-breaker, not an assertion that
   // acceptance order is economically authoritative.
   [[nodiscard]] EntryView economic_order() const {
-    EntryView result;
-    result.reserve(entries_.size());
-    for (const auto& entry : entries_) result.emplace_back(std::cref(entry));
-    std::sort(result.begin(), result.end(), economic_less);
-    return result;
+    return economic_entries(entries_);
   }
 
   // Returns [from, to) in economic replay order. Empty and reversed intervals
   // produce an empty view.
   [[nodiscard]] EntryView entries_between(Timestamp from, Timestamp to) const {
-    if (from >= to) return {};
-    EntryView result;
-    for (const auto& entry : entries_) {
-      const auto time = header(entry.event()).effective_at();
-      if (time >= from && time < to) result.emplace_back(std::cref(entry));
-    }
-    std::sort(result.begin(), result.end(), economic_less);
-    return result;
+    return economic_entries_between(entries_, from, to);
   }
 
  private:
-  [[nodiscard]] static bool economic_less(EntryReference lhs,
-                                          EntryReference rhs) noexcept {
-    const auto left_time = header(lhs.get().event()).effective_at();
-    const auto right_time = header(rhs.get().event()).effective_at();
-    if (left_time != right_time) return left_time < right_time;
-    return lhs.get().sequence() < rhs.get().sequence();
-  }
-
   std::vector<LedgerEntry> entries_;
   std::unordered_map<std::string, std::size_t> event_index_;
   std::uint64_t next_sequence_ = LedgerSequence::first_value;

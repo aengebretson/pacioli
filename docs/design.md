@@ -91,16 +91,19 @@ it is not exchange, broker, business, or global market ordering. Out-of-order
 economic times are valid. This first ledger is in-memory, persistence-neutral,
 and not concurrently mutable; persistence and synchronization belong in later
 wrappers rather than its financial semantics.
-Economic-time range queries filter acceptance-order entries first and sort only
-the matching subset; a dedicated time index may be added later without changing
-query semantics.
+The ledger layer owns reusable economic ordering and economic-time selection for
+explicit entry spans. Full replay, inclusive as-of selection, and half-open range
+queries share the same `effective_at` then sequence ordering. Selection filters
+acceptance-order entries before sorting only the matching subset; a dedicated
+time index may be added later without changing query semantics. Projections
+consume these ordered views and define only their state transitions.
 
 ### Position projection
 
 Positions are sparse derived values replayed from explicit ledger entries, not
-authoritative mutable ledger data. The as-of projection internally orders input
-by `effective_at`, then ledger sequence, and includes events whose effective time
-is equal to the requested timestamp. Equity trades change the account/instrument
+authoritative mutable ledger data. It consumes the ledger's inclusive as-of
+economic view, which includes events whose effective time is equal to the
+requested timestamp. Equity trades change the account/instrument
 quantity at `effective_at`; cash movements have no position effect, and settlement
 dates do not affect this projection. Output is ordered by account then instrument,
 with exactly zero quantities omitted, and checked aggregation reports overflow.

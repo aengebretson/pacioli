@@ -41,6 +41,9 @@ int main() {
   constexpr Timestamp earlier{9h + 59min + 58s};
   Ledger ledger;
   assert(ledger.empty() && ledger.size() == 0);
+  assert(economic_entries(ledger.entries()).empty());
+  assert(economic_entries_through(ledger.entries(), Timestamp{10s}).empty());
+  assert(economic_entries_between(ledger.entries(), Timestamp{0s}, Timestamp{10s}).empty());
 
   const auto event_a = cash_event("a", later, "source-a", "account-a", "25.125");
   const auto first = ledger.append(event_a);
@@ -76,6 +79,21 @@ int main() {
   assert(entry_header(replay[1]).id() == EventId{"a"});
   assert(entry_header(replay[2]).id() == EventId{"c"});
   assert(entry_header(replay[3]).id() == EventId{"d"});
+
+  // The reusable span helper has identical deterministic ordering and inclusive
+  // as-of semantics: earlier and exact events are selected, later events are not.
+  const auto through_later = economic_entries_through(ledger.entries(), later);
+  assert(through_later.size() == 2);
+  assert(entry_header(through_later[0]).id() == EventId{"b"});
+  assert(entry_header(through_later[1]).id() == EventId{"a"});
+  const auto before_later = economic_entries_through(ledger.entries(), earlier);
+  assert(before_later.size() == 1);
+  assert(entry_header(before_later[0]).id() == EventId{"b"});
+
+  const auto reusable_replay = economic_entries(ledger.entries());
+  assert(reusable_replay.size() == replay.size());
+  for (std::size_t index = 0; index < replay.size(); ++index)
+    assert(reusable_replay[index].get() == replay[index].get());
 
   Ledger ranges;
   assert(ranges.append(cash_event("after", Timestamp{21s}, "s1")));

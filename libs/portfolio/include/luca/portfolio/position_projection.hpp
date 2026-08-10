@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <concepts>
 #include <expected>
-#include <functional>
 #include <span>
 #include <string>
 #include <unordered_map>
@@ -22,19 +21,7 @@ enum class PositionProjectionError { quantity_overflow };
 // quantities and are ordered by account, then instrument.
 [[nodiscard]] inline std::expected<std::vector<Position>, PositionProjectionError>
 project_positions(std::span<const LedgerEntry> entries, Timestamp as_of) {
-  using EntryReference = std::reference_wrapper<const LedgerEntry>;
-  std::vector<EntryReference> ordered;
-  ordered.reserve(entries.size());
-  for (const auto& entry : entries) {
-    if (header(entry.event()).effective_at() <= as_of)
-      ordered.emplace_back(std::cref(entry));
-  }
-  std::sort(ordered.begin(), ordered.end(), [](EntryReference lhs, EntryReference rhs) {
-    const auto left_time = header(lhs.get().event()).effective_at();
-    const auto right_time = header(rhs.get().event()).effective_at();
-    if (left_time != right_time) return left_time < right_time;
-    return lhs.get().sequence() < rhs.get().sequence();
-  });
+  const auto ordered = economic_entries_through(entries, as_of);
 
   struct KeyHash {
     std::size_t operator()(const PositionKey& key) const noexcept {
