@@ -67,6 +67,8 @@ trades. Each immutable value carries a common header: event identity, account,
 `effective_at`, and provenance referencing (rather than embedding) source-record
 evidence. `effective_at` is the economic time at which the event affects LUCA's
 portfolio state; it is distinct from source observation and source-event times.
+LUCA value objects validate their own invariants at construction; successfully
+constructed nested values are trusted by higher-level domain types.
 
 Cash amounts are signed (positive increases cash), and equity quantities are
 signed (positive buys and negative sells). An equity trade keeps its

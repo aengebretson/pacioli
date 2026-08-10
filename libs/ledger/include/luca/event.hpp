@@ -15,16 +15,6 @@ class EventHeader {
       EventId id, AccountId account, Timestamp effective_at, Provenance provenance) {
     if (id.value().empty() || account.value().empty())
       return std::unexpected(ValueError::empty_identifier);
-    // Provenance has no public invalid constructor, but recheck so a moved-from
-    // value cannot be used to create a production event.
-    if (provenance.source_records().empty())
-      return std::unexpected(ValueError::empty_source_records);
-    for (const auto& source_record : provenance.source_records())
-      if (source_record.value().empty())
-        return std::unexpected(ValueError::empty_identifier);
-    if (provenance.transformation_name().empty() ||
-        provenance.transformation_version().empty())
-      return std::unexpected(ValueError::empty_required_field);
     return EventHeader(std::move(id), std::move(account), effective_at,
                        std::move(provenance));
   }
@@ -36,19 +26,6 @@ class EventHeader {
   bool operator==(const EventHeader&) const = default;
 
  private:
-  [[nodiscard]] bool valid() const noexcept {
-    if (id_.value().empty() || account_.value().empty() ||
-        provenance_.source_records().empty() ||
-        provenance_.transformation_name().empty() ||
-        provenance_.transformation_version().empty())
-      return false;
-    for (const auto& source_record : provenance_.source_records())
-      if (source_record.value().empty()) return false;
-    return true;
-  }
-  friend class CashMovement;
-  friend class EquityTrade;
-
   EventHeader(EventId id, AccountId account, Timestamp effective_at,
               Provenance provenance)
       : id_(std::move(id)), account_(std::move(account)), effective_at_(effective_at),
@@ -62,9 +39,7 @@ class EventHeader {
 
 class CashMovement {
  public:
-  [[nodiscard]] static std::expected<CashMovement, ValueError> create(
-      EventHeader header, Money amount) {
-    if (!header.valid()) return std::unexpected(ValueError::empty_required_field);
+  [[nodiscard]] static CashMovement create(EventHeader header, Money amount) {
     return CashMovement(std::move(header), amount);
   }
 
@@ -84,7 +59,6 @@ class EquityTrade {
   [[nodiscard]] static std::expected<EquityTrade, ValueError> create(
       EventHeader header, InstrumentId instrument, Quantity quantity, Price price,
       Currency quote_currency, SettlementDate settlement_date) {
-    if (!header.valid()) return std::unexpected(ValueError::empty_required_field);
     if (instrument.value().empty())
       return std::unexpected(ValueError::empty_identifier);
     if (quantity.scaled_value() == 0)

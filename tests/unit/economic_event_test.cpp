@@ -41,6 +41,10 @@ int main() {
   static_assert(std::variant_size_v<EconomicEvent> == 2);
   static_assert(std::is_same_v<decltype(std::declval<const EventHeader&>().id()),
                                const EventId&>);
+  static_assert(std::is_same_v<
+                decltype(CashMovement::create(std::declval<EventHeader>(),
+                                              std::declval<Money>())),
+                CashMovement>);
 
   constexpr Timestamp effective_at{nanoseconds{1'767'600'000'123'456'789LL}};
   const auto common = event_header("event-1", effective_at);
@@ -60,11 +64,10 @@ int main() {
       event_header("deposit", effective_at), *Money::parse("1000000", usd));
   const auto withdrawal = CashMovement::create(
       event_header("withdrawal", effective_at), *Money::parse("-50000", usd));
-  assert(deposit && withdrawal);
-  assert(deposit->amount().scaled_value() == 1'000'000'000'000LL);
-  assert(withdrawal->amount().scaled_value() == -50'000'000'000LL);
-  assert(deposit->amount().currency() == usd);
-  assert(deposit->header().provenance().source_records()[0] ==
+  assert(deposit.amount().scaled_value() == 1'000'000'000'000LL);
+  assert(withdrawal.amount().scaled_value() == -50'000'000'000LL);
+  assert(deposit.amount().currency() == usd);
+  assert(deposit.header().provenance().source_records()[0] ==
          SourceRecordId{"source-1"});
 
   const auto settlement = SettlementDate::create(2026y / January / 8d);
@@ -92,7 +95,7 @@ int main() {
                               parsed<Price>("0"), usd, *settlement));
 
   // Equal economic times are valid and deliberately do not imply replay order.
-  const EconomicEvent first = *deposit;
+  const EconomicEvent first = deposit;
   const EconomicEvent second = *buy;
   assert(header(first).effective_at() == header(second).effective_at());
   assert(header(first).id() != header(second).id());
