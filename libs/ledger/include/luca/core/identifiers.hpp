@@ -19,9 +19,11 @@ struct AccountIdTag;
 struct InstrumentIdTag;
 struct EventIdTag;
 struct SourceIdTag;
+struct SourceRecordIdTag;
 using AccountId = Identifier<AccountIdTag>;
 using InstrumentId = Identifier<InstrumentIdTag>;
 using EventId = Identifier<EventIdTag>;
 using SourceId = Identifier<SourceIdTag>;
+using SourceRecordId = Identifier<SourceRecordIdTag>;
 
 }  // namespace luca
