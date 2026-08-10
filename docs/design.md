@@ -91,6 +91,9 @@ it is not exchange, broker, business, or global market ordering. Out-of-order
 economic times are valid. This first ledger is in-memory, persistence-neutral,
 and not concurrently mutable; persistence and synchronization belong in later
 wrappers rather than its financial semantics.
+Economic-time range queries filter acceptance-order entries first and sort only
+the matching subset; a dedicated time index may be added later without changing
+query semantics.
 
 ## Deterministic computation
 

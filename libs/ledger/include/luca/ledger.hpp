@@ -84,12 +84,7 @@ class Ledger {
     EntryView result;
     result.reserve(entries_.size());
     for (const auto& entry : entries_) result.emplace_back(std::cref(entry));
-    std::sort(result.begin(), result.end(), [](EntryReference lhs, EntryReference rhs) {
-      const auto left_time = header(lhs.get().event()).effective_at();
-      const auto right_time = header(rhs.get().event()).effective_at();
-      if (left_time != right_time) return left_time < right_time;
-      return lhs.get().sequence() < rhs.get().sequence();
-    });
+    std::sort(result.begin(), result.end(), economic_less);
     return result;
   }
 
@@ -97,15 +92,24 @@ class Ledger {
   // produce an empty view.
   [[nodiscard]] EntryView entries_between(Timestamp from, Timestamp to) const {
     if (from >= to) return {};
-    auto result = economic_order();
-    std::erase_if(result, [from, to](EntryReference entry) {
-      const auto time = header(entry.get().event()).effective_at();
-      return time < from || time >= to;
-    });
+    EntryView result;
+    for (const auto& entry : entries_) {
+      const auto time = header(entry.event()).effective_at();
+      if (time >= from && time < to) result.emplace_back(std::cref(entry));
+    }
+    std::sort(result.begin(), result.end(), economic_less);
     return result;
   }
 
  private:
+  [[nodiscard]] static bool economic_less(EntryReference lhs,
+                                          EntryReference rhs) noexcept {
+    const auto left_time = header(lhs.get().event()).effective_at();
+    const auto right_time = header(rhs.get().event()).effective_at();
+    if (left_time != right_time) return left_time < right_time;
+    return lhs.get().sequence() < rhs.get().sequence();
+  }
+
   std::vector<LedgerEntry> entries_;
   std::unordered_map<std::string, std::size_t> event_index_;
   std::uint64_t next_sequence_ = LedgerSequence::first_value;

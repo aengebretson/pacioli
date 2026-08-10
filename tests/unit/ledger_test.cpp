@@ -78,15 +78,33 @@ int main() {
   assert(entry_header(replay[3]).id() == EventId{"d"});
 
   Ledger ranges;
-  assert(ranges.append(cash_event("before", Timestamp{9s}, "s1")));
-  assert(ranges.append(cash_event("from", Timestamp{10s}, "s2")));
-  assert(ranges.append(cash_event("inside", Timestamp{19s}, "s3")));
-  assert(ranges.append(cash_event("to", Timestamp{20s}, "s4")));
+  assert(ranges.append(cash_event("after", Timestamp{21s}, "s1")));
+  assert(ranges.append(cash_event("tied-first", Timestamp{15s}, "s2")));
+  assert(ranges.append(cash_event("before", Timestamp{9s}, "s3")));
+  assert(ranges.append(cash_event("inside-late", Timestamp{19s}, "s4")));
+  assert(ranges.append(cash_event("from", Timestamp{10s}, "s5")));
+  assert(ranges.append(cash_event("tied-second", Timestamp{15s}, "s6")));
+  assert(ranges.append(cash_event("to", Timestamp{20s}, "s7")));
+
+  // A narrow range filters the acceptance-order ledger before sorting only its
+  // matching subset. The subset still uses economic time, then sequence.
   const auto between = ranges.entries_between(Timestamp{10s}, Timestamp{20s});
-  assert(between.size() == 2);
+  assert(between.size() == 4);
   assert(entry_header(between[0]).id() == EventId{"from"});
-  assert(entry_header(between[1]).id() == EventId{"inside"});
+  assert(entry_header(between[1]).id() == EventId{"tied-first"});
+  assert(entry_header(between[2]).id() == EventId{"tied-second"});
+  assert(entry_header(between[3]).id() == EventId{"inside-late"});
+  assert(ranges.entries_between(Timestamp{10s}, Timestamp{10s}).empty());
   assert(ranges.entries_between(Timestamp{20s}, Timestamp{10s}).empty());
+
+  const auto range_replay = ranges.economic_order();
+  assert(entry_header(range_replay[0]).id() == EventId{"before"});
+  assert(entry_header(range_replay[1]).id() == EventId{"from"});
+  assert(entry_header(range_replay[2]).id() == EventId{"tied-first"});
+  assert(entry_header(range_replay[3]).id() == EventId{"tied-second"});
+  assert(entry_header(range_replay[4]).id() == EventId{"inside-late"});
+  assert(entry_header(range_replay[5]).id() == EventId{"to"});
+  assert(entry_header(range_replay[6]).id() == EventId{"after"});
 
   Ledger same_history;
   for (const auto& entry : ledger.entries()) assert(same_history.append(entry.event()));
