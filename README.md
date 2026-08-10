@@ -23,6 +23,8 @@ Blockchain ──┘       ▼
 
 The project does **not** require firms to adopt a new interchange standard. FIX, FINOS CDM, SWIFT, broker feeds, custodian files, administrator files, and blockchain data are inputs through adapters. LUCA owns the internal computational representation.
 
+For the deeper architecture and scaling principles, see [docs/design.md](docs/design.md). For phased implementation, ecosystem capabilities, and possible products, see [docs/roadmap.md](docs/roadmap.md).
+
 ## Core concepts
 
 - **Source records** — immutable evidence received from an external or internal system.
@@ -123,6 +125,7 @@ Planned adapter families include:
 8. **AI outside the ledger.** Agents may classify, map, investigate, and explain, but they do not perform authoritative ledger, accounting, or risk calculations.
 9. **Technology-neutral inputs.** Traditional databases, files, APIs, standardized messages, and blockchains are all potential sources.
 10. **Library first.** Build a reusable engine before services, dashboards, or agent interfaces.
+11. **Scale by construction.** Keep projections side-effect-light, partition-aware, incremental, snapshot-friendly, and batch-oriented so distribution is an execution concern rather than a rewrite.
 
 ## Initial milestone
 
@@ -162,6 +165,7 @@ Replay ledger
 - position projection
 - cash projection
 - settlement projection
+- state snapshots/checkpoints
 - position and cash observations
 - generic reconciliation engine
 - generic CSV adapter
@@ -169,12 +173,14 @@ Replay ledger
 
 ## Roadmap
 
-- **v0.1 — Ledger:** trades, cash, positions, settlement
+The detailed roadmap lives in [docs/roadmap.md](docs/roadmap.md). At a high level:
+
+- **v0.1 — Ledger:** trades, cash, positions, settlement, snapshots
 - **v0.2 — Reconciliation:** matching, aggregation, observations, structured breaks
 - **v0.3 — Corporate actions:** dividends, splits, mergers, spin-offs
 - **v0.4 — Accounting:** journals, lots, accruals, realized/unrealized P&L
 - **v0.5 — Securities finance:** borrow, lending, financing, collateral
-- **v0.6 — Adapters:** FIX, CDM, selected broker/custodian formats
+- **v0.6 — Performance and adapters:** scale-oriented execution plus FIX, CDM, Arrow/Parquet, and selected broker/custodian formats
 - **v0.7 — Automation:** agent-assisted mapping, exception investigation, and explanation
 
 ## Non-goals
