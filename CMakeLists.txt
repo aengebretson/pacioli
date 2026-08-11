@@ -13,6 +13,7 @@ target_include_directories(pacioli INTERFACE
   ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 option(PACIOLI_BUILD_TESTS "Build tests" ON)
+option(PACIOLI_BUILD_BENCHMARKS "Build reproducible performance benchmarks" OFF)
 if(PACIOLI_BUILD_TESTS)
   enable_testing()
   find_package(Python3 REQUIRED COMPONENTS Interpreter)
@@ -81,4 +82,16 @@ if(PACIOLI_BUILD_TESTS)
   target_link_libraries(pacioli_conformance_engine_test PRIVATE pacioli)
   add_test(NAME pacioli_conformance_engine_test
     COMMAND pacioli_conformance_engine_test ${CONFORMANCE_ARTIFACT})
+endif()
+
+if(PACIOLI_BUILD_BENCHMARKS)
+  add_executable(pacioli_benchmarks
+    tests/benchmarks/benchmark_main.cpp
+    tests/benchmarks/ledger_benchmark.cpp
+    tests/benchmarks/projection_benchmark.cpp
+    tests/benchmarks/reconciliation_benchmark.cpp)
+  target_link_libraries(pacioli_benchmarks PRIVATE pacioli)
+  target_compile_definitions(pacioli_benchmarks PRIVATE
+    LUCA_BENCHMARK_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
+    LUCA_BENCHMARK_COMPILER="${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
 endif()
