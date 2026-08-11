@@ -119,6 +119,15 @@ its date-granular settlement date is at or before the independently supplied
 settlement evaluation date. The projection does not turn dates into timestamps
 or represent unsettled obligations. Exactly zero balances are omitted.
 
+### Open-settlement-obligation projection
+
+Open settlement obligations are derived state. Economically effective equity
+buys create payables and sells create receivables until their settlement date is
+reached. Each obligation exposes a positive money magnitude and an explicit
+direction, aggregated by account, settlement date, currency, and direction;
+receivables and payables are not automatically netted. Settlement clocks,
+calendars, legal netting rules, and actual settlement processing remain deferred.
+
 ## Deterministic computation
 
 Financial calculations should behave like pure transformations wherever practical:
