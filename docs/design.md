@@ -60,6 +60,14 @@ produced it. Neither type defines storage or serialization behavior.
 
 External balances and snapshots are **observations**, not automatically ledger truth. They are reconciled against derived state.
 
+Position observations are immutable external claims keyed by account and
+instrument. Position reconciliation compares them exactly with sparse projected
+positions at one explicit, shared `as_of`: absent observations, observations
+without projected keys (including zero-valued observations), and unequal
+quantities produce missing, unexpected, and quantity-mismatch breaks. Breaks
+retain observation provenance where external evidence exists. Reconciliation
+never mutates the ledger.
+
 ### Canonical economic events
 
 The initial closed `EconomicEvent` sum contains cash movements and equity
