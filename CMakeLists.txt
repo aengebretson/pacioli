@@ -9,6 +9,7 @@ add_library(pacioli INTERFACE)
 target_include_directories(pacioli INTERFACE
   ${CMAKE_CURRENT_SOURCE_DIR}/libs/ledger/include
   ${CMAKE_CURRENT_SOURCE_DIR}/libs/portfolio/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/libs/reconciliation/include
   ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 option(PACIOLI_BUILD_TESTS "Build tests" ON)
@@ -38,6 +39,10 @@ if(PACIOLI_BUILD_TESTS)
   add_executable(pacioli_position_projection_test tests/unit/position_projection_test.cpp)
   target_link_libraries(pacioli_position_projection_test PRIVATE pacioli)
   add_test(NAME pacioli_position_projection_test COMMAND pacioli_position_projection_test)
+
+  add_executable(pacioli_position_reconciliation_test tests/unit/position_reconciliation_test.cpp)
+  target_link_libraries(pacioli_position_reconciliation_test PRIVATE pacioli)
+  add_test(NAME pacioli_position_reconciliation_test COMMAND pacioli_position_reconciliation_test)
 
   add_executable(pacioli_cash_projection_test tests/unit/cash_projection_test.cpp)
   target_link_libraries(pacioli_cash_projection_test PRIVATE pacioli)
