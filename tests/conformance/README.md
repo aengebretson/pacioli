@@ -31,11 +31,28 @@ conformance-fixture vocabulary. They do not define LUCA's future canonical
 provided an implementation can consume the fixture semantics and produce the
 specified expected state.
 
-`harness.py` discovers scenario directories, loads every referenced file, and
-validates their implementation-neutral structure. Future projection tests should
-call `discover_scenarios()` or `load_scenario()` and compare their results with
-the returned expected projections. They should not translate fixture fields into
-assumptions about C++ class names, memory layout, storage, or replay machinery.
+The suite has two complementary layers. `harness.py` discovers scenario
+directories, loads every referenced file, and validates their
+implementation-neutral structure. A build-time, test-only translator then emits
+a small tabular artifact consumed by the C++ engine conformance test. That test
+constructs canonical events with deterministic IDs and provenance, appends them
+to a real `Ledger`, and runs the production position, settled-cash, and open
+settlement projections.
+
+Initial cash is represented by deterministic synthetic opening `CashMovement`
+events at the first scenario event's economic timestamp. Initial positions are
+merged into position results in the test layer, because manufacturing an equity
+trade would incorrectly create cash and settlement effects. This is deliberately
+not a mutable production initial-state API. Timestamp phases use their `as_of`
+for economic selection and its calendar date for settlement evaluation.
+Date-granular phases use the latest known input event timestamp for economic
+selection and their `as_of_date` only for settlement eligibility; no end-of-day
+timestamp is invented.
+
+Fixture translation is test infrastructure, not LUCA's canonical adapter
+architecture. JSON parsing and fixture-specific vocabulary remain outside the
+production libraries. The engine test also executes every scenario phase twice
+and compares normalized, fixed-point state to guard deterministic replay.
 
 Run the validator through CTest (`ctest --preset dev`) or directly with:
 

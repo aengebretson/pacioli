@@ -53,4 +53,23 @@ if(PACIOLI_BUILD_TESTS)
   )
   set_tests_properties(pacioli_conformance_test PROPERTIES
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
+  set(CONFORMANCE_ARTIFACT ${CMAKE_CURRENT_BINARY_DIR}/conformance/fixtures.tsv)
+  file(GLOB_RECURSE CONFORMANCE_FIXTURES CONFIGURE_DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/conformance/*.json)
+  add_custom_command(
+    OUTPUT ${CONFORMANCE_ARTIFACT}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/conformance/generate_engine_fixture.py
+      --root ${CMAKE_CURRENT_SOURCE_DIR}/tests/conformance
+      --output ${CONFORMANCE_ARTIFACT}
+    DEPENDS ${CONFORMANCE_FIXTURES}
+      ${CMAKE_CURRENT_SOURCE_DIR}/tests/conformance/harness.py
+      ${CMAKE_CURRENT_SOURCE_DIR}/tests/conformance/generate_engine_fixture.py
+    VERBATIM)
+  add_executable(pacioli_conformance_engine_test
+    tests/conformance/engine/conformance_engine_test.cpp
+    ${CONFORMANCE_ARTIFACT})
+  target_link_libraries(pacioli_conformance_engine_test PRIVATE pacioli)
+  add_test(NAME pacioli_conformance_engine_test
+    COMMAND pacioli_conformance_engine_test ${CONFORMANCE_ARTIFACT})
 endif()
