@@ -110,8 +110,10 @@ with exactly zero quantities omitted, and checked aggregation reports overflow.
 
 ### Settled-cash projection
 
-Settled cash is sparse derived state keyed by account and currency. A signed
-`CashMovement` changes settled cash at `effective_at`. An equity trade changes
+Settled cash is sparse derived state keyed by account and currency. Its explicit
+`CashProjectionContext` separates economic `as_of` from
+`settlement_as_of_date`. A signed `CashMovement` changes settled cash at
+`effective_at`. An equity trade changes
 settled cash by `-(quantity × price)` only when it is economically effective and
 its date-granular settlement date is at or before the independently supplied
 settlement evaluation date. The projection does not turn dates into timestamps

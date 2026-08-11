@@ -77,10 +77,4 @@ project_cash(std::span<const LedgerEntry> entries, CashProjectionContext context
   return balances;
 }
 
-[[nodiscard]] inline std::expected<std::vector<CashBalance>, CashProjectionError>
-project_cash(std::span<const LedgerEntry> entries, Timestamp as_of,
-             std::chrono::year_month_day settlement_as_of_date) {
-  return project_cash(entries, CashProjectionContext{as_of, settlement_as_of_date});
-}
-
 }  // namespace luca
