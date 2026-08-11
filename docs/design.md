@@ -68,6 +68,13 @@ quantities produce missing, unexpected, and quantity-mismatch breaks. Breaks
 retain observation provenance where external evidence exists. Reconciliation
 never mutates the ledger.
 
+Settled-cash observations are likewise immutable external claims rather than
+ledger truth. Cash reconciliation compares exact amounts by account and currency
+only when both the economic `as_of` and `settlement_as_of_date` match exactly.
+Missing, unexpected, and amount-mismatched balances produce explicit breaks;
+zero observations remain explicit even though projected cash is sparse. The
+comparison retains external provenance where present and never mutates the ledger.
+
 ### Canonical economic events
 
 The initial closed `EconomicEvent` sum contains cash movements and equity
