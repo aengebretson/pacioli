@@ -3,15 +3,39 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime
+import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 from harness import discover_scenarios
 
 
+TIMESTAMP = re.compile(
+    r"^(?P<seconds>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})"
+    r"(?:\.(?P<fraction>[0-9]+))?(?P<timezone>Z|[+-][0-9]{2}:[0-9]{2})$"
+)
+EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+
 def _timestamp(value: str) -> str:
-    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    return str(int(parsed.timestamp() * 1_000_000_000))
+    match = TIMESTAMP.fullmatch(value)
+    if match is None:
+        raise ValueError(f"invalid ISO 8601 fixture timestamp: {value!r}")
+    fraction = match.group("fraction") or ""
+    if len(fraction) > 9:
+        raise ValueError(
+            f"fixture timestamp precision exceeds nanoseconds: {value!r}"
+        )
+
+    zone = "+00:00" if match.group("timezone") == "Z" else match.group("timezone")
+    parsed = datetime.fromisoformat(match.group("seconds") + zone)
+    delta = parsed.astimezone(timezone.utc) - EPOCH
+    nanoseconds = (
+        delta.days * 86_400_000_000_000
+        + delta.seconds * 1_000_000_000
+        + int(fraction.ljust(9, "0") or "0")
+    )
+    return str(nanoseconds)
 
 
 def _date(value: str) -> str:

@@ -53,6 +53,8 @@ Fixture translation is test infrastructure, not LUCA's canonical adapter
 architecture. JSON parsing and fixture-specific vocabulary remain outside the
 production libraries. The engine test also executes every scenario phase twice
 and compares normalized, fixed-point state to guard deterministic replay.
+Fixture timestamps are converted to epoch nanoseconds using exact integer
+arithmetic; floating-point time conversion is not used.
 
 Run the validator through CTest (`ctest --preset dev`) or directly with:
 
