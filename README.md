@@ -1,12 +1,8 @@
-# Pacioli
-
-> **Working name:** LUCA — Ledger Understanding, Computation & Automation.
->
-> The repository will be renamed later. The project is an open-source financial ledger and portfolio-state engine for transforming heterogeneous economic events into reproducible investment state.
+# Pacioli LUCA
 
 ## What it does
 
-Pacioli/LUCA ingests financial activity from existing systems, normalizes it into a compact canonical ledger, and deterministically derives portfolio state.
+Pacioli LUCA ingests financial activity from existing systems, normalizes it into a compact canonical ledger, and deterministically derives portfolio state.
 
 ```text
 FIX ─────────┐
