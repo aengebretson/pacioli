@@ -6,6 +6,8 @@ LUCA should grow outward from a small deterministic ledger core. Capabilities be
 2. **Ecosystem** — connects LUCA to external formats, runtimes, and languages.
 3. **Applications/products** — use LUCA to solve workflows; these are not core requirements.
 
+The version milestones below describe capability groups, not rigid release gates. Engineering slices may establish cross-cutting foundations or introduce a narrow part of a later capability when that work reduces architectural risk for the whole project.
+
 ## Core roadmap
 
 ### v0.1 — Ledger and basic state
@@ -160,17 +162,92 @@ The roadmap should preserve the following constraints from the beginning:
 - storage and distribution outside financial semantics
 - conformance tests for executable behavior
 
-## Near-term implementation sequence
+## Current baseline
 
-The next engineering work should remain deliberately small:
+The repository has already implemented a meaningful portion of the original near-term sequence:
 
-1. Define source provenance, account, instrument, money, and quantity types.
-2. Define the minimal economic-event representation without over-modeling the entire financial industry.
-3. Implement an append-only in-memory ledger.
-4. Implement deposit and equity-trade events.
-5. Project position, cash, and settlement state.
-6. Add snapshots and verify replay from snapshot + incremental events equals full replay.
-7. Add position/cash observations and generic reconciliation.
-8. Add synthetic conformance tests and a first performance benchmark.
+- strong account, instrument, currency, money, quantity, source-record, and provenance values;
+- cash-movement and equity-trade events;
+- an append-only in-memory ledger with deterministic ordering;
+- position projection;
+- settled-cash projection;
+- open-settlement-obligation projection;
+- exact position and settled-cash reconciliation;
+- unit and executable conformance tests;
+- a reproducible benchmark suite.
 
-Only after these semantics are stable should broader adapters, cloud execution, UI, or agent layers become active engineering work.
+The next work should no longer repeat that original bootstrap checklist. It should turn the existing primitives into a consumable engine, close foundational lifecycle/replay gaps, and prove the accounting thesis.
+
+## Current implementation program
+
+The next four slices are the active engineering sequence.
+
+### Slice 1 — LUCA identity and package
+
+Turn the repository into a deliberate open-source C++ dependency.
+
+- establish LUCA as the single canonical project identity;
+- define domain-oriented `luca::...` CMake targets;
+- support both `add_subdirectory` and installed `find_package` consumption;
+- prevent tests, examples, and benchmarks from polluting parent builds;
+- add install/export rules and an external package-consumer test;
+- add one end-to-end public-API example;
+- establish Linux GCC/Clang and Windows MSVC CI;
+- prepare a first preview release and repository rename.
+
+Detailed design: [Slice 1 — LUCA identity and package](slices/01-identity-and-package.md).
+
+### Slice 2 — Event lifecycle
+
+Define immutable lifecycle semantics before the event domain expands.
+
+- cancellation;
+- reversal;
+- correction;
+- supersession;
+- causal lineage between events;
+- deterministic replay after late lifecycle events;
+- conformance scenarios that prove positions, cash, settlement, and provenance after lifecycle changes.
+
+The ledger must never silently mutate accepted historical facts to implement a correction.
+
+### Slice 3 — Serialization and checkpoints
+
+Make replay and derived state portable, hashable, and incrementally reproducible.
+
+- versioned canonical serialization outside domain value objects;
+- deterministic event and projection representations;
+- input and state hashes;
+- position, cash, and settlement checkpoints;
+- projection version and event-watermark metadata;
+- conformance tests proving full replay equals checkpoint plus incremental events.
+
+Storage technology remains outside financial semantics.
+
+### Slice 4 — Accounting foundations
+
+Prove that the same event history can produce balanced, traceable accounting output.
+
+- journal-entry and journal-line value types;
+- balanced debit/credit invariants;
+- a narrow accounting-policy interface;
+- journal projection for cash movements and equity trades;
+- trade-date and settlement-date views;
+- full lineage from journal line to economic event to source-record provenance;
+- conformance fixtures covering a cash contribution, an equity purchase, settlement state, and balanced journals.
+
+This slice begins the v0.4 accounting capability but does not attempt lots, tax accounting, complete P&L, NAV production, or universal charts of accounts.
+
+## Program completion criteria
+
+The four-slice program is complete when:
+
+- an unfamiliar C++ developer can install and consume LUCA through documented public targets;
+- LUCA Enterprise can pin and build LUCA without using internal headers or source files;
+- event corrections and reversals have explicit immutable semantics;
+- deterministic serialized inputs and state can be hashed and replayed;
+- incremental replay from a checkpoint is equivalent to full replay;
+- cash and equity activity produce positions, cash, settlement obligations, reconciliation breaks, and balanced journals from one authoritative event history;
+- all behavior is demonstrated through reusable conformance fixtures.
+
+Only after these foundations are stable should broader adapters, cloud execution, extensive UI, distributed orchestration, or agent layers become active open-source engineering priorities.
