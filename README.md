@@ -1,8 +1,8 @@
-# Pacioli LUCA
+# LUCA
 
 ## What it does
 
-Pacioli LUCA ingests financial activity from existing systems, normalizes it into a compact canonical ledger, and deterministically derives portfolio state.
+LUCA ingests financial activity from existing systems, normalizes it into a compact canonical ledger, and deterministically derives portfolio state.
 
 ```text
 FIX ─────────┐
