@@ -21,6 +21,21 @@ The project does **not** require firms to adopt a new interchange standard. FIX,
 
 For the deeper architecture and scaling principles, see [docs/design.md](docs/design.md). For phased implementation, ecosystem capabilities, and possible products, see [docs/roadmap.md](docs/roadmap.md).
 
+## Source-tree consumption
+
+```cmake
+add_subdirectory(third_party/luca)
+
+target_link_libraries(my_app PRIVATE luca::portfolio)
+```
+
+Available public targets:
+
+- `luca::ledger`
+- `luca::portfolio`
+- `luca::reconciliation`
+- `luca::luca`
+
 ## Core concepts
 
 - **Source records** — immutable evidence received from an external or internal system.

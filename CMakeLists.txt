@@ -1,21 +1,29 @@
 cmake_minimum_required(VERSION 3.24)
 project(luca VERSION 0.1.0 LANGUAGES CXX)
 
+include(GNUInstallDirs)
+
 set(LUCA_STANDALONE ${PROJECT_IS_TOP_LEVEL})
+
+function(luca_disable_cxx_extensions target_name)
+  set_target_properties(${target_name} PROPERTIES CXX_EXTENSIONS OFF)
+endfunction()
 
 add_library(luca_ledger INTERFACE)
 add_library(luca::ledger ALIAS luca_ledger)
 set_target_properties(luca_ledger PROPERTIES EXPORT_NAME ledger)
 target_compile_features(luca_ledger INTERFACE cxx_std_23)
 target_include_directories(luca_ledger INTERFACE
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/libs/ledger/include>)
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/libs/ledger/include>
+  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
 add_library(luca_portfolio INTERFACE)
 add_library(luca::portfolio ALIAS luca_portfolio)
 set_target_properties(luca_portfolio PROPERTIES EXPORT_NAME portfolio)
 target_compile_features(luca_portfolio INTERFACE cxx_std_23)
 target_include_directories(luca_portfolio INTERFACE
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/libs/portfolio/include>)
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/libs/portfolio/include>
+  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 target_link_libraries(luca_portfolio INTERFACE luca::ledger)
 
 add_library(luca_reconciliation INTERFACE)
@@ -23,7 +31,8 @@ add_library(luca::reconciliation ALIAS luca_reconciliation)
 set_target_properties(luca_reconciliation PROPERTIES EXPORT_NAME reconciliation)
 target_compile_features(luca_reconciliation INTERFACE cxx_std_23)
 target_include_directories(luca_reconciliation INTERFACE
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/libs/reconciliation/include>)
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/libs/reconciliation/include>
+  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 target_link_libraries(luca_reconciliation INTERFACE luca::portfolio)
 
 add_library(luca INTERFACE)
@@ -41,42 +50,52 @@ if(LUCA_BUILD_TESTS)
   enable_testing()
   find_package(Python3 REQUIRED COMPONENTS Interpreter)
   add_executable(luca_smoke_test tests/smoke.cpp)
+  luca_disable_cxx_extensions(luca_smoke_test)
   target_link_libraries(luca_smoke_test PRIVATE luca::ledger)
   add_test(NAME luca_smoke_test COMMAND luca_smoke_test)
 
   add_executable(luca_core_values_test tests/unit/core_values_test.cpp)
+  luca_disable_cxx_extensions(luca_core_values_test)
   target_link_libraries(luca_core_values_test PRIVATE luca::ledger)
   add_test(NAME luca_core_values_test COMMAND luca_core_values_test)
 
   add_executable(luca_provenance_test tests/unit/provenance_test.cpp)
+  luca_disable_cxx_extensions(luca_provenance_test)
   target_link_libraries(luca_provenance_test PRIVATE luca::ledger)
   add_test(NAME luca_provenance_test COMMAND luca_provenance_test)
 
   add_executable(luca_economic_event_test tests/unit/economic_event_test.cpp)
+  luca_disable_cxx_extensions(luca_economic_event_test)
   target_link_libraries(luca_economic_event_test PRIVATE luca::ledger)
   add_test(NAME luca_economic_event_test COMMAND luca_economic_event_test)
 
   add_executable(luca_ledger_test tests/unit/ledger_test.cpp)
+  luca_disable_cxx_extensions(luca_ledger_test)
   target_link_libraries(luca_ledger_test PRIVATE luca::ledger)
   add_test(NAME luca_ledger_test COMMAND luca_ledger_test)
 
   add_executable(luca_position_projection_test tests/unit/position_projection_test.cpp)
+  luca_disable_cxx_extensions(luca_position_projection_test)
   target_link_libraries(luca_position_projection_test PRIVATE luca::portfolio)
   add_test(NAME luca_position_projection_test COMMAND luca_position_projection_test)
 
   add_executable(luca_position_reconciliation_test tests/unit/position_reconciliation_test.cpp)
+  luca_disable_cxx_extensions(luca_position_reconciliation_test)
   target_link_libraries(luca_position_reconciliation_test PRIVATE luca::reconciliation)
   add_test(NAME luca_position_reconciliation_test COMMAND luca_position_reconciliation_test)
 
   add_executable(luca_cash_reconciliation_test tests/unit/cash_reconciliation_test.cpp)
+  luca_disable_cxx_extensions(luca_cash_reconciliation_test)
   target_link_libraries(luca_cash_reconciliation_test PRIVATE luca::reconciliation)
   add_test(NAME luca_cash_reconciliation_test COMMAND luca_cash_reconciliation_test)
 
   add_executable(luca_cash_projection_test tests/unit/cash_projection_test.cpp)
+  luca_disable_cxx_extensions(luca_cash_projection_test)
   target_link_libraries(luca_cash_projection_test PRIVATE luca::portfolio)
   add_test(NAME luca_cash_projection_test COMMAND luca_cash_projection_test)
 
   add_executable(luca_settlement_projection_test tests/unit/settlement_projection_test.cpp)
+  luca_disable_cxx_extensions(luca_settlement_projection_test)
   target_link_libraries(luca_settlement_projection_test PRIVATE luca::portfolio)
   add_test(NAME luca_settlement_projection_test COMMAND luca_settlement_projection_test)
 
@@ -102,9 +121,24 @@ if(LUCA_BUILD_TESTS)
   add_executable(luca_conformance_engine_test
     tests/conformance/engine/conformance_engine_test.cpp
     ${CONFORMANCE_ARTIFACT})
+  luca_disable_cxx_extensions(luca_conformance_engine_test)
   target_link_libraries(luca_conformance_engine_test PRIVATE luca::portfolio)
   add_test(NAME luca_conformance_engine_test
     COMMAND luca_conformance_engine_test ${CONFORMANCE_ARTIFACT})
+
+  add_test(
+    NAME luca_add_subdirectory_consumer_test
+    COMMAND
+      ${CMAKE_COMMAND}
+      "-Dluca_source_dir=${CMAKE_CURRENT_SOURCE_DIR}"
+      "-Dconsumer_binary_dir=${CMAKE_CURRENT_BINARY_DIR}/tests/add_subdirectory_consumer"
+      "-Dconsumer_generator=${CMAKE_GENERATOR}"
+      "-Dconsumer_make_program=${CMAKE_MAKE_PROGRAM}"
+      "-Dconsumer_build_type=${CMAKE_BUILD_TYPE}"
+      "-Dconsumer_config=$<CONFIG>"
+      -P
+      ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/add_subdirectory_consumer/driver.cmake
+  )
 endif()
 
 if(LUCA_BUILD_BENCHMARKS)
@@ -113,6 +147,7 @@ if(LUCA_BUILD_BENCHMARKS)
     tests/benchmarks/ledger_benchmark.cpp
     tests/benchmarks/projection_benchmark.cpp
     tests/benchmarks/reconciliation_benchmark.cpp)
+  luca_disable_cxx_extensions(luca_benchmarks)
   target_link_libraries(luca_benchmarks PRIVATE luca::reconciliation)
   target_compile_definitions(luca_benchmarks PRIVATE
     LUCA_BENCHMARK_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
