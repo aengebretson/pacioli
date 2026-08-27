@@ -1,6 +1,6 @@
-#include <pacioli/ledger.hpp>
+#include <luca/ledger.hpp>
 
 int main() {
-    const pacioli::Ledger ledger;
+    const luca::Ledger ledger;
     return ledger.empty() ? 0 : 1;
 }
