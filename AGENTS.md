@@ -1,5 +1,17 @@
 # AGENTS.md
 
+## Coordinated development
+
+Follow [docs/DEVELOPMENT_WORKFLOW.md](docs/DEVELOPMENT_WORKFLOW.md), protocol 1,
+and the coordinator's assigned task before editing. This local copy makes the
+workflow usable independently of Luca Platform. The combined product backlog
+lives in [Luca Platform planning](https://github.com/aengebretson/luca-platform/tree/main/planning).
+The financial-domain, build, test and nested instructions below remain applicable.
+Use your assigned branch and worktree; provide a tested handoff to the coordinator.
+In the initial container worker setup, the coordinator commits and pushes your
+changes after validating scope. Workers do not merge, deploy, access production
+data, or modify shared planning state. Explicit user instructions take precedence.
+
 ## Repository overview
 
 LUCA is a C++ financial ledger and portfolio-state engine.
