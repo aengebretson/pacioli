@@ -2,7 +2,9 @@
 
 The fixtures are a semantic design vocabulary, not production serialization.
 This validator checks declarations, compatibility, exact decimal assertions,
-and references.  It intentionally does not replay LUCA portfolio projections.
+and references.  It binds the single-trade fixture's declared outputs to its
+resolved input and context, but does not implement general lifecycle resolution
+or replay LUCA portfolio projections.
 """
 
 from __future__ import annotations
@@ -643,6 +645,7 @@ def _validate_ordered_fixture(
     sources = _strings(document.get("source_records"), "source_records", nonempty=True)
     records: dict[str, dict[str, Any]] = {}
     sequences: list[int] = []
+    recorded_times: list[datetime] = []
     for index, record in enumerate(_objects(document.get("records"), "records", nonempty=True)):
         context = f"records[{index}]"
         _keys(
@@ -670,7 +673,8 @@ def _validate_ordered_fixture(
         if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 1:
             _fail("ordering_metadata", f"{context}.acceptance_sequence is invalid")
         sequences.append(sequence)
-        _timestamp(record.get("recorded_at"), f"{context}.recorded_at")
+        recorded_at = _timestamp(record.get("recorded_at"), f"{context}.recorded_at")
+        recorded_times.append(datetime.fromisoformat(recorded_at.replace("Z", "+00:00")))
         _timestamp(record.get("effective_at"), f"{context}.effective_at")
         _string(record, "account", context)
         predecessor = record.get("supersedes_record_id")
@@ -701,13 +705,41 @@ def _validate_ordered_fixture(
         records[record_id] = record
     if sequences != sorted(sequences) or len(sequences) != len(set(sequences)):
         _fail("ordering_metadata", "records must be listed in unique acceptance order")
+    if recorded_times != sorted(recorded_times):
+        _fail(
+            "ordering_metadata",
+            "recorded times must not decrease with lifecycle acceptance sequence",
+        )
     for record in records.values():
         predecessor = record["supersedes_record_id"]
         if predecessor is not None:
             if predecessor not in records:
                 _fail("lineage_reference_missing", "correction references an unknown predecessor")
             if records[predecessor]["acceptance_sequence"] >= record["acceptance_sequence"]:
-                _fail("ordering_violation", "correction precedes its target")
+                _fail("causal_reference_unavailable", "correction precedes its target")
+            target = records[predecessor]
+            if record["economic_event_id"] != target["economic_event_id"]:
+                _fail(
+                    "incompatible_event_relationship",
+                    "correction changes its predecessor's economic identity",
+                )
+            immutable_relationship = (
+                record["account"],
+                record["event"]["type"],
+                record["event"]["instrument"],
+                record["event"]["quote_currency"],
+            )
+            target_relationship = (
+                target["account"],
+                target["event"]["type"],
+                target["event"]["instrument"],
+                target["event"]["quote_currency"],
+            )
+            if immutable_relationship != target_relationship:
+                _fail(
+                    "incompatible_event_relationship",
+                    "correction changes an immutable account or trade natural key",
+                )
 
     expected = _object(document.get("expected"), "expected")
     _keys(
@@ -745,6 +777,40 @@ def _validate_ordered_fixture(
     }
     if set(_strings(resolution["source_record_ids"], "expected.resolution.source_record_ids", nonempty=True)) != expected_sources:
         _fail("lineage_reference_missing", "resolved lifecycle source lineage is incomplete")
+
+    resolution_operation = operations.get("resolve.lifecycle-knowledge")
+    if resolution_operation is None:
+        _fail("lineage_reference_missing", "ordered fixture omits lifecycle resolution")
+    evaluation = resolution_operation["evaluation_context"]
+    recorded_through = datetime.fromisoformat(
+        evaluation["recorded_through"].replace("Z", "+00:00")
+    )
+    economic_as_of = datetime.fromisoformat(
+        evaluation["economic_as_of"].replace("Z", "+00:00")
+    )
+    if any(moment > recorded_through for moment in recorded_times):
+        _fail(
+            "context_mismatch",
+            "expected resolved chain contains a record after recorded_through",
+        )
+
+    active_record = records[active]
+    active_effective_at = datetime.fromisoformat(
+        active_record["effective_at"].replace("Z", "+00:00")
+    )
+    if active_effective_at > economic_as_of:
+        _fail(
+            "context_mismatch",
+            "expected active record is after the economic cutoff",
+        )
+    active_event = active_record["event"]
+    active_quantity = _decimal(active_event["quantity"], "active_record.event.quantity", 8)
+    active_price = _decimal(active_event["price"], "active_record.event.price", 8)
+    active_gross = (active_quantity * active_price).quantize(
+        Decimal(1).scaleb(-6), rounding=ROUND_HALF_EVEN
+    )
+    active_event_id = active_record["economic_event_id"]
+
     positions = _objects(expected["positions"], "expected.positions", nonempty=True)
     for index, item in enumerate(positions):
         context = f"expected.positions[{index}]"
@@ -761,6 +827,27 @@ def _validate_ordered_fixture(
         )
         if any(event_id not in economic_ids for event_id in event_ids):
             _fail("lineage_reference_missing", f"{context} references an unknown economic event")
+    if len(positions) != 1:
+        _fail("projection_expectation_mismatch", "single active trade must emit one position")
+    position = positions[0]
+    if (
+        position["account"] != active_record["account"]
+        or position["instrument"] != active_event["instrument"]
+    ):
+        _fail(
+            "projection_expectation_mismatch",
+            "position key differs from the resolved active trade",
+        )
+    if _decimal(position["quantity"], "expected.positions[0].quantity", 8) != active_quantity:
+        _fail(
+            "arithmetic_mismatch",
+            "position quantity differs from the resolved active trade",
+        )
+    if set(position["source_event_ids"]) != {active_event_id}:
+        _fail(
+            "lineage_reference_missing",
+            "position lineage must identify the resolved active economic event",
+        )
 
     settled_cash = _objects(expected["settled_cash"], "expected.settled_cash")
     for index, item in enumerate(settled_cash):
@@ -775,6 +862,19 @@ def _validate_ordered_fixture(
         )
         if any(event_id not in economic_ids for event_id in event_ids):
             _fail("lineage_reference_missing", f"{context} references an unknown economic event")
+
+    settlement_cutoff = date.fromisoformat(evaluation["settlement_as_of_date"])
+    active_settlement_date = date.fromisoformat(active_event["settlement_date"])
+    if active_settlement_date <= settlement_cutoff:
+        _fail(
+            "context_mismatch",
+            "ordered fixture requires the active trade to remain unsettled",
+        )
+    if settled_cash:
+        _fail(
+            "projection_expectation_mismatch",
+            "an unsettled trade must not emit settled cash in this fixture",
+        )
 
     obligations = _objects(
         expected["open_settlement_obligations"],
@@ -807,12 +907,78 @@ def _validate_ordered_fixture(
         )
         if any(event_id not in economic_ids for event_id in event_ids):
             _fail("lineage_reference_missing", f"{context} references an unknown economic event")
+    if len(obligations) != 1:
+        _fail(
+            "projection_expectation_mismatch",
+            "single unsettled active trade must emit one open obligation",
+        )
+    obligation = obligations[0]
+    expected_direction = "payable" if active_quantity > 0 else "receivable"
+    if (
+        obligation["account"] != active_record["account"]
+        or obligation["settlement_date"] != active_event["settlement_date"]
+        or obligation["currency"] != active_event["quote_currency"]
+        or obligation["direction"] != expected_direction
+    ):
+        _fail(
+            "projection_expectation_mismatch",
+            "open-obligation key differs from the resolved active trade",
+        )
+    if _decimal(obligation["amount"], "expected.open_settlement_obligations[0].amount", 6) != abs(
+        active_gross
+    ):
+        _fail(
+            "arithmetic_mismatch",
+            "open-obligation amount differs from the resolved active trade gross",
+        )
+    if set(obligation["source_event_ids"]) != {active_event_id}:
+        _fail(
+            "lineage_reference_missing",
+            "open-obligation lineage must identify the resolved active economic event",
+        )
 
     if _trace(expected["operation_trace"], operations, "expected.operation_trace") != set(
         operations
     ):
         _fail("lineage_reference_missing", "expected operation trace is incomplete")
     arithmetic = _arithmetic_assertions(document)
+    arithmetic_entries = {
+        item["id"]: item
+        for item in _objects(document.get("arithmetic"), "arithmetic", nonempty=True)
+    }
+    if set(arithmetic_entries) != {"corrected-position", "corrected-trade-gross"}:
+        _fail(
+            "arithmetic_mismatch",
+            "ordered fixture must declare position and trade-gross arithmetic",
+        )
+    position_arithmetic = arithmetic_entries["corrected-position"]
+    if (
+        position_arithmetic["operator"] != "sum"
+        or position_arithmetic["scale"] != 8
+        or position_arithmetic["rounding"] != "none"
+        or [_decimal(value, "corrected-position.operand", 8) for value in position_arithmetic["operands"]]
+        != [active_quantity]
+        or _decimal(position_arithmetic["expected"], "corrected-position.expected", 8)
+        != active_quantity
+    ):
+        _fail(
+            "arithmetic_mismatch",
+            "position arithmetic is not derived from the resolved active quantity",
+        )
+    gross_arithmetic = arithmetic_entries["corrected-trade-gross"]
+    if (
+        gross_arithmetic["operator"] != "product"
+        or gross_arithmetic["scale"] != 6
+        or gross_arithmetic["rounding"] != "half_even"
+        or [_decimal(value, "corrected-trade-gross.operand", 8) for value in gross_arithmetic["operands"]]
+        != [active_quantity, active_price]
+        or _decimal(gross_arithmetic["expected"], "corrected-trade-gross.expected", 6)
+        != active_gross
+    ):
+        _fail(
+            "arithmetic_mismatch",
+            "trade-gross arithmetic is not derived from the resolved active quantity and price",
+        )
     if _decimal(positions[0]["quantity"], "expected.positions[0].quantity", 8) != arithmetic.get(
         "corrected-position"
     ):
@@ -839,8 +1005,13 @@ def _validate_ordered_fixture(
         _fail("lineage_reference_missing", "ordering counterexample must use the fixture records")
     if [records[item]["acceptance_sequence"] for item in permuted] == sorted(sequences):
         _fail("ordering_metadata", "ordering counterexample does not reorder the records")
-    if counterexample.get("expected_category") != "ordering_violation":
+    if counterexample.get("expected_category") != "causal_reference_unavailable":
         _fail("expected_category_mismatch", "ordering counterexample category is not stable")
+    if counterexample["expected_category"] not in operations[operation_id]["errors"]:
+        _fail(
+            "schema_shape",
+            "ordering counterexample category is absent from the lifecycle declaration",
+        )
     _string(counterexample, "reason", "ordering_counterexample")
     if operations[operation_id]["laws"]["commutativity"] != "counterexample":
         _fail("law_declaration", "ordered fold must declare the commutativity counterexample")
@@ -960,6 +1131,7 @@ def _validate_comparison_fixture(
                 "expected_amount",
                 "observed_amount",
                 "difference",
+                "projection_source_event_ids",
                 "projection_source_record_ids",
                 "observation_source_record_id",
             },
@@ -981,15 +1153,39 @@ def _validate_comparison_fixture(
             observed_by_key[key]["amount"], f"{context}.observed_input", 6
         ):
             _fail("arithmetic_mismatch", f"{context} amounts differ from the input records")
+        projected_input = projected_by_key[key]
+        observed_input = observed_by_key[key]
+        projection_events = _strings(
+            item.get("projection_source_event_ids"),
+            f"{context}.projection_source_event_ids",
+            nonempty=True,
+        )
+        if set(projection_events) != set(projected_input["source_event_ids"]):
+            _fail(
+                "lineage_reference_missing",
+                f"{context} projection event lineage differs from the matched projection",
+            )
         projection_sources = _strings(
             item.get("projection_source_record_ids"),
             f"{context}.projection_source_record_ids",
             nonempty=True,
         )
-        if any(source not in evidence for source in projection_sources):
-            _fail("lineage_reference_missing", f"{context} projection lineage is unknown")
-        if item.get("observation_source_record_id") not in evidence:
-            _fail("lineage_reference_missing", f"{context} observation lineage is unknown")
+        if set(projection_sources) != set(projected_input["source_record_ids"]):
+            _fail(
+                "lineage_reference_missing",
+                f"{context} projection record lineage differs from the matched projection",
+            )
+        observation_source = item.get("observation_source_record_id")
+        if observation_source != observed_input["source_record_id"]:
+            _fail(
+                "lineage_reference_missing",
+                f"{context} observation lineage differs from the matched observation",
+            )
+        if observation_source in set(projection_sources):
+            _fail(
+                "lineage_role_mismatch",
+                f"{context} observation evidence is not distinct from projection lineage",
+            )
     if _trace(expected["operation_trace"], operations, "expected.operation_trace") != set(
         operations
     ):
@@ -1174,6 +1370,76 @@ class TransformationContractTest(unittest.TestCase):
     def test_missing_lineage_reference_is_rejected(self):
         document = json.loads((FIXTURE_ROOT / "valid-equity-lifecycle-fold.json").read_text())
         document["records"][1]["source_record_ids"] = ["unknown-source"]
+        with self.assertRaisesRegex(ContractError, "lineage_reference_missing"):
+            validate_document(document)
+
+    def test_ordered_outputs_and_arithmetic_are_bound_to_the_active_record(self):
+        path = FIXTURE_ROOT / "valid-equity-lifecycle-fold.json"
+        for field, replacement in (
+            ("quantity", "81.00000000"),
+            ("price", "56.00000000"),
+        ):
+            with self.subTest(field=field):
+                document = json.loads(path.read_text())
+                document["records"][1]["event"][field] = replacement
+                with self.assertRaisesRegex(ContractError, "arithmetic_mismatch"):
+                    validate_document(document)
+
+    def test_ordered_projection_keys_and_settlement_context_are_enforced(self):
+        path = FIXTURE_ROOT / "valid-equity-lifecycle-fold.json"
+        for field, replacement in (
+            ("account", "fund-b"),
+            ("settlement_date", "2026-06-05"),
+            ("currency", "EUR"),
+            ("direction", "receivable"),
+        ):
+            with self.subTest(field=field):
+                document = json.loads(path.read_text())
+                document["expected"]["open_settlement_obligations"][0][field] = replacement
+                with self.assertRaisesRegex(ContractError, "projection_expectation_mismatch"):
+                    validate_document(document)
+
+        document = json.loads(path.read_text())
+        document["expected"]["settled_cash"] = [
+            {
+                "account": "fund-a",
+                "currency": "USD",
+                "amount": "-4400.000000",
+                "source_event_ids": ["trade-economic-1"],
+            }
+        ]
+        with self.assertRaisesRegex(ContractError, "projection_expectation_mismatch"):
+            validate_document(document)
+
+        document = json.loads(path.read_text())
+        for operation in document["operations"]:
+            operation["evaluation_context"]["settlement_as_of_date"] = "2026-06-04"
+        with self.assertRaisesRegex(ContractError, "context_mismatch"):
+            validate_document(document)
+
+    def test_public_lifecycle_category_cannot_be_relabelled(self):
+        document = json.loads(
+            (FIXTURE_ROOT / "valid-equity-lifecycle-fold.json").read_text()
+        )
+        document["operations"][1]["errors"][0] = "ordering_violation"
+        document["ordering_counterexample"]["expected_category"] = "ordering_violation"
+        with self.assertRaisesRegex(ContractError, "expected_category_mismatch"):
+            validate_document(document)
+
+    def test_reconciliation_lineage_must_match_each_input_role(self):
+        path = FIXTURE_ROOT / "valid-cash-reconciliation.json"
+        document = json.loads(path.read_text())
+        document["expected"]["breaks"][0]["projection_source_record_ids"].pop()
+        with self.assertRaisesRegex(ContractError, "lineage_reference_missing"):
+            validate_document(document)
+
+        document = json.loads(path.read_text())
+        document["expected"]["breaks"][0]["projection_source_event_ids"].pop()
+        with self.assertRaisesRegex(ContractError, "lineage_reference_missing"):
+            validate_document(document)
+
+        document = json.loads(path.read_text())
+        document["expected"]["breaks"][0]["observation_source_record_id"] = "source.cash.1"
         with self.assertRaisesRegex(ContractError, "lineage_reference_missing"):
             validate_document(document)
 

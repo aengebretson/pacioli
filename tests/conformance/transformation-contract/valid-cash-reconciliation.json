@@ -71,6 +71,7 @@
           "observation_source_record_id"
         ],
         "emits": [
+          "projection_source_event_ids",
           "projection_source_record_ids",
           "observation_source_record_id",
           "operation_version",
@@ -132,6 +133,11 @@
         "expected_amount": "800.000000",
         "observed_amount": "790.000000",
         "difference": "-10.000000",
+        "projection_source_event_ids": [
+          "cash-event-1",
+          "cash-event-2",
+          "cash-event-3"
+        ],
         "projection_source_record_ids": [
           "source.cash.1",
           "source.cash.2",

@@ -124,7 +124,7 @@
         "applies_at": "none"
       },
       "errors": [
-        "ordering_violation",
+        "causal_reference_unavailable",
         "causal_reference_missing",
         "conflicting_lifecycle_successor"
       ],
@@ -657,7 +657,7 @@
       "trade-record-2",
       "trade-record-1"
     ],
-    "expected_category": "ordering_violation",
+    "expected_category": "causal_reference_unavailable",
     "reason": "A correction cannot be resolved before its predecessor is available; arbitrary reordering is not equivalent."
   },
   "invalidation_cases": [

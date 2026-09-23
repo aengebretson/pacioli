@@ -51,12 +51,15 @@ existing function; it does not claim a new callable API exists.
 | Settled cash | `project_cash(span<LedgerEntry>, CashProjectionContext)` | ordered fold with embedded mapping/aggregation | Cash is keyed by `(account, currency)`. Trade cash is `-(quantity × price)` only when settlement-eligible; valuation is half-even to scale 6. It returns `valuation_overflow` or `amount_overflow`. |
 | Open settlement | `project_settlement_obligations(span<LedgerEntry>, SettlementProjectionContext)` | ordered fold with embedded mapping/aggregation | Positive magnitudes are keyed by `(account, settlement_date, currency, direction)`. Payables and receivables are not netted. It returns `valuation_overflow` or `amount_overflow`. |
 | Exact addition | `Quantity::add` and `Money::add` | compatible reduction primitives | Both are checked fixed-point additions. `Money::add` also rejects currency mismatch. There is no public generic reducer. |
-| Position comparison | `reconcile_positions(expected, observed, PositionReconciliationContext)` | comparison | Exact shared `as_of`; detects duplicate observations, time mismatch, overflow, and missing/unexpected/mismatched values. |
-| Settled-cash comparison | `reconcile_cash(expected, observed, CashReconciliationContext)` | comparison | Exact shared economic and settlement cutoffs; detects duplicate observations, both context mismatches, overflow, and missing/unexpected/mismatched values. |
-| Lifecycle resolution | `docs/event-lifecycle.md` and its conformance fixtures | ordered fold before all affected projections | This is an integrated executable design contract, not an implemented public C++ interface. It orders by `(recorded_at, acceptance_sequence)`, resolves causal chains, then orders active payloads economically. |
+| Position comparison | `reconcile_positions(expected, observed, PositionReconciliationContext)` | comparison | Exact shared `as_of`; detects duplicate observations, time mismatch, overflow, and missing/unexpected/mismatched values. `Position` and `PositionBreak` do not retain projection provenance; a break retains observation provenance only when an observation exists. |
+| Settled-cash comparison | `reconcile_cash(expected, observed, CashReconciliationContext)` | comparison | Exact shared economic and settlement cutoffs; detects duplicate observations, both context mismatches, overflow, and missing/unexpected/mismatched values. `CashBalance` and `CashBreak` do not retain projection provenance; a break retains observation provenance only when an observation exists. |
+| Lifecycle acceptance and resolution | `LifecycleRecordDraft::{originate,correct,cancel,reverse}` and `LifecycleLedger::{accept,accept_batch,resolve}` in `luca/lifecycle.hpp` | ordered fold before all affected projections | This is a public in-memory C++ API. Acceptance validates immutable causal records and assigns lifecycle sequences; `resolve(recorded_through, economic_as_of)` returns knowledge-selected chains and active payloads ordered by `(effective_at, acceptance_sequence)`. Existing position, cash, and settlement projection functions do not yet consume `LifecycleResolution`. |
 | Journals/accounting | none in the current checkout | future map and reduction boundaries | Journal types and accounting-policy interfaces belong to O4. This contract does not invent their signatures or decide accounting policy. |
 
-The current projection functions accept entries in any input order because they
+The public lifecycle increment is narrower than the fixture composition shown
+here: it implements causal acceptance and two-cutoff resolution, but not the
+downstream projection adapters or composed-result lineage vocabulary. The
+current projection functions accept entries in any input order because they
 first request the ledger's canonical economic view. That convenience does not
 make the financial transition commutative: the evaluation order remains part of
 the contract, and lifecycle records must be resolved before that view exists.
@@ -163,8 +166,9 @@ open settlement before 2026-06-04 = 4400.000000 USD payable
 
 The ordered fold's valid record order is origin then correction. The
 counterexample presents correction then origin. The correction's causal target
-is unavailable at that point, so evaluation returns `ordering_violation`; it
-cannot obtain the resolved result by arbitrary reordering. The lifecycle fold
+is unavailable at that point, so the public lifecycle diagnostic is
+`causal_reference_unavailable`; it cannot obtain the resolved result by
+arbitrary reordering. The lifecycle fold
 therefore claims no commutativity, associativity, identity, invertibility, or
 distributivity, and it does not permit a raw chain to be split and merged.
 
@@ -198,10 +202,13 @@ difference = observed - expected = 790.000000 - 800.000000
            = -10.000000 USD
 ```
 
-The break retains projection evidence separately from observation provenance.
-Comparison neither mutates the ledger nor makes the observation authoritative.
-Swapping projected and observed ports changes meaning, so comparison claims no
-commutativity or inverse.
+The fixture-level composed result carries the projection's complete source-event
+and source-record lineage separately from the matched observation's evidence.
+This is a requirement for a later composition interface, not a claim about the
+current `CashBreak`: today `CashBalance` has no projection-provenance member and
+`CashBreak` retains only observation provenance. Comparison neither mutates the
+ledger nor makes the observation authoritative. Swapping projected and observed
+ports changes meaning, so comparison claims no commutativity or inverse.
 
 ## Replay and invalidation
 
@@ -275,11 +282,15 @@ The fixture set contains four independently parseable documents:
 `tests/conformance/test_transformation_contract.py` checks JSON shape, stable
 identifiers, all operation declarations, compatible edges, ordering and
 partition metadata, exact `Decimal` assertions, lineage references, law
-examples, invalidation coverage, and stable negative categories. Its arithmetic
-is limited to the equations written in the fixtures. It does not independently
-select events, resolve arbitrary lifecycle graphs, calculate portfolio state,
-or reconcile arbitrary records; those remain responsibilities of reviewed LUCA
-implementations and their engine conformance tests.
+examples, invalidation coverage, and stable negative categories. For the single
+resolved-trade example it also binds the declared position, pre-settlement cash,
+obligation key/direction/amount, and arithmetic operands to the selected active
+record and evaluation context. Reconciliation output lineage must exactly match
+the projected and observed inputs in their distinct roles. This deliberately
+narrow checking does not select events, resolve arbitrary lifecycle graphs,
+calculate general portfolio state, or reconcile arbitrary records; those remain
+responsibilities of reviewed LUCA implementations and their engine conformance
+tests.
 
 ## Explicit deferrals and unresolved policy choices
 
