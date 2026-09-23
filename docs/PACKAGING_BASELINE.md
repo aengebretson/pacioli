@@ -1,9 +1,11 @@
 # LUCA packaging baseline
 
 The initial install/export audit covers task O1-T01 at source commit
-`2af21ce91cdc299d00717d9cca462a17e229ec59`. The parent-consumer follow-up in
-O1-T02 was implemented from base commit
-`38d9cab57ce7ebcaa9a71f19cf06da188035d259`.
+`2af21ce91cdc299d00717d9cca462a17e229ec59`. The O1-T02 parent-consumer
+implementation commit `5414bb017036e06a4c6489379eba172548cf2a36` was originally
+based on `38d9caba2e8106aec27ab0a6178ef81fffdfaa01`. This bounded repair applies
+that implementation to current-main base
+`23fb82fafd64d056aa17be1708851e41c953133c`.
 
 ## Canonical identity inspected
 
