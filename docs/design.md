@@ -212,7 +212,9 @@ The engine should parallelize only where those semantics permit it.
 The first executable lifecycle design is specified in [Immutable event lifecycle
 contract](event-lifecycle.md). It introduces separate immutable record and stable
 economic-event identities, recorded/knowledge selection, unbranched causal
-lineage, and correction, cancellation, reversal, and supersession semantics.
+lineage, terminal exact-offset reversals, and correction, cancellation,
+reversal, and supersession semantics. Knowledge-cutoff resolution derives a
+complete causal path and head for every selected economic identity.
 Lifecycle resolution precedes every affected projection, after which active
 payloads retain the existing economic ordering and explicit settlement
 evaluation rules. This is a reviewable design contract, not an implemented public

@@ -58,8 +58,9 @@ serialization.
   `supersedes_record_id`. Once the correction is known, the replacement is the
   only active payload for that economic identity. It may change quantity,
   amount, price, effective time, or supplied settlement date, but not account,
-  event type, instrument, or currency. A wrong immutable relationship is
-  cancelled and re-originated under a new economic identity.
+  event type, instrument, or currency. Its target must be an open `originate`
+  or `correct` record; a reversal is not correctable. A wrong immutable
+  relationship is cancelled and re-originated under a new economic identity.
 
 `cancel`
 : Carries no payload and retains the target's `economic_event_id`. It identifies
@@ -67,15 +68,19 @@ serialization.
   the chain. Once known, that economic identity contributes no state at any
   economic cutoff. This is LUCA's semantic cancellation of erroneous economic
   evidence, not a mutable delete and not a claim about an exchange protocol's
-  cancellation message.
+  cancellation message. Its target must be an open `originate` or `correct`
+  record; neither cancellations nor reversals can themselves be cancelled.
 
 `reverse`
 : Carries a full offsetting payload under a new `economic_event_id` and points
   to the payload-bearing target with `reverses_record_id`. The target remains
   active; the reversal contributes at its own `effective_at`. For this first
   contract a reversal is complete: cash amount or trade quantity is the exact
-  opposite, and account, type, instrument, price, and currency match. A reversal
-  may have a later supplied settlement date. Partial reversals are deferred.
+  opposite, and account, type, instrument, numerically equal price, and currency
+  match. A reversal may have a later supplied settlement date. Accepting it
+  closes its target, and the new reversal root is itself terminal: no correction,
+  cancellation, or further reversal may target either record. Partial reversals
+  and changes to an accepted reversal are deferred.
 
 **Supersession** is the relationship expressed by `supersedes_record_id`, not a
 fifth financial action. A correction supersedes a payload with a replacement;
@@ -86,8 +91,11 @@ The causal graph is an unbranched forest. A target must exist, must not refer to
 itself, must be earlier in knowledge order, and may have at most one direct
 lifecycle successor across correction, cancellation, or reversal. Cycles are
 invalid. The referenced record must be the open head appropriate to the action;
-a cancelled record is terminal. This intentionally closes a record after a
-reversal so a later change cannot silently make the offset incompatible.
+a cancelled record and a reversal record are terminal. This intentionally fixes
+both sides of an accepted reversal relationship so a later lifecycle action
+cannot silently make its exact offset incompatible. A new correction to the
+underlying business fact therefore requires a separately evidenced cancellation
+and re-origination policy in a future contract; this contract does not infer one.
 
 ## Validation and diagnostics
 
@@ -102,7 +110,7 @@ an implementation may attach more detail, record IDs, and field paths:
 | `causal_cycle` | Causal edges form a cycle. |
 | `causal_reference_unavailable` | The target is not earlier in recorded/acceptance order. |
 | `incompatible_account` | Target and action cross account boundaries. |
-| `incompatible_event_relationship` | Economic identity, event type, natural key, or reversal terms are incompatible. |
+| `incompatible_event_relationship` | Economic identity, event type, natural key, reversal terms, or terminal-action policy are incompatible. |
 | `conflicting_lifecycle_successor` | A target already has a correction, cancellation, or reversal successor. |
 
 Ordinary shape errors, duplicate record/economic-origin identities, invalid
@@ -125,10 +133,13 @@ Evaluation is deterministic:
 1. Select records with `recorded_at <= recorded_through`. Accepted timestamps
    are nondecreasing with sequence; equal timestamps are ordered by
    `acceptance_sequence`.
-2. Resolve selected correction/cancellation chains in causal order. A selected
-   active chain contributes exactly its active full payload. A selected
-   cancelled chain contributes none. A reversal is an active independent chain
-   whose causal link is retained.
+2. Group every selected record by `economic_event_id`, follow each complete
+   causal path from its `originate` or `reverse` root, and resolve the
+   knowledge-time head. Every selected economic identity appears exactly once
+   as either an active chain or a cancelled chain; a fixture cannot omit a known
+   successor or identity. An active chain contributes exactly its head's full
+   payload. A cancelled chain contributes none. A reversal is an active,
+   terminal independent chain whose causal link is retained.
 3. Select active payloads with `effective_at <= economic_as_of` and replay them
    by `(effective_at, acceptance_sequence)`. The sequence of the active payload
    record is the deterministic tie-breaker.
@@ -180,7 +191,7 @@ O3 work. Incremental processing may be added only when it proves equivalent to
 full replay and invalidates state affected by late lifecycle records.
 
 Partial reversals, multiple independent reversals, changes of account or natural
-key within a correction, and lifecycle action after a closed reversal are not
-accepted by this first contract. A later financial-policy decision may add them
-with new conformance cases; implementations must not infer them from these
-fixtures.
+key within a correction, and any lifecycle action targeting an accepted
+reversal are not accepted by this first contract. A later financial-policy
+decision may add them with new conformance cases; implementations must not infer
+them from these fixtures.

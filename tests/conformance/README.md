@@ -69,12 +69,13 @@ fix stable causal diagnostic categories.
 
 `test_event_lifecycle_contract.py` is dependency-free and checks the portable
 schema, identity uniqueness, provenance references, time and ordering inputs,
-causal consistency, relationship compatibility, and expected-output structure.
-It intentionally does not calculate positions, cash, or settlement state; that
-would duplicate the production projection engine. Expected financial arithmetic
-is recorded in the fixtures and in
-[`docs/event-lifecycle.md`](../../docs/event-lifecycle.md) for independent human
-review.
+causal consistency, terminal reversal and relationship compatibility, and the
+complete lifecycle paths and heads selected by each recorded-time cutoff. It
+also checks expected-output structure, but intentionally does not calculate
+positions, cash, or settlement state; that would duplicate the production
+projection engine. Expected financial arithmetic is recorded in the fixtures
+and in [`docs/event-lifecycle.md`](../../docs/event-lifecycle.md) for independent
+human review.
 
 The lifecycle fixture vocabulary is a semantic interchange contract for tests,
 not canonical serialization or a promise that future public C++ types use the

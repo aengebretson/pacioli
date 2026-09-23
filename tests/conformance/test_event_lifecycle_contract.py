@@ -1,7 +1,8 @@
 """Dependency-free validator for the contract-first O2 lifecycle fixtures.
 
-This validates identities, causal structure, provenance and expected-state shape.
-It deliberately does not reproduce position, cash or settlement calculations.
+This validates identities, causal structure, provenance, knowledge-cutoff chain
+heads and expected-state shape. It deliberately does not reproduce position,
+cash or settlement calculations.
 """
 
 from __future__ import annotations
@@ -377,10 +378,10 @@ def _validate_causality(
 def _validate_relationship(record: dict[str, Any], target: dict[str, Any]) -> None:
     action = record["action"]
     record_id = record["record_id"]
-    if target["action"] == "cancel":
+    if target["action"] in {"cancel", "reverse"}:
         _fail(
             "incompatible_event_relationship",
-            "a cancelled record is terminal",
+            f"a {target['action']} record is terminal",
             record_id,
         )
     if action in {"correct", "cancel"}:
@@ -421,12 +422,18 @@ def _validate_relationship(record: dict[str, Any], target: dict[str, Any]) -> No
             )
     else:
         stable_fields = ["instrument", "quote_currency"]
-        if action == "reverse":
-            stable_fields.append("price")
         if any(event[field] != target_event[field] for field in stable_fields):
             _fail(
                 "incompatible_event_relationship",
                 "equity relationship changes a stable term",
+                record_id,
+            )
+        if action == "reverse" and _decimal(
+            event["price"], "reversal price"
+        ) != _decimal(target_event["price"], "target price"):
+            _fail(
+                "incompatible_event_relationship",
+                "trade reversal price differs from its target",
                 record_id,
             )
         if action == "reverse" and _decimal(
@@ -578,6 +585,111 @@ def _validate_inactive_chain(
     )
 
 
+def _derive_known_chains(
+    records: dict[str, dict[str, Any]],
+    recorded_times: dict[str, int],
+    recorded_through: int,
+) -> dict[str, dict[str, Any]]:
+    """Resolve lifecycle paths selected by knowledge time, without projecting them."""
+    selected_by_economic_id: dict[str, list[str]] = {}
+    selected_records = sorted(
+        (
+            record
+            for record_id, record in records.items()
+            if recorded_times[record_id] <= recorded_through
+        ),
+        key=lambda record: record["acceptance_sequence"],
+    )
+    for record in selected_records:
+        selected_by_economic_id.setdefault(record["economic_event_id"], []).append(
+            record["record_id"]
+        )
+
+    result: dict[str, dict[str, Any]] = {}
+    for economic_id, selected_ids in selected_by_economic_id.items():
+        roots = [
+            record_id
+            for record_id in selected_ids
+            if records[record_id]["action"] in {"originate", "reverse"}
+        ]
+        if len(roots) != 1:
+            _fail(
+                "expected_output",
+                f"knowledge-selected economic event {economic_id!r} has no unique root",
+            )
+
+        successors: dict[str, str] = {}
+        for record_id in selected_ids:
+            record = records[record_id]
+            if record["action"] in {"correct", "cancel"}:
+                successors[record["supersedes_record_id"]] = record_id
+
+        path = [roots[0]]
+        while path[-1] in successors:
+            path.append(successors[path[-1]])
+        if set(path) != set(selected_ids):
+            _fail(
+                "expected_output",
+                f"knowledge-selected economic event {economic_id!r} is not one complete chain",
+            )
+
+        head_id = path[-1]
+        result[economic_id] = {
+            "record_ids": path,
+            "head_id": head_id,
+            "active": records[head_id]["action"] != "cancel",
+        }
+    return result
+
+
+def _validate_chains_at_recorded_cutoff(
+    active_chains: list[dict[str, Any]],
+    inactive_chains: list[dict[str, Any]],
+    context: str,
+    records: dict[str, dict[str, Any]],
+    recorded_times: dict[str, int],
+    recorded_through: int,
+) -> None:
+    listed = {
+        chain["economic_event_id"]: (chain, True) for chain in active_chains
+    }
+    listed.update(
+        {chain["economic_event_id"]: (chain, False) for chain in inactive_chains}
+    )
+    derived = _derive_known_chains(records, recorded_times, recorded_through)
+
+    if set(listed) != set(derived):
+        missing = sorted(set(derived) - set(listed))
+        unexpected = sorted(set(listed) - set(derived))
+        _fail(
+            "expected_output",
+            f"{context} lifecycle chains differ at recorded_through "
+            f"(missing={missing}, unexpected={unexpected})",
+        )
+
+    for economic_id, expected in derived.items():
+        chain, listed_active = listed[economic_id]
+        if listed_active != expected["active"]:
+            _fail(
+                "expected_output",
+                f"{context} lifecycle disposition for {economic_id!r} does not match "
+                "the recorded_through head",
+            )
+        if chain["record_ids"] != expected["record_ids"]:
+            _fail(
+                "expected_output",
+                f"{context} lifecycle path for {economic_id!r} does not contain every "
+                "record selected by recorded_through",
+            )
+        head_field = "active_record_id" if listed_active else "terminal_record_id"
+        if chain[head_field] != expected["head_id"]:
+            _fail(
+                "expected_output",
+                f"{context}.{head_field} for {economic_id!r} does not match the "
+                "recorded_through head",
+            )
+
+
 def _validate_projection_records(expected: dict[str, Any], context: str) -> None:
     position_keys: set[tuple[str, str]] = set()
     for index, item in enumerate(_objects(expected.get("positions"), f"{context}.positions")):
@@ -630,6 +742,7 @@ def _validate_projection_records(expected: dict[str, Any], context: str) -> None
 def _validate_evaluations(
     document: dict[str, Any],
     records: dict[str, dict[str, Any]],
+    recorded_times: dict[str, int],
     source_records: dict[str, dict[str, Any]],
 ) -> None:
     names: set[str] = set()
@@ -710,6 +823,14 @@ def _validate_evaluations(
                         "expected_output",
                         f"{context}.expected includes {record_id!r} after recorded_through",
                     )
+        _validate_chains_at_recorded_cutoff(
+            active_chains,
+            inactive_chains,
+            f"{context}.expected",
+            records,
+            recorded_times,
+            recorded_through,
+        )
         _validate_projection_records(expected, f"{context}.expected")
         journals = _object(expected.get("journals"), f"{context}.expected.journals")
         _keys(journals, {"status", "reason"}, f"{context}.expected.journals")
@@ -776,7 +897,7 @@ def validate_contract(document: dict[str, Any]) -> None:
     records, recorded_times = _validate_records(document, source_records)
     _validate_causality(records, recorded_times)
     if document["valid"]:
-        _validate_evaluations(document, records, source_records)
+        _validate_evaluations(document, records, recorded_times, source_records)
 
 
 def load_document(path: Path) -> dict[str, Any]:
@@ -796,7 +917,7 @@ class EventLifecycleContractTest(unittest.TestCase):
 
     def test_every_json_fixture_parses_independently(self):
         paths = sorted(FIXTURE_ROOT.glob("*.json"))
-        self.assertEqual(len(paths), 9)
+        self.assertEqual(len(paths), 10)
         for path in paths:
             with self.subTest(path=path.name):
                 self.assertIsInstance(load_document(path), dict)
@@ -815,7 +936,7 @@ class EventLifecycleContractTest(unittest.TestCase):
 
     def test_invalid_fixtures_produce_stable_diagnostics(self):
         paths = sorted(FIXTURE_ROOT.glob("invalid-*.json"))
-        self.assertEqual(len(paths), 7)
+        self.assertEqual(len(paths), 8)
         for path in paths:
             with self.subTest(path=path.name):
                 document = load_document(path)
@@ -865,6 +986,33 @@ class EventLifecycleContractTest(unittest.TestCase):
         with self.assertRaises(ContractError) as raised:
             validate_contract(mutated)
         self.assertEqual(raised.exception.category, "schema_shape")
+
+    def test_expected_chain_cannot_omit_known_correction(self):
+        document = load_document(FIXTURE_ROOT / "valid-late-cash-correction.json")
+        mutated = copy.deepcopy(document)
+        chain = mutated["evaluations"][1]["expected"]["active_event_chains"][0]
+        chain["record_ids"] = ["cash-record-v1"]
+        chain["active_record_id"] = "cash-record-v1"
+        chain["source_lineage"] = chain["source_lineage"][:1]
+        with self.assertRaises(ContractError) as raised:
+            validate_contract(mutated)
+        self.assertEqual(raised.exception.category, "expected_output")
+
+    def test_expected_chains_cannot_omit_known_economic_identity(self):
+        document = load_document(FIXTURE_ROOT / "valid-equity-reversal-correction.json")
+        mutated = copy.deepcopy(document)
+        mutated["evaluations"][0]["expected"]["active_event_chains"] = [
+            mutated["evaluations"][0]["expected"]["active_event_chains"][0]
+        ]
+        with self.assertRaises(ContractError) as raised:
+            validate_contract(mutated)
+        self.assertEqual(raised.exception.category, "expected_output")
+
+    def test_reversal_price_uses_decimal_value_equality(self):
+        document = load_document(FIXTURE_ROOT / "valid-equity-reversal-correction.json")
+        mutated = copy.deepcopy(document)
+        mutated["records"][3]["event"]["price"] = "55.0"
+        validate_contract(mutated)
 
 
 if __name__ == "__main__":
