@@ -1,0 +1,45 @@
+{
+  "contract_version": "luca.event-lifecycle.v1",
+  "name": "invalid-self-reference",
+  "description": "A lifecycle record cannot target itself.",
+  "valid": false,
+  "source_records": [
+    {
+      "source_record_id": "invalid-source",
+      "source_id": "fixture",
+      "observed_at": "2026-01-01T00:00:00Z",
+      "source_event_at": null,
+      "payload_hash": {
+        "algorithm": "sha256",
+        "value": "invalid-self-reference"
+      },
+      "kind": "fixture"
+    }
+  ],
+  "records": [
+    {
+      "record_id": "cash-self",
+      "economic_event_id": "cash-economic",
+      "account": "fund-a",
+      "action": "correct",
+      "supersedes_record_id": "cash-self",
+      "recorded_at": "2026-01-02T00:00:00Z",
+      "acceptance_sequence": 1,
+      "effective_at": "2026-01-02T00:00:00Z",
+      "provenance": {
+        "source_record_ids": ["invalid-source"],
+        "transformation_name": "fixture",
+        "transformation_version": "1"
+      },
+      "event": {
+        "type": "cash_movement",
+        "currency": "USD",
+        "amount": "10.000000"
+      }
+    }
+  ],
+  "expected_diagnostic": {
+    "category": "causal_self_reference",
+    "record_id": "cash-self"
+  }
+}
