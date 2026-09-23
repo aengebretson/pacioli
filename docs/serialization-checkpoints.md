@@ -74,7 +74,7 @@ parser, and memory representation:
 | Settlement date | Valid proleptic-Gregorian `YYYY-MM-DD` text, with no time or timezone. |
 | Fixed point | An object containing its version, a canonical signed base-10 `scaled_value` string, and canonical non-negative `scale` string. `0` is the only zero spelling; leading plus, leading zero, decimal point, exponent, whitespace, and `-0` are forbidden. The parsed scaled value must fit signed 64-bit. |
 | Currency | Exactly three uppercase ASCII letters. Money contains its currency; price remains currency-neutral and an equity trade carries `quote_currency`. |
-| Sequence/watermark integer | Canonical positive base-10 text parsed as signed 64-bit. Text avoids loss in fixture consumers whose JSON numbers cannot represent all 64-bit integers. |
+| Sequence/watermark integer | Canonical positive base-10 text parsed as unsigned 64-bit (`1` through `18446744073709551615`). Text avoids loss in fixture consumers whose JSON numbers cannot represent the complete public `LifecycleSequence` domain. The text is an LCB string node, so it is not constrained by LCB1's signed primitive-integer tag. |
 | Optional value | The member is always present. Absence is tag `00` null; presence is the canonical child value. Omitting the member is not equivalent. |
 | Ordered collection | LCB array in the financial order defined below. An implementation may use an unordered container internally but must emit this order. |
 
@@ -154,6 +154,18 @@ ordered first occurrence of every provenance source ID while walking lifecycle
 records and each record's provenance array. Reordering any of these ordered
 arrays changes canonical bytes and is rejected where it violates the declared
 order.
+
+The validator checks the same structural lifecycle invariants as public
+acceptance: an unbranched causal target, same account for related records,
+retained economic identity for correction/cancellation, a distinct identity
+for reversal, compatible event type and natural key, and exact reversal terms.
+For lineage binding it selects records through `recorded_through`, takes the
+unique head of every economic identity, removes cancellation heads and payloads
+after `economic_as_of`, then orders the remaining heads by the replay key. The
+declared `active_record_ids` must equal that derived set exactly; it cannot list
+both a predecessor and correction, omit the true head, or substitute a head
+from a different identity. This is lifecycle selection and validation, not a
+second implementation of portfolio arithmetic.
 
 ### Portfolio state — `luca.portfolio-state.v1`
 
@@ -296,14 +308,20 @@ The executable contract emits these categories:
 | `incompatible_prefix` | The requested checkpoint prefix is not the verified manifest prefix. |
 | `prefix_continuity` | The inclusive prefix or append-only suffix has a gap or wrong boundary. |
 | `late_lifecycle_knowledge` | A suffix targets prefix lifecycle knowledge or sorts at/before resolved checkpoint state. |
+| `incompatible_account` | A correction, cancellation, or reversal crosses account identity. |
+| `incompatible_event_relationship` | A lifecycle edge changes economic identity, event type, natural key, reversal terms, or terminal-action policy. |
+| `conflicting_lifecycle_successor` | More than one lifecycle record directly targets the same predecessor. |
 
 Diagnostic prose is explanatory and may grow; category strings are the portable
 contract.
 
 ## Fixture and validator responsibilities
 
-`canonical-vectors.json` pins the LCB1 grammar and representative money and
-provenance values. `valid-append.json` covers canonical lifecycle input,
+`canonical-vectors.json` pins the LCB1 grammar, representative money and
+provenance values, and the maximum public unsigned lifecycle sequence. Its
+named values are closed schemas: the validator applies money and provenance
+shape/version rules before accepting matching bytes and digests.
+`valid-append.json` covers canonical lifecycle input,
 positions, cash, settlement, a verified checkpoint, an ordinary suffix, equality
 of full and resumed state/lineage, and incompatible projection, engine, policy,
 context, partition, prefix, schema, and hash cases. `late-correction.json` pins
@@ -314,9 +332,10 @@ scalar normalization, ordering, canonical bytes, hashes, round trips, manifest
 binding, compatibility, prefix continuity, lineage, and stable diagnostics. It
 accepts explicit values and named fixture paths only. It has no network,
 database, environment, filesystem discovery, clock, or hidden input access. It
-does not resolve lifecycle chains or calculate a position, cash balance,
-settlement obligation, correction delta, cancellation, or reversal. That avoids
-creating a second financial projection engine in Python.
+derives context-selected lifecycle heads solely to verify declared lineage and
+the watermark. It does not calculate a position, cash balance, settlement
+obligation, correction delta, cancellation, or reversal. That avoids creating a
+second financial projection engine in Python.
 
 ## Deliberately deferred
 

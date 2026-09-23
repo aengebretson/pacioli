@@ -1,10 +1,10 @@
 """Dependency-free validator for O3 serialization/checkpoint fixtures.
 
 This module validates declared canonical values, digests, checkpoint compatibility,
-prefix continuity, and lineage.  It intentionally does not calculate positions,
-cash, settlement obligations, or lifecycle heads: expected financial state is data
-produced by the authoritative engine and equality between execution modes is checked
-as a contract assertion.
+prefix continuity, lifecycle relationships, and context-selected lifecycle heads. It
+intentionally does not calculate positions, cash, or settlement obligations: expected
+financial state is data produced by the authoritative engine and equality between
+execution modes is checked as a contract assertion.
 """
 
 from __future__ import annotations
@@ -52,10 +52,12 @@ CANONICAL_TIMESTAMP = re.compile(
     r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9}Z$"
 )
 CANONICAL_INTEGER = re.compile(r"^(?:0|-?[1-9][0-9]*)$")
+CANONICAL_UNSIGNED_INTEGER = re.compile(r"^(?:0|[1-9][0-9]*)$")
 CURRENCY = re.compile(r"^[A-Z]{3}$")
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
 I64_MIN = -(1 << 63)
 I64_MAX = (1 << 63) - 1
+U64_MAX = (1 << 64) - 1
 
 
 class ContractError(ValueError):
@@ -131,6 +133,18 @@ def _integer(value: Any, context: str, *, minimum: int = I64_MIN) -> int:
     result = int(value)
     if result < minimum or result > I64_MAX:
         _fail("schema_shape", f"{context} is outside the signed 64-bit range")
+    return result
+
+
+def _unsigned_integer(value: Any, context: str, *, minimum: int = 0) -> int:
+    if not isinstance(value, str) or CANONICAL_UNSIGNED_INTEGER.fullmatch(value) is None:
+        _fail(
+            "canonical_encoding",
+            f"{context} must be a canonical unsigned decimal integer string",
+        )
+    result = int(value)
+    if result < minimum or result > U64_MAX:
+        _fail("schema_shape", f"{context} is outside the unsigned 64-bit range")
     return result
 
 
@@ -404,7 +418,9 @@ def _record(value: Any, context: str) -> dict[str, Any]:
     if action not in {"originate", "correct", "cancel", "reverse"}:
         _fail("schema_shape", f"{context}.action is unsupported")
     _timestamp(record["recorded_at"], f"{context}.recorded_at")
-    _integer(record["acceptance_sequence"], f"{context}.acceptance_sequence", minimum=1)
+    _unsigned_integer(
+        record["acceptance_sequence"], f"{context}.acceptance_sequence", minimum=1
+    )
     causal = record["causal_record_id"]
     if action == "originate":
         if causal is not None:
@@ -434,15 +450,87 @@ def _record_sequence(records: list[dict[str, Any]]) -> dict[str, Any]:
     return {"schema_version": SUPPORTED["record_sequence"], "records": records}
 
 
+def _scaled_value(value: dict[str, Any]) -> int:
+    return int(value["scaled_value"])
+
+
+def _validate_relationship(
+    record: dict[str, Any], target: dict[str, Any], context: str
+) -> None:
+    action = record["action"]
+    if target["action"] in {"cancel", "reverse"}:
+        _fail(
+            "incompatible_event_relationship",
+            f"{context} targets terminal {target['action']} record {target['record_id']!r}",
+        )
+    if action in {"correct", "cancel"}:
+        if record["economic_event_id"] != target["economic_event_id"]:
+            _fail(
+                "incompatible_event_relationship",
+                f"{context} supersession changes economic-event identity",
+            )
+    elif record["economic_event_id"] == target["economic_event_id"]:
+        _fail(
+            "incompatible_event_relationship",
+            f"{context} reversal must start a distinct economic-event identity",
+        )
+
+    if action == "cancel":
+        return
+    event = record["event"]
+    target_event = target["event"]
+    if target_event is None or event["variant"] != target_event["variant"]:
+        _fail("incompatible_event_relationship", f"{context} lifecycle event types differ")
+
+    if event["variant"] == "cash_movement":
+        if event["amount"]["currency"] != target_event["amount"]["currency"]:
+            _fail("incompatible_event_relationship", f"{context} changes cash currency")
+        if action == "reverse" and _scaled_value(event["amount"]) != -_scaled_value(
+            target_event["amount"]
+        ):
+            _fail(
+                "incompatible_event_relationship",
+                f"{context} cash reversal is not the exact offset",
+            )
+    else:
+        if (
+            event["instrument"] != target_event["instrument"]
+            or event["quote_currency"] != target_event["quote_currency"]
+        ):
+            _fail(
+                "incompatible_event_relationship",
+                f"{context} changes an equity-trade natural key",
+            )
+        if action == "reverse" and (
+            _scaled_value(event["price"]) != _scaled_value(target_event["price"])
+            or _scaled_value(event["quantity"]) != -_scaled_value(target_event["quantity"])
+        ):
+            _fail(
+                "incompatible_event_relationship",
+                f"{context} equity reversal is not the exact quantity and price offset",
+            )
+
+    if (
+        action == "reverse"
+        and event["header"]["effective_at"] < target_event["header"]["effective_at"]
+    ):
+        _fail(
+            "incompatible_event_relationship",
+            f"{context} reversal economically predates its target",
+        )
+
+
 def _validate_records(records_value: Any, context: str) -> list[dict[str, Any]]:
     records = _objects(records_value, context, nonempty=True)
     ids: set[str] = set()
     economic_origins: set[str] = set()
     expected_sequence = 1
     previous_recorded_at: str | None = None
-    known: set[str] = set()
+    known: dict[str, dict[str, Any]] = {}
+    successors: dict[str, str] = {}
     for index, record in enumerate(records):
-        _record(record, f"{context}[{index}]")
+        item = f"{context}[{index}]"
+        _record(record, item)
         record_id = record["record_id"]
         if record_id in ids:
             _fail("duplicate_identity", f"duplicate record ID {record_id!r}")
@@ -452,7 +540,7 @@ def _validate_records(records_value: Any, context: str) -> list[dict[str, Any]]:
             if economic_id in economic_origins:
                 _fail("duplicate_identity", f"duplicate economic origin {economic_id!r}")
             economic_origins.add(economic_id)
-        sequence = _integer(record["acceptance_sequence"], f"{context}[{index}].acceptance_sequence")
+        sequence = _unsigned_integer(record["acceptance_sequence"], f"{item}.acceptance_sequence")
         if sequence != expected_sequence:
             _fail("deterministic_ordering", f"{context} must be contiguous from sequence 1")
         expected_sequence += 1
@@ -460,9 +548,26 @@ def _validate_records(records_value: Any, context: str) -> list[dict[str, Any]]:
             _fail("deterministic_ordering", f"{context}.recorded_at must not decrease")
         previous_recorded_at = record["recorded_at"]
         causal = record["causal_record_id"]
-        if causal is not None and causal not in known:
-            _fail("lineage_reference_missing", f"{record_id!r} has unavailable causal target {causal!r}")
-        known.add(record_id)
+        if causal is not None:
+            if causal not in known:
+                _fail(
+                    "lineage_reference_missing",
+                    f"{record_id!r} has unavailable causal target {causal!r}",
+                )
+            target = known[causal]
+            if record["account"] != target["account"]:
+                _fail(
+                    "incompatible_account",
+                    f"{item} and target {causal!r} have different accounts",
+                )
+            if causal in successors:
+                _fail(
+                    "conflicting_lifecycle_successor",
+                    f"{causal!r} already has lifecycle successor {successors[causal]!r}",
+                )
+            successors[causal] = record_id
+            _validate_relationship(record, target, item)
+        known[record_id] = record
     return records
 
 
@@ -613,9 +718,9 @@ def _event_prefix(value: Any, context: str) -> dict[str, Any]:
     )
     if result["kind"] != "acceptance_sequence_inclusive":
         _fail("schema_shape", f"{context}.kind is unsupported")
-    first = _integer(result["first_sequence"], f"{context}.first_sequence", minimum=1)
-    last = _integer(result["last_sequence"], f"{context}.last_sequence", minimum=1)
-    count = _integer(result["record_count"], f"{context}.record_count", minimum=1)
+    first = _unsigned_integer(result["first_sequence"], f"{context}.first_sequence", minimum=1)
+    last = _unsigned_integer(result["last_sequence"], f"{context}.last_sequence", minimum=1)
+    count = _unsigned_integer(result["record_count"], f"{context}.record_count", minimum=1)
     if first != 1 or last - first + 1 != count:
         _fail("prefix_continuity", f"{context} is not one inclusive contiguous prefix")
     _string(result["last_record_id"], f"{context}.last_record_id")
@@ -672,7 +777,11 @@ def _manifest(value: Any, context: str) -> dict[str, Any]:
     watermark = _object(manifest["resolved_event_watermark"], f"{context}.resolved_event_watermark")
     _keys(watermark, {"effective_at", "acceptance_sequence", "record_id"}, f"{context}.resolved_event_watermark")
     _timestamp(watermark["effective_at"], f"{context}.resolved_event_watermark.effective_at")
-    _integer(watermark["acceptance_sequence"], f"{context}.resolved_event_watermark.acceptance_sequence", minimum=1)
+    _unsigned_integer(
+        watermark["acceptance_sequence"],
+        f"{context}.resolved_event_watermark.acceptance_sequence",
+        minimum=1,
+    )
     _string(watermark["record_id"], f"{context}.resolved_event_watermark.record_id")
     _lineage(manifest["lineage"], f"{context}.lineage")
     return manifest
@@ -694,8 +803,32 @@ def _event_sort_key(record: dict[str, Any]) -> tuple[str, int]:
     return event["header"]["effective_at"], int(record["acceptance_sequence"])
 
 
+def _active_heads(
+    records: list[dict[str, Any]], evaluation_context: dict[str, Any]
+) -> list[dict[str, Any]]:
+    selected_by_economic_id: dict[str, list[dict[str, Any]]] = {}
+    recorded_through = evaluation_context["recorded_through"]
+    economic_as_of = evaluation_context["economic_as_of"]
+    for record in records:
+        if record["recorded_at"] <= recorded_through:
+            selected_by_economic_id.setdefault(record["economic_event_id"], []).append(record)
+
+    active: list[dict[str, Any]] = []
+    for chain in selected_by_economic_id.values():
+        head = chain[-1]
+        if (
+            head["action"] != "cancel"
+            and head["event"]["header"]["effective_at"] <= economic_as_of
+        ):
+            active.append(head)
+    return sorted(active, key=_event_sort_key)
+
+
 def _bind_lineage(
-    lineage: dict[str, Any], records: list[dict[str, Any]], context: str
+    lineage: dict[str, Any],
+    records: list[dict[str, Any]],
+    evaluation_context: dict[str, Any],
+    context: str,
 ) -> list[dict[str, Any]]:
     record_ids = [record["record_id"] for record in records]
     if lineage["lifecycle_record_ids"] != record_ids:
@@ -707,7 +840,15 @@ def _bind_lineage(
         active = [by_id[record_id] for record_id in lineage["active_record_ids"]]
     except KeyError as error:
         _fail("lineage_reference_missing", f"{context} active record {error.args[0]!r} is absent")
-    if active != sorted(active, key=_event_sort_key):
+    expected_active = _active_heads(records, evaluation_context)
+    active_ids = [record["record_id"] for record in active]
+    expected_ids = [record["record_id"] for record in expected_active]
+    if set(active_ids) != set(expected_ids):
+        _fail(
+            "lineage_reference_missing",
+            f"{context} active lineage does not equal the context-selected lifecycle heads",
+        )
+    if active_ids != expected_ids:
         _fail("deterministic_ordering", f"{context} active lineage is not in economic replay order")
     return active
 
@@ -728,9 +869,11 @@ def _bind_manifest(
         _fail("digest_mismatch", f"{context} canonical state digest is altered")
 
     lineage = manifest["lineage"]
-    active = _bind_lineage(lineage, records, context)
+    active = _bind_lineage(lineage, records, manifest["evaluation_context"], context)
     watermark = manifest["resolved_event_watermark"]
-    if active and (
+    if not active:
+        _fail("lineage_reference_missing", f"{context} v1 checkpoint has no resolved event watermark")
+    if (
         watermark["record_id"] != active[-1]["record_id"]
         or watermark["effective_at"] != active[-1]["event"]["header"]["effective_at"]
         or watermark["acceptance_sequence"] != active[-1]["acceptance_sequence"]
@@ -823,6 +966,54 @@ def _target(document: dict[str, Any], target: str) -> Any:
     return document[target]
 
 
+def _primitive_envelope(value: Any, context: str) -> dict[str, Any]:
+    result = _object(value, context)
+    _keys(
+        result,
+        {"schema_version", "enabled", "optional", "signed_integer", "ordered_values"},
+        context,
+    )
+    _version(
+        result["schema_version"],
+        "luca.canonical-test-value.v1",
+        f"{context}.schema_version",
+    )
+    if not isinstance(result["enabled"], bool) or result["optional"] is not None:
+        _fail("schema_shape", f"{context} boolean or optional primitive is invalid")
+    integer = result["signed_integer"]
+    if (
+        isinstance(integer, bool)
+        or not isinstance(integer, int)
+        or integer < I64_MIN
+        or integer > I64_MAX
+    ):
+        _fail("schema_shape", f"{context}.signed_integer must fit signed 64-bit")
+    values = result["ordered_values"]
+    if not isinstance(values, list):
+        _fail("schema_shape", f"{context}.ordered_values must be an array")
+    for index, item in enumerate(values):
+        _string(item, f"{context}.ordered_values[{index}]")
+    return result
+
+
+def _canonical_vector_values(value: Any, context: str) -> dict[str, Any]:
+    values = _object(value, context)
+    _keys(
+        values,
+        {"primitive_envelope", "money", "provenance", "maximum_lifecycle_sequence"},
+        context,
+    )
+    _primitive_envelope(values["primitive_envelope"], f"{context}.primitive_envelope")
+    _money(values["money"], f"{context}.money")
+    _provenance(values["provenance"], f"{context}.provenance")
+    _unsigned_integer(
+        values["maximum_lifecycle_sequence"],
+        f"{context}.maximum_lifecycle_sequence",
+        minimum=1,
+    )
+    return values
+
+
 def _vectors(value: Any, document: dict[str, Any], context: str) -> None:
     vectors = _objects(value, context, nonempty=True)
     ids: set[str] = set()
@@ -870,10 +1061,14 @@ def validate_fixture(document: dict[str, Any]) -> None:
     if kind == "canonical_vectors":
         _keys(document, {"fixture_schema", "case_kind", "case_id", "values", "vectors"}, "fixture")
         _string(document["case_id"], "case_id")
-        values = _object(document["values"], "values")
-        for key in values:
-            _string(key, f"values key {key!r}")
+        values = _canonical_vector_values(document["values"], "values")
         _vectors(document["vectors"], values, "vectors")
+        vector_targets = [vector.get("target") for vector in document["vectors"]]
+        if len(vector_targets) != len(set(vector_targets)) or set(vector_targets) != set(values):
+            _fail(
+                "schema_shape",
+                "canonical vectors must cover every named value exactly once",
+            )
         return
     if kind not in {"compatible_append", "late_correction"}:
         _fail("schema_shape", f"case_kind {kind!r} is unsupported")
@@ -911,7 +1106,12 @@ def validate_fixture(document: dict[str, Any]) -> None:
     _bind_manifest(manifest, prefix, checkpoint_state, "checkpoint_manifest")
     resume = _resume(document["resume_request"], "resume_request")
     full_lineage = _lineage(document["full_replay_lineage"], "full_replay_lineage")
-    _bind_lineage(full_lineage, records, "full_replay_lineage")
+    _bind_lineage(
+        full_lineage,
+        records,
+        manifest["evaluation_context"],
+        "full_replay_lineage",
+    )
 
     diagnostic = document["expected_resume_diagnostic"]
     if diagnostic is not None:
@@ -927,7 +1127,12 @@ def validate_fixture(document: dict[str, Any]) -> None:
         incremental_lineage = _lineage(
             document["checkpoint_plus_suffix_lineage"], "checkpoint_plus_suffix_lineage"
         )
-        _bind_lineage(incremental_lineage, records, "checkpoint_plus_suffix_lineage")
+        _bind_lineage(
+            incremental_lineage,
+            records,
+            manifest["evaluation_context"],
+            "checkpoint_plus_suffix_lineage",
+        )
     else:
         if document["checkpoint_plus_suffix_state"] is not None or document["checkpoint_plus_suffix_lineage"] is not None:
             _fail("schema_shape", "invalidated checkpoint must not declare an incremental result")
@@ -959,6 +1164,20 @@ def validate_fixture(document: dict[str, Any]) -> None:
 class SerializationCheckpointContractTest(unittest.TestCase):
     def _load_valid_append(self) -> dict[str, Any]:
         return _read_json(FIXTURE_ROOT / "valid-append.json")
+
+    def _load_canonical_vectors(self) -> dict[str, Any]:
+        return _read_json(FIXTURE_ROOT / "canonical-vectors.json")
+
+    @staticmethod
+    def _refresh_vector(document: dict[str, Any], target_name: str) -> None:
+        target = document["values"][target_name]
+        encoded = canonical_bytes(target)
+        for vector in document["vectors"]:
+            if vector["target"] == target_name:
+                vector["canonical_hex"] = encoded.hex()
+                vector["sha256"] = hashlib.sha256(encoded).hexdigest()
+                return
+        raise AssertionError(f"missing canonical vector for {target_name!r}")
 
     def test_every_named_fixture_validates_independently(self):
         self.assertEqual(len(FIXTURE_FILES), 3)
@@ -1014,6 +1233,115 @@ class SerializationCheckpointContractTest(unittest.TestCase):
         fixture["checkpoint_manifest"]["lineage"]["active_record_ids"][0] = "record-missing"
         with self.assertRaisesRegex(ContractError, "lineage_reference_missing"):
             validate_fixture(fixture)
+
+    def test_lifecycle_relationships_and_derived_heads_are_enforced(self):
+        late = _read_json(FIXTURE_ROOT / "late-correction.json")
+
+        both_predecessor_and_head = copy.deepcopy(late)
+        both_predecessor_and_head["full_replay_lineage"]["active_record_ids"] = [
+            "record-cash-1000",
+            "record-cash-1200-correction",
+        ]
+        with self.assertRaisesRegex(ContractError, "lineage_reference_missing"):
+            validate_fixture(both_predecessor_and_head)
+
+        omitted_head = copy.deepcopy(late)
+        omitted_head["full_replay_lineage"]["active_record_ids"] = ["record-cash-1000"]
+        with self.assertRaisesRegex(ContractError, "lineage_reference_missing"):
+            validate_fixture(omitted_head)
+
+        false_manifest = copy.deepcopy(late["checkpoint_manifest"])
+        false_manifest["event_prefix"].update(
+            {
+                "last_sequence": "2",
+                "record_count": "2",
+                "last_record_id": "record-cash-1200-correction",
+                "canonical_input_digest": canonical_digest(_record_sequence(late["records"])),
+            }
+        )
+        false_manifest["canonical_state_digest"] = canonical_digest(late["full_replay_state"])
+        false_manifest["lineage"] = copy.deepcopy(late["full_replay_lineage"])
+        false_manifest["lineage"]["active_record_ids"] = ["record-cash-1000"]
+        false_manifest["resolved_event_watermark"] = {
+            "effective_at": "2026-02-01T09:00:00.000000000Z",
+            "acceptance_sequence": "1",
+            "record_id": "record-cash-1000",
+        }
+        with self.assertRaisesRegex(ContractError, "lineage_reference_missing"):
+            _bind_manifest(
+                false_manifest,
+                late["records"],
+                late["full_replay_state"],
+                "checkpoint_manifest",
+            )
+
+        cross_account = copy.deepcopy(late)
+        correction = cross_account["records"][1]
+        correction["account"] = "acct-other"
+        correction["event"]["header"]["account"] = "acct-other"
+        with self.assertRaisesRegex(ContractError, "incompatible_account"):
+            validate_fixture(cross_account)
+
+        cross_identity = copy.deepcopy(late)
+        cross_identity["records"][1]["economic_event_id"] = "economic-other"
+        with self.assertRaisesRegex(ContractError, "incompatible_event_relationship"):
+            validate_fixture(cross_identity)
+
+    def test_lifecycle_sequence_supports_the_complete_uint64_domain(self):
+        fixture = self._load_valid_append()
+        record = copy.deepcopy(fixture["records"][0])
+        record["acceptance_sequence"] = str((1 << 64) - 1)
+        self.assertEqual(
+            _record(record, "record")["acceptance_sequence"],
+            "18446744073709551615",
+        )
+
+        record["acceptance_sequence"] = str(1 << 64)
+        with self.assertRaisesRegex(ContractError, "unsigned 64-bit"):
+            _record(record, "record")
+
+        manifest = copy.deepcopy(fixture["checkpoint_manifest"])
+        manifest["resolved_event_watermark"]["acceptance_sequence"] = str((1 << 64) - 1)
+        self.assertEqual(
+            _manifest(manifest, "manifest")["resolved_event_watermark"]["acceptance_sequence"],
+            "18446744073709551615",
+        )
+        manifest["resolved_event_watermark"]["acceptance_sequence"] = str(1 << 64)
+        with self.assertRaisesRegex(ContractError, "unsigned 64-bit"):
+            _manifest(manifest, "manifest")
+
+    def test_canonical_domain_vectors_validate_shape_before_matching_bytes(self):
+        mutations = (
+            ("money-version", "money", "schema_version", "luca.money.v2", "unsupported_version"),
+            ("money-scale", "money", "scale", "7", "schema_shape"),
+            ("money-currency", "money", "currency", "usd", "schema_shape"),
+            (
+                "provenance-version",
+                "provenance",
+                "schema_version",
+                "luca.provenance.v2",
+                "unsupported_version",
+            ),
+            (
+                "duplicate-provenance-source",
+                "provenance",
+                "source_record_ids",
+                ["source-trade-001", "source-trade-001"],
+                "duplicate_identity",
+            ),
+        )
+        for name, target, field, replacement, diagnostic in mutations:
+            candidate = self._load_canonical_vectors()
+            candidate["values"][target][field] = replacement
+            self._refresh_vector(candidate, target)
+            with self.subTest(name=name), self.assertRaisesRegex(ContractError, diagnostic):
+                validate_fixture(candidate)
+
+        unknown_field = self._load_canonical_vectors()
+        unknown_field["values"]["money"]["extra"] = "forbidden"
+        self._refresh_vector(unknown_field, "money")
+        with self.assertRaisesRegex(ContractError, "schema_shape"):
+            validate_fixture(unknown_field)
 
     def test_meaningful_mutations_change_the_relevant_digest(self):
         fixture = self._load_valid_append()
