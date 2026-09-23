@@ -1,0 +1,252 @@
+{
+  "contract_version": "luca.transformation-contract.v1",
+  "fixture_id": "valid.exact-cash-reduction",
+  "fixture_kind": "reduction_law",
+  "operations": [
+    {
+      "id": "reduce.cash.exact",
+      "classification": "reduction",
+      "input_ports": [
+        {
+          "name": "deltas",
+          "type": "CashDeltaSet",
+          "unit": "money",
+          "currency": "USD"
+        }
+      ],
+      "output_port": {
+        "name": "balances",
+        "type": "CashBalanceSet",
+        "unit": "money",
+        "currency": "USD"
+      },
+      "operation_version": "1",
+      "policy": {
+        "id": "exact-cash-sum",
+        "version": "1"
+      },
+      "evaluation_context": {
+        "id": "cash-context-1",
+        "engine_version": "contract-fixture-1",
+        "recorded_through": "2026-06-10T00:00:00Z",
+        "economic_as_of": "2026-06-05T23:59:59Z",
+        "settlement_as_of_date": "2026-06-05"
+      },
+      "ordering": {
+        "required": false,
+        "keys": [],
+        "arbitrary_reordering": "equivalent"
+      },
+      "partitioning": {
+        "supported": true,
+        "keys": [
+          "account",
+          "currency"
+        ],
+        "merge_operation": "reduce.cash.exact"
+      },
+      "rounding": {
+        "mode": "none",
+        "scale": 6,
+        "applies_at": "no rounding; checked fixed-point addition only"
+      },
+      "errors": [
+        "currency_mismatch",
+        "amount_overflow",
+        "partition_key_mismatch"
+      ],
+      "lineage": {
+        "requires": [
+          "event_id",
+          "source_record_ids"
+        ],
+        "emits": [
+          "source_event_ids",
+          "source_record_ids",
+          "operation_version",
+          "policy_version",
+          "engine_version",
+          "context_id"
+        ]
+      },
+      "laws": {
+        "identity": "proved",
+        "associativity": "proved",
+        "commutativity": "proved",
+        "invertibility": "not_claimed",
+        "distributivity": "not_claimed",
+        "domain": "Same account and currency, exact scale-6 amounts, and every checked intermediate sum representable as int64."
+      }
+    }
+  ],
+  "values": [
+    {
+      "id": "cash-delta-1",
+      "account": "fund-a",
+      "currency": "USD",
+      "amount": "1000.000000",
+      "event_id": "cash-event-1",
+      "source_record_ids": [
+        "source.cash.1"
+      ]
+    },
+    {
+      "id": "cash-delta-2",
+      "account": "fund-a",
+      "currency": "USD",
+      "amount": "-250.000000",
+      "event_id": "cash-event-2",
+      "source_record_ids": [
+        "source.cash.2"
+      ]
+    },
+    {
+      "id": "cash-delta-3",
+      "account": "fund-a",
+      "currency": "USD",
+      "amount": "50.000000",
+      "event_id": "cash-event-3",
+      "source_record_ids": [
+        "source.cash.3"
+      ]
+    }
+  ],
+  "execution_modes": {
+    "full": {
+      "value_ids": [
+        "cash-delta-1",
+        "cash-delta-2",
+        "cash-delta-3"
+      ],
+      "expected_amount": "800.000000"
+    },
+    "incremental": {
+      "prefix_value_ids": [
+        "cash-delta-1",
+        "cash-delta-2"
+      ],
+      "prefix_amount": "750.000000",
+      "suffix_value_ids": [
+        "cash-delta-3"
+      ],
+      "expected_amount": "800.000000"
+    },
+    "partitioned": {
+      "partitions": [
+        {
+          "id": "partial-a",
+          "value_ids": [
+            "cash-delta-1",
+            "cash-delta-2"
+          ],
+          "expected_amount": "750.000000"
+        },
+        {
+          "id": "partial-b",
+          "value_ids": [
+            "cash-delta-3"
+          ],
+          "expected_amount": "50.000000"
+        }
+      ],
+      "expected_amount": "800.000000"
+    }
+  },
+  "expected_output": {
+    "account": "fund-a",
+    "currency": "USD",
+    "amount": "800.000000",
+    "source_event_ids": [
+      "cash-event-1",
+      "cash-event-2",
+      "cash-event-3"
+    ],
+    "source_record_ids": [
+      "source.cash.1",
+      "source.cash.2",
+      "source.cash.3"
+    ],
+    "operation_trace": [
+      {
+        "operation_id": "reduce.cash.exact",
+        "operation_version": "1",
+        "policy_id": "exact-cash-sum",
+        "policy_version": "1",
+        "engine_version": "contract-fixture-1",
+        "context_id": "cash-context-1"
+      }
+    ]
+  },
+  "arithmetic": [
+    {
+      "id": "full-sum",
+      "operator": "sum",
+      "operands": [
+        "1000.000000",
+        "-250.000000",
+        "50.000000"
+      ],
+      "expected": "800.000000",
+      "scale": 6,
+      "rounding": "none"
+    },
+    {
+      "id": "partial-a-sum",
+      "operator": "sum",
+      "operands": [
+        "1000.000000",
+        "-250.000000"
+      ],
+      "expected": "750.000000",
+      "scale": 6,
+      "rounding": "none"
+    },
+    {
+      "id": "partial-b-sum",
+      "operator": "sum",
+      "operands": [
+        "50.000000"
+      ],
+      "expected": "50.000000",
+      "scale": 6,
+      "rounding": "none"
+    },
+    {
+      "id": "partial-merge",
+      "operator": "sum",
+      "operands": [
+        "750.000000",
+        "50.000000"
+      ],
+      "expected": "800.000000",
+      "scale": 6,
+      "rounding": "none"
+    }
+  ],
+  "law_checks": [
+    {
+      "id": "zero-identity",
+      "law": "identity",
+      "value": "800.000000",
+      "identity": "0.000000",
+      "expected": "800.000000"
+    },
+    {
+      "id": "three-way-associativity",
+      "law": "associativity",
+      "values": [
+        "1000.000000",
+        "-250.000000",
+        "50.000000"
+      ],
+      "expected": "800.000000"
+    },
+    {
+      "id": "two-way-commutativity",
+      "law": "commutativity",
+      "left": "750.000000",
+      "right": "50.000000",
+      "expected": "800.000000"
+    }
+  ]
+}
