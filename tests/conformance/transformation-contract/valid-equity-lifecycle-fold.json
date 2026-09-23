@@ -1,0 +1,734 @@
+{
+  "contract_version": "luca.transformation-contract.v1",
+  "fixture_id": "valid.equity-lifecycle-fold",
+  "fixture_kind": "ordered_lifecycle",
+  "operations": [
+    {
+      "id": "normalize.fixture-equity",
+      "classification": "normalization",
+      "input_ports": [
+        {
+          "name": "source-records",
+          "type": "SourceRecordSet",
+          "unit": "source_record",
+          "currency": null
+        }
+      ],
+      "output_port": {
+        "name": "raw-records",
+        "type": "RawLifecycleRecordSet",
+        "unit": "lifecycle_record",
+        "currency": "USD"
+      },
+      "operation_version": "1",
+      "policy": {
+        "id": "fixture-equity-normalization",
+        "version": "1"
+      },
+      "evaluation_context": {
+        "id": "equity-context-1",
+        "engine_version": "contract-fixture-1",
+        "recorded_through": "2026-06-05T23:59:59Z",
+        "economic_as_of": "2026-06-03T23:59:59Z",
+        "settlement_as_of_date": "2026-06-03"
+      },
+      "ordering": {
+        "required": false,
+        "keys": [],
+        "arbitrary_reordering": "equivalent"
+      },
+      "partitioning": {
+        "supported": true,
+        "keys": [
+          "source_id",
+          "external_record_id"
+        ],
+        "merge_operation": "disjoint-record-union"
+      },
+      "rounding": {
+        "mode": "not_applicable",
+        "scale": null,
+        "applies_at": "none"
+      },
+      "errors": [
+        "invalid_source_record",
+        "normalization_policy_mismatch"
+      ],
+      "lineage": {
+        "requires": [
+          "source_record_id"
+        ],
+        "emits": [
+          "record_id",
+          "source_record_ids",
+          "operation_version",
+          "policy_version",
+          "engine_version",
+          "context_id"
+        ]
+      },
+      "laws": {
+        "identity": "not_claimed",
+        "associativity": "not_claimed",
+        "commutativity": "not_claimed",
+        "invertibility": "not_claimed",
+        "distributivity": "not_claimed",
+        "domain": "The fixture normalizer emits immutable raw lifecycle records and claims no algebraic merge law."
+      }
+    },
+    {
+      "id": "resolve.lifecycle-knowledge",
+      "classification": "ordered_fold",
+      "input_ports": [
+        {
+          "name": "raw-records",
+          "type": "RawLifecycleRecordSet",
+          "unit": "lifecycle_record",
+          "currency": "USD"
+        }
+      ],
+      "output_port": {
+        "name": "resolved-events",
+        "type": "ResolvedEconomicEventSet",
+        "unit": "economic_event",
+        "currency": "USD"
+      },
+      "operation_version": "1",
+      "policy": {
+        "id": "o2-lifecycle-resolution",
+        "version": "1"
+      },
+      "evaluation_context": {
+        "id": "equity-context-1",
+        "engine_version": "contract-fixture-1",
+        "recorded_through": "2026-06-05T23:59:59Z",
+        "economic_as_of": "2026-06-03T23:59:59Z",
+        "settlement_as_of_date": "2026-06-03"
+      },
+      "ordering": {
+        "required": true,
+        "keys": [
+          "recorded_at",
+          "acceptance_sequence"
+        ],
+        "arbitrary_reordering": "rejected"
+      },
+      "partitioning": {
+        "supported": false,
+        "keys": [],
+        "merge_operation": null
+      },
+      "rounding": {
+        "mode": "not_applicable",
+        "scale": null,
+        "applies_at": "none"
+      },
+      "errors": [
+        "deterministic_ordering",
+        "causal_reference_unavailable",
+        "causal_reference_missing",
+        "conflicting_lifecycle_successor"
+      ],
+      "lineage": {
+        "requires": [
+          "record_id",
+          "economic_event_id",
+          "source_record_ids"
+        ],
+        "emits": [
+          "active_record_id",
+          "record_ids",
+          "source_record_ids",
+          "operation_version",
+          "policy_version",
+          "engine_version",
+          "context_id"
+        ]
+      },
+      "laws": {
+        "identity": "not_claimed",
+        "associativity": "not_claimed",
+        "commutativity": "counterexample",
+        "invertibility": "not_claimed",
+        "distributivity": "not_claimed",
+        "domain": "One complete, unbranched lifecycle chain in recorded-at and acceptance-sequence order."
+      }
+    },
+    {
+      "id": "map.equity-position-delta",
+      "classification": "map",
+      "input_ports": [
+        {
+          "name": "resolved-events",
+          "type": "ResolvedEconomicEventSet",
+          "unit": "economic_event",
+          "currency": "USD"
+        }
+      ],
+      "output_port": {
+        "name": "position-deltas",
+        "type": "PositionDeltaSet",
+        "unit": "share_quantity",
+        "currency": null
+      },
+      "operation_version": "1",
+      "policy": {
+        "id": "equity-position-delta",
+        "version": "1"
+      },
+      "evaluation_context": {
+        "id": "equity-context-1",
+        "engine_version": "contract-fixture-1",
+        "recorded_through": "2026-06-05T23:59:59Z",
+        "economic_as_of": "2026-06-03T23:59:59Z",
+        "settlement_as_of_date": "2026-06-03"
+      },
+      "ordering": {
+        "required": false,
+        "keys": [],
+        "arbitrary_reordering": "equivalent"
+      },
+      "partitioning": {
+        "supported": true,
+        "keys": [
+          "account",
+          "instrument"
+        ],
+        "merge_operation": "disjoint-position-delta-union"
+      },
+      "rounding": {
+        "mode": "none",
+        "scale": 8,
+        "applies_at": "quantity is copied exactly"
+      },
+      "errors": [
+        "unresolved_lifecycle_input",
+        "unit_mismatch"
+      ],
+      "lineage": {
+        "requires": [
+          "active_record_id",
+          "source_record_ids"
+        ],
+        "emits": [
+          "source_event_ids",
+          "source_record_ids",
+          "operation_version",
+          "policy_version",
+          "engine_version",
+          "context_id"
+        ]
+      },
+      "laws": {
+        "identity": "not_claimed",
+        "associativity": "not_claimed",
+        "commutativity": "not_claimed",
+        "invertibility": "not_claimed",
+        "distributivity": "not_claimed",
+        "domain": "Resolved equity-trade events only; this semantic map is not a current public function."
+      }
+    },
+    {
+      "id": "reduce.position.exact",
+      "classification": "reduction",
+      "input_ports": [
+        {
+          "name": "position-deltas",
+          "type": "PositionDeltaSet",
+          "unit": "share_quantity",
+          "currency": null
+        }
+      ],
+      "output_port": {
+        "name": "positions",
+        "type": "PositionSet",
+        "unit": "share_quantity",
+        "currency": null
+      },
+      "operation_version": "1",
+      "policy": {
+        "id": "exact-position-sum",
+        "version": "1"
+      },
+      "evaluation_context": {
+        "id": "equity-context-1",
+        "engine_version": "contract-fixture-1",
+        "recorded_through": "2026-06-05T23:59:59Z",
+        "economic_as_of": "2026-06-03T23:59:59Z",
+        "settlement_as_of_date": "2026-06-03"
+      },
+      "ordering": {
+        "required": false,
+        "keys": [],
+        "arbitrary_reordering": "equivalent"
+      },
+      "partitioning": {
+        "supported": false,
+        "keys": [],
+        "merge_operation": null
+      },
+      "rounding": {
+        "mode": "none",
+        "scale": 8,
+        "applies_at": "no rounding; checked fixed-point addition only"
+      },
+      "errors": [
+        "unit_mismatch",
+        "quantity_overflow"
+      ],
+      "lineage": {
+        "requires": [
+          "source_event_ids",
+          "source_record_ids"
+        ],
+        "emits": [
+          "source_event_ids",
+          "source_record_ids",
+          "operation_version",
+          "policy_version",
+          "engine_version",
+          "context_id"
+        ]
+      },
+      "laws": {
+        "identity": "not_claimed",
+        "associativity": "not_claimed",
+        "commutativity": "not_claimed",
+        "invertibility": "not_claimed",
+        "distributivity": "not_claimed",
+        "domain": "The fixture uses exact quantity addition but makes no reusable law claim beyond the separately proved cash example."
+      }
+    },
+    {
+      "id": "fold.settled-cash",
+      "classification": "ordered_fold",
+      "input_ports": [
+        {
+          "name": "resolved-events",
+          "type": "ResolvedEconomicEventSet",
+          "unit": "economic_event",
+          "currency": "USD"
+        }
+      ],
+      "output_port": {
+        "name": "cash-balances",
+        "type": "CashBalanceSet",
+        "unit": "money",
+        "currency": "USD"
+      },
+      "operation_version": "1",
+      "policy": {
+        "id": "current-settled-cash",
+        "version": "1"
+      },
+      "evaluation_context": {
+        "id": "equity-context-1",
+        "engine_version": "contract-fixture-1",
+        "recorded_through": "2026-06-05T23:59:59Z",
+        "economic_as_of": "2026-06-03T23:59:59Z",
+        "settlement_as_of_date": "2026-06-03"
+      },
+      "ordering": {
+        "required": true,
+        "keys": [
+          "effective_at",
+          "acceptance_sequence"
+        ],
+        "arbitrary_reordering": "rejected"
+      },
+      "partitioning": {
+        "supported": true,
+        "keys": [
+          "account",
+          "currency"
+        ],
+        "merge_operation": "disjoint-cash-balance-union"
+      },
+      "rounding": {
+        "mode": "half_even",
+        "scale": 6,
+        "applies_at": "quantity multiplied by price for each eligible trade"
+      },
+      "errors": [
+        "unresolved_lifecycle_input",
+        "valuation_overflow",
+        "amount_overflow"
+      ],
+      "lineage": {
+        "requires": [
+          "active_record_id",
+          "source_record_ids"
+        ],
+        "emits": [
+          "source_event_ids",
+          "source_record_ids",
+          "operation_version",
+          "policy_version",
+          "engine_version",
+          "context_id"
+        ]
+      },
+      "laws": {
+        "identity": "not_claimed",
+        "associativity": "not_claimed",
+        "commutativity": "not_claimed",
+        "invertibility": "not_claimed",
+        "distributivity": "not_claimed",
+        "domain": "Resolved events selected by economic time and settlement eligibility, replayed in canonical economic order."
+      }
+    },
+    {
+      "id": "fold.open-settlement",
+      "classification": "ordered_fold",
+      "input_ports": [
+        {
+          "name": "resolved-events",
+          "type": "ResolvedEconomicEventSet",
+          "unit": "economic_event",
+          "currency": "USD"
+        }
+      ],
+      "output_port": {
+        "name": "open-obligations",
+        "type": "SettlementObligationSet",
+        "unit": "money_obligation",
+        "currency": "USD"
+      },
+      "operation_version": "1",
+      "policy": {
+        "id": "current-open-settlement",
+        "version": "1"
+      },
+      "evaluation_context": {
+        "id": "equity-context-1",
+        "engine_version": "contract-fixture-1",
+        "recorded_through": "2026-06-05T23:59:59Z",
+        "economic_as_of": "2026-06-03T23:59:59Z",
+        "settlement_as_of_date": "2026-06-03"
+      },
+      "ordering": {
+        "required": true,
+        "keys": [
+          "effective_at",
+          "acceptance_sequence"
+        ],
+        "arbitrary_reordering": "rejected"
+      },
+      "partitioning": {
+        "supported": true,
+        "keys": [
+          "account",
+          "settlement_date",
+          "currency",
+          "direction"
+        ],
+        "merge_operation": "disjoint-settlement-obligation-union"
+      },
+      "rounding": {
+        "mode": "half_even",
+        "scale": 6,
+        "applies_at": "quantity multiplied by price for each unsettled trade"
+      },
+      "errors": [
+        "unresolved_lifecycle_input",
+        "valuation_overflow",
+        "amount_overflow",
+        "partition_key_mismatch"
+      ],
+      "lineage": {
+        "requires": [
+          "active_record_id",
+          "source_record_ids"
+        ],
+        "emits": [
+          "source_event_ids",
+          "source_record_ids",
+          "operation_version",
+          "policy_version",
+          "engine_version",
+          "context_id"
+        ]
+      },
+      "laws": {
+        "identity": "not_claimed",
+        "associativity": "not_claimed",
+        "commutativity": "not_claimed",
+        "invertibility": "not_claimed",
+        "distributivity": "not_claimed",
+        "domain": "Resolved unsettled trades; payable and receivable directions remain separate partition keys."
+      }
+    }
+  ],
+  "source_records": [
+    "source.trade.original",
+    "source.trade.correction"
+  ],
+  "records": [
+    {
+      "record_id": "trade-record-1",
+      "economic_event_id": "trade-economic-1",
+      "action": "originate",
+      "acceptance_sequence": 1,
+      "recorded_at": "2026-06-02T10:00:00Z",
+      "effective_at": "2026-06-03T14:00:00Z",
+      "account": "fund-a",
+      "supersedes_record_id": null,
+      "source_record_ids": [
+        "source.trade.original"
+      ],
+      "event": {
+        "type": "equity_trade",
+        "instrument": "MSFT",
+        "quantity": "100.00000000",
+        "price": "50.00000000",
+        "quote_currency": "USD",
+        "settlement_date": "2026-06-04"
+      }
+    },
+    {
+      "record_id": "trade-record-2",
+      "economic_event_id": "trade-economic-1",
+      "action": "correct",
+      "acceptance_sequence": 2,
+      "recorded_at": "2026-06-05T09:00:00Z",
+      "effective_at": "2026-06-03T14:00:00Z",
+      "account": "fund-a",
+      "supersedes_record_id": "trade-record-1",
+      "source_record_ids": [
+        "source.trade.correction"
+      ],
+      "event": {
+        "type": "equity_trade",
+        "instrument": "MSFT",
+        "quantity": "80.00000000",
+        "price": "55.00000000",
+        "quote_currency": "USD",
+        "settlement_date": "2026-06-04"
+      }
+    }
+  ],
+  "composition": [
+    {
+      "from": "normalize.fixture-equity",
+      "to": "resolve.lifecycle-knowledge",
+      "to_port": "raw-records"
+    },
+    {
+      "from": "resolve.lifecycle-knowledge",
+      "to": "map.equity-position-delta",
+      "to_port": "resolved-events"
+    },
+    {
+      "from": "map.equity-position-delta",
+      "to": "reduce.position.exact",
+      "to_port": "position-deltas"
+    },
+    {
+      "from": "resolve.lifecycle-knowledge",
+      "to": "fold.settled-cash",
+      "to_port": "resolved-events"
+    },
+    {
+      "from": "resolve.lifecycle-knowledge",
+      "to": "fold.open-settlement",
+      "to_port": "resolved-events"
+    }
+  ],
+  "expected": {
+    "normalized_record_ids": [
+      "trade-record-1",
+      "trade-record-2"
+    ],
+    "resolution": {
+      "economic_event_id": "trade-economic-1",
+      "record_ids": [
+        "trade-record-1",
+        "trade-record-2"
+      ],
+      "active_record_id": "trade-record-2",
+      "source_record_ids": [
+        "source.trade.original",
+        "source.trade.correction"
+      ]
+    },
+    "positions": [
+      {
+        "account": "fund-a",
+        "instrument": "MSFT",
+        "quantity": "80.00000000",
+        "source_event_ids": [
+          "trade-economic-1"
+        ]
+      }
+    ],
+    "settled_cash": [],
+    "open_settlement_obligations": [
+      {
+        "account": "fund-a",
+        "settlement_date": "2026-06-04",
+        "currency": "USD",
+        "direction": "payable",
+        "amount": "4400.000000",
+        "source_event_ids": [
+          "trade-economic-1"
+        ]
+      }
+    ],
+    "operation_trace": [
+      {
+        "operation_id": "normalize.fixture-equity",
+        "operation_version": "1",
+        "policy_id": "fixture-equity-normalization",
+        "policy_version": "1",
+        "engine_version": "contract-fixture-1",
+        "context_id": "equity-context-1"
+      },
+      {
+        "operation_id": "resolve.lifecycle-knowledge",
+        "operation_version": "1",
+        "policy_id": "o2-lifecycle-resolution",
+        "policy_version": "1",
+        "engine_version": "contract-fixture-1",
+        "context_id": "equity-context-1"
+      },
+      {
+        "operation_id": "map.equity-position-delta",
+        "operation_version": "1",
+        "policy_id": "equity-position-delta",
+        "policy_version": "1",
+        "engine_version": "contract-fixture-1",
+        "context_id": "equity-context-1"
+      },
+      {
+        "operation_id": "reduce.position.exact",
+        "operation_version": "1",
+        "policy_id": "exact-position-sum",
+        "policy_version": "1",
+        "engine_version": "contract-fixture-1",
+        "context_id": "equity-context-1"
+      },
+      {
+        "operation_id": "fold.settled-cash",
+        "operation_version": "1",
+        "policy_id": "current-settled-cash",
+        "policy_version": "1",
+        "engine_version": "contract-fixture-1",
+        "context_id": "equity-context-1"
+      },
+      {
+        "operation_id": "fold.open-settlement",
+        "operation_version": "1",
+        "policy_id": "current-open-settlement",
+        "policy_version": "1",
+        "engine_version": "contract-fixture-1",
+        "context_id": "equity-context-1"
+      }
+    ]
+  },
+  "arithmetic": [
+    {
+      "id": "corrected-position",
+      "operator": "sum",
+      "operands": [
+        "80.00000000"
+      ],
+      "expected": "80.00000000",
+      "scale": 8,
+      "rounding": "none"
+    },
+    {
+      "id": "corrected-trade-gross",
+      "operator": "product",
+      "operands": [
+        "80.00000000",
+        "55.00000000"
+      ],
+      "expected": "4400.000000",
+      "scale": 6,
+      "rounding": "half_even"
+    }
+  ],
+  "ordering_counterexample": {
+    "operation_id": "resolve.lifecycle-knowledge",
+    "valid_order": [
+      "trade-record-1",
+      "trade-record-2"
+    ],
+    "permuted_order": [
+      "trade-record-2",
+      "trade-record-1"
+    ],
+    "expected_category": "deterministic_ordering",
+    "reason": "The permutation makes recorded_at decrease from the correction to its predecessor, which public lifecycle acceptance rejects before checking causal availability."
+  },
+  "invalidation_cases": [
+    {
+      "id": "late-correction",
+      "trigger": "late_lifecycle_record",
+      "changed_fields": [
+        "recorded_through",
+        "active_record_id",
+        "quantity",
+        "price"
+      ],
+      "before": "active_record_id=trade-record-1",
+      "after": "active_record_id=trade-record-2",
+      "affected_operations": [
+        "resolve.lifecycle-knowledge",
+        "map.equity-position-delta",
+        "reduce.position.exact",
+        "fold.settled-cash",
+        "fold.open-settlement"
+      ],
+      "affected_partition_keys": [
+        "economic_event_id=trade-economic-1",
+        "account=fund-a",
+        "instrument=MSFT",
+        "currency=USD"
+      ],
+      "prior_result_reuse": "rejected",
+      "required_action": "resolve_and_recompute_affected_partitions",
+      "reason": "The replacement payload changes an earlier economic result; it is not an append-only delta or a mathematical inverse."
+    },
+    {
+      "id": "cash-policy-upgrade",
+      "trigger": "policy_version_change",
+      "changed_fields": [
+        "policy.version"
+      ],
+      "before": "current-settled-cash@1",
+      "after": "current-settled-cash@2",
+      "affected_operations": [
+        "fold.settled-cash"
+      ],
+      "affected_partition_keys": [
+        "account=fund-a",
+        "currency=USD"
+      ],
+      "prior_result_reuse": "rejected",
+      "required_action": "recompute_operation_and_downstream",
+      "reason": "A result produced by another policy identity is not compatible even if this fixture happens to yield the same amount."
+    },
+    {
+      "id": "settlement-cutoff-advance",
+      "trigger": "evaluation_context_change",
+      "changed_fields": [
+        "settlement_as_of_date"
+      ],
+      "before": "settlement_as_of_date=2026-06-03",
+      "after": "settlement_as_of_date=2026-06-04",
+      "affected_operations": [
+        "fold.settled-cash",
+        "fold.open-settlement"
+      ],
+      "affected_partition_keys": [
+        "account=fund-a",
+        "currency=USD",
+        "settlement_date=2026-06-04"
+      ],
+      "prior_result_reuse": "rejected",
+      "required_action": "reevaluate_settlement_dependent_operations",
+      "reason": "Moving the settlement date from 2026-06-03 to 2026-06-04 clears the payable and makes the trade cash eligible."
+    }
+  ]
+}
