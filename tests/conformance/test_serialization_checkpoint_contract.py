@@ -127,6 +127,13 @@ def _version(value: Any, expected: str, context: str) -> str:
     return actual
 
 
+def _enum(value: Any, allowed: set[str], context: str) -> str:
+    actual = _string(value, context)
+    if actual not in allowed:
+        _fail("schema_shape", f"{context} is unsupported")
+    return actual
+
+
 def _integer(value: Any, context: str, *, minimum: int = I64_MIN) -> int:
     if not isinstance(value, str) or CANONICAL_INTEGER.fullmatch(value) is None:
         _fail("canonical_encoding", f"{context} must be a canonical decimal integer string")
@@ -414,9 +421,11 @@ def _record(value: Any, context: str) -> dict[str, Any]:
     _string(record["record_id"], f"{context}.record_id")
     _string(record["economic_event_id"], f"{context}.economic_event_id")
     _string(record["account"], f"{context}.account")
-    action = record["action"]
-    if action not in {"originate", "correct", "cancel", "reverse"}:
-        _fail("schema_shape", f"{context}.action is unsupported")
+    action = _enum(
+        record["action"],
+        {"originate", "correct", "cancel", "reverse"},
+        f"{context}.action",
+    )
     _timestamp(record["recorded_at"], f"{context}.recorded_at")
     _unsigned_integer(
         record["acceptance_sequence"], f"{context}.acceptance_sequence", minimum=1
@@ -620,15 +629,16 @@ def _state(value: Any, context: str) -> dict[str, Any]:
         _version(obligation["schema_version"], SUPPORTED["settlement"], f"{item}.schema_version")
         _string(obligation["account"], f"{item}.account")
         _date(obligation["settlement_date"], f"{item}.settlement_date")
-        if obligation["direction"] not in direction_order:
-            _fail("schema_shape", f"{item}.direction is unsupported")
+        direction = _enum(
+            obligation["direction"], set(direction_order), f"{item}.direction"
+        )
         amount = _money(obligation["amount"], f"{item}.amount", positive=True)
         obligation_keys.append(
             (
                 obligation["account"],
                 obligation["settlement_date"],
                 amount["currency"],
-                direction_order[obligation["direction"]],
+                direction_order[direction],
             )
         )
     if obligation_keys != sorted(obligation_keys) or len(obligation_keys) != len(set(obligation_keys)):
@@ -1033,7 +1043,9 @@ def _vectors(value: Any, document: dict[str, Any], context: str) -> None:
         second = canonical_bytes(target)
         if first != second or first.hex() != expected_hex:
             _fail("digest_mismatch", f"{vector_id!r} canonical byte vector differs")
-        if hashlib.sha256(first).hexdigest() != vector["sha256"]:
+        first_digest = hashlib.sha256(first).hexdigest()
+        second_digest = hashlib.sha256(second).hexdigest()
+        if first_digest != second_digest or first_digest != vector["sha256"]:
             _fail("digest_mismatch", f"{vector_id!r} digest vector differs")
         if decode_canonical(first) != target or canonical_bytes(decode_canonical(first)) != first:
             _fail("canonical_encoding", f"{vector_id!r} does not round trip")
@@ -1057,7 +1069,11 @@ def _apply_path(value: dict[str, Any], path: str, replacement: Any) -> dict[str,
 
 def validate_fixture(document: dict[str, Any]) -> None:
     _version(document.get("fixture_schema"), SUPPORTED["fixture"], "fixture_schema")
-    kind = document.get("case_kind")
+    kind = _enum(
+        document.get("case_kind"),
+        {"canonical_vectors", "compatible_append", "late_correction"},
+        "case_kind",
+    )
     if kind == "canonical_vectors":
         _keys(document, {"fixture_schema", "case_kind", "case_id", "values", "vectors"}, "fixture")
         _string(document["case_id"], "case_id")
@@ -1070,8 +1086,6 @@ def validate_fixture(document: dict[str, Any]) -> None:
                 "canonical vectors must cover every named value exactly once",
             )
         return
-    if kind not in {"compatible_append", "late_correction"}:
-        _fail("schema_shape", f"case_kind {kind!r} is unsupported")
     _keys(
         document,
         {
@@ -1214,6 +1228,29 @@ class SerializationCheckpointContractTest(unittest.TestCase):
         altered_manifest["checkpoint_manifest"]["canonical_state_digest"] = "0" * 64
         with self.assertRaisesRegex(ContractError, "digest_mismatch"):
             validate_fixture(altered_manifest)
+
+    def test_ill_typed_enums_produce_stable_schema_diagnostics(self):
+        for field, replacement in (
+            ("case_kind", []),
+            ("case_kind", {}),
+            ("action", []),
+            ("action", {}),
+            ("direction", []),
+            ("direction", {}),
+        ):
+            candidate = self._load_valid_append()
+            if field == "case_kind":
+                candidate["case_kind"] = replacement
+            elif field == "action":
+                candidate["records"][0]["action"] = replacement
+            else:
+                candidate["checkpoint_state"]["open_settlement_obligations"][0][
+                    "direction"
+                ] = replacement
+            with self.subTest(field=field, replacement_type=type(replacement).__name__):
+                with self.assertRaises(ContractError) as raised:
+                    validate_fixture(candidate)
+                self.assertEqual(raised.exception.category, "schema_shape")
 
     def test_reordered_inputs_and_broken_prefix_are_rejected(self):
         fixture = self._load_valid_append()
