@@ -1,0 +1,308 @@
+# Executable transformation and composition contract
+
+Status: executable design contract for O5-T01. The JSON fixtures and their
+dependency-free validator define a portable semantic vocabulary for design
+review. They are not a public C++ composition API, canonical wire format,
+checkpoint format, plugin ABI, or second implementation of LUCA projections.
+
+## Purpose and boundary
+
+LUCA already has deterministic ledger ordering, cash/position/settlement
+projections, and exact reconciliation. This increment names the different kinds
+of work those APIs perform and states when results may be composed or merged.
+It does not wrap the current APIs in a generic runtime.
+
+The smallest vocabulary is:
+
+- **normalization** interprets immutable source evidence as a typed canonical
+  record and retains source provenance;
+- **map** converts one typed value to another without cross-record state;
+- **ordered fold** applies typed inputs to state in a declared total order;
+- **reduction** combines compatible values with only the algebraic laws that
+  the operation explicitly proves; and
+- **comparison** compares an authoritative projection with separate,
+  non-authoritative observations and produces breaks.
+
+Lifecycle resolution is an ordered fold between normalization and portfolio
+projection. Raw lifecycle records are not economic events ready for projection.
+The O2 contract selects one active payload per economic identity at a knowledge
+cutoff, then projections use that resolved set at the economic and settlement
+cutoffs. Corrections and cancellations replace or suppress a chain head; a
+reversal is a separate explicit event. None of these facts supplies a general
+mathematical inverse.
+
+All inputs, policies, contexts, and evidence are supplied explicitly. A
+deterministic operation performs no filesystem, database, network, authorization,
+or scheduling work. Execution hosts own those concerns.
+
+## Existing-interface inventory
+
+The table describes the public headers in this checkout. “Semantic
+decomposition” means that the fixture vocabulary can describe part of an
+existing function; it does not claim a new callable API exists.
+
+| Boundary | Existing public interface | Classification in this contract | Current limits |
+| --- | --- | --- | --- |
+| Source evidence | `SourceRecord`, `PayloadHash`, and `Provenance::create` | normalization boundary values | No generic public normalizer or adapter policy interface exists. Raw payload bytes and IO remain external. |
+| Canonical event construction | `EventHeader::create`, `CashMovement::create`, `EquityTrade::create` | normalization output validation | The closed `EconomicEvent` variant contains cash movements and equity trades only. These constructors do not normalize an external format. |
+| Economic selection/order | `economic_entries`, `economic_entries_through`, and `economic_entries_between` | ordered-input preparation | Order is `(effective_at, LedgerSequence)`. The sequence is ledger-local and only a tie-breaker. |
+| Scalar valuation | `value(Quantity, Price, Currency, RoundingMode)` | map | Produces scale-6 `Money`; default rounding is half-even. Overflow is a `ValueError`. It does not carry event lineage by itself. |
+| Position state | `project_positions(span<LedgerEntry>, Timestamp)` | ordered fold with an embedded event-to-delta map and checked aggregation | Equity trades add scale-8 quantity by `(account, instrument)`; zeros are omitted. It returns `quantity_overflow`. It is not lifecycle-aware yet. |
+| Settled cash | `project_cash(span<LedgerEntry>, CashProjectionContext)` | ordered fold with embedded mapping/aggregation | Cash is keyed by `(account, currency)`. Trade cash is `-(quantity × price)` only when settlement-eligible; valuation is half-even to scale 6. It returns `valuation_overflow` or `amount_overflow`. |
+| Open settlement | `project_settlement_obligations(span<LedgerEntry>, SettlementProjectionContext)` | ordered fold with embedded mapping/aggregation | Positive magnitudes are keyed by `(account, settlement_date, currency, direction)`. Payables and receivables are not netted. It returns `valuation_overflow` or `amount_overflow`. |
+| Exact addition | `Quantity::add` and `Money::add` | compatible reduction primitives | Both are checked fixed-point additions. `Money::add` also rejects currency mismatch. There is no public generic reducer. |
+| Position comparison | `reconcile_positions(expected, observed, PositionReconciliationContext)` | comparison | Exact shared `as_of`; detects duplicate observations, time mismatch, overflow, and missing/unexpected/mismatched values. |
+| Settled-cash comparison | `reconcile_cash(expected, observed, CashReconciliationContext)` | comparison | Exact shared economic and settlement cutoffs; detects duplicate observations, both context mismatches, overflow, and missing/unexpected/mismatched values. |
+| Lifecycle resolution | `docs/event-lifecycle.md` and its conformance fixtures | ordered fold before all affected projections | This is an integrated executable design contract, not an implemented public C++ interface. It orders by `(recorded_at, acceptance_sequence)`, resolves causal chains, then orders active payloads economically. |
+| Journals/accounting | none in the current checkout | future map and reduction boundaries | Journal types and accounting-policy interfaces belong to O4. This contract does not invent their signatures or decide accounting policy. |
+
+The current projection functions accept entries in any input order because they
+first request the ledger's canonical economic view. That convenience does not
+make the financial transition commutative: the evaluation order remains part of
+the contract, and lifecycle records must be resolved before that view exists.
+
+## Typed operation declaration
+
+Every operation demonstrated in
+`tests/conformance/transformation-contract/*.json` declares the following
+fields. Field names are conformance vocabulary, not promised production
+serialization.
+
+| Declaration | Meaning |
+| --- | --- |
+| `id`, `classification`, `operation_version` | Stable semantic identity, one of the five classes above, and the version of the calculation. |
+| `input_ports`, `output_port` | Named types plus units and currency. A multi-input comparison declares the projection and observation ports separately. |
+| `policy.id`, `policy.version` | The named financial or interpretation policy used by this operation. Different operations may use different policy identities; each result records its own. |
+| `evaluation_context` | Context identity, engine version, inclusive `recorded_through`, inclusive `economic_as_of`, and independent `settlement_as_of_date`. A pure reducer still records the context in which its inputs are meaningful. |
+| `ordering` | Whether order is required, the total-order keys, and whether arbitrary reordering is equivalent or rejected. |
+| `partitioning` | Whether partitioned execution is supported, the complete financial keys, and the compatible merge operation. `supported: false` is meaningful and must not be ignored by a host. |
+| `rounding` | Mode, output scale, and the exact arithmetic stage at which rounding occurs. `none` and `not_applicable` are explicit. |
+| `errors` | Stable semantic categories that callers can handle without parsing prose. Implementations may attach paths and identifiers. |
+| `lineage` | Required input identity fields and identities/versions that the result emits. |
+| `laws` | Separate declarations for identity, associativity, commutativity, invertibility, and distributivity, plus the domain on which a proof applies. |
+
+An operation returns either its declared output or a declared diagnostic. It
+must not return a partial financial result as though it were successful after an
+overflow, incompatible context, missing causal record, or dimensional mismatch.
+
+### Composition compatibility
+
+For an edge `A.output -> B.input`, the first contract requires all of the
+following:
+
+1. The output and selected input port types are equal. `CashBalanceSet` is not
+   `PositionDeltaSet` merely because both contain fixed-point numbers.
+2. Units are equal. Money, quantity, price, rate, and obligation direction are
+   not interchangeable.
+3. Currency declarations are equal. Cross-currency composition requires a
+   separate, explicit FX operation and versioned policy; none exists here.
+4. The complete evaluation contexts are equal. Matching context names with
+   different economic, knowledge, settlement, or engine versions is not enough.
+5. A projection port that requires `ResolvedEconomicEventSet` cannot consume
+   `RawLifecycleRecordSet`.
+6. Any merge uses every declared partition key and the declared merge operation.
+   Dropping `direction` from settlement obligations would silently net a payable
+   with a receivable and is rejected.
+
+The portable categories exercised by negative fixtures are
+`operation_type_mismatch`, `unit_mismatch`, `currency_mismatch`,
+`context_mismatch`, `unresolved_lifecycle_input`, and
+`partition_key_mismatch`. These categories describe why composition is unsafe;
+they do not prescribe a C++ error enum for a later implementation.
+
+Policy versions are traced per operation rather than required to be identical
+across unlike operations. Reusing a prior output for the *same* operation does
+require the same operation, engine, policy, and context versions. A change to
+any of them follows the invalidation rules below.
+
+## Ordering, partitions, and actual laws
+
+### Exact cash reduction
+
+The fixture operation `reduce.cash.exact` combines `Money` values only for one
+`(account, currency)` key. It exposes scale-6 zero as identity and claims
+associativity and commutativity only on the declared domain: same currency and
+key, exact fixed-point values, and every checked intermediate sum representable
+as `int64`. Currency mismatch and overflow remain errors, so the claim is not a
+universal algebra over arbitrary JSON decimals or all `Money` values.
+
+Within that domain the fixture proves:
+
+```text
+full:        1000.000000 + (-250.000000) + 50.000000 = 800.000000 USD
+incremental: (1000.000000 + -250.000000) + 50.000000 = 800.000000 USD
+partitioned: partial(750.000000) + partial(50.000000) = 800.000000 USD
+identity:    800.000000 + 0.000000 = 800.000000 USD
+```
+
+The partials may be calculated independently and merged because this reduction
+declares and demonstrates the compatible merge. A host partition identifier is
+operational metadata and is not part of the result. Financial merge keys and
+lineage are part of the result.
+
+Although scalar signed addition has an additive opposite on a representable
+domain, this operation deliberately makes no `invertibility` claim. A negative
+cash amount does not prove that a source event is a valid lifecycle reversal,
+and removing a previously aggregated value still requires event/lifecycle
+evidence and invalidation.
+
+### Lifecycle resolution and portfolio folds
+
+The equity fixture has an original trade of `100 × 50` and a late correction to
+`80 × 55`. Normalization retains both immutable raw records. O2 lifecycle
+resolution selects the correction as the active payload while retaining both
+source records in lineage. At the fixture context:
+
+```text
+position                         = 80.00000000 MSFT
+trade gross                      = 80.00000000 × 55.00000000
+                                  = 4400.000000 USD (half-even, scale 6)
+settled cash before 2026-06-04   = no trade-cash balance
+open settlement before 2026-06-04 = 4400.000000 USD payable
+```
+
+The ordered fold's valid record order is origin then correction. The
+counterexample presents correction then origin. The correction's causal target
+is unavailable at that point, so evaluation returns `ordering_violation`; it
+cannot obtain the resolved result by arbitrary reordering. The lifecycle fold
+therefore claims no commutativity, associativity, identity, invertibility, or
+distributivity, and it does not permit a raw chain to be split and merged.
+
+The fixture shows a semantic event-to-position map and exact position reduction
+so the type boundary can be reviewed. Those names are not new public C++ APIs;
+the current `project_positions` function embeds both steps. T01 makes no
+reusable law claim for that decomposition. Likewise, the current cash and
+settlement functions remain ordered folds. Their disjoint financial keys are
+safe parallel boundaries only after lifecycle resolution and only with the
+complete context; this increment does not add a partitioned API.
+
+For settlement output, the complete key is:
+
+```text
+(account, settlement_date, currency, direction)
+```
+
+The negative fixture uses otherwise equal payable and receivable keys and shows
+that merging on `(account, settlement_date, currency)` is invalid. LUCA's
+current projection intentionally keeps their positive magnitudes separate.
+
+### Comparison is not a reduction
+
+`compare.cash.exact` receives projected cash and external observations through
+different typed ports. With projected cash `800.000000 USD` and an observed
+balance `790.000000 USD`, it produces one `amount_mismatch` whose existing LUCA
+sign convention is:
+
+```text
+difference = observed - expected = 790.000000 - 800.000000
+           = -10.000000 USD
+```
+
+The break retains projection evidence separately from observation provenance.
+Comparison neither mutates the ledger nor makes the observation authoritative.
+Swapping projected and observed ports changes meaning, so comparison claims no
+commutativity or inverse.
+
+## Replay and invalidation
+
+The exact cash fixture demonstrates equal canonical values and lineage for
+three supported reduction paths: full input, a verified prefix plus suffix, and
+compatible partial reduction plus merge. This does **not** claim that the
+current projection APIs expose general incremental replay or checkpoints.
+Portable serialized checkpoints, watermarks, and hashes are O3 work.
+
+Incremental or partitioned execution is supported only when its operation
+declaration says so and all compatibility conditions hold. Otherwise full
+recomputation from immutable inputs is the baseline. In particular:
+
+| Change | Prior-result rule | Required response |
+| --- | --- | --- |
+| New ordinary input after a verified reduction prefix | Reuse only for an operation that declares a compatible reduction and unchanged operation/policy/context versions. | Apply the suffix and verify the result equals full reduction. |
+| Late correction, cancellation, or reversal knowledge | Do not append the raw lifecycle record directly to projection state and do not treat it as an inverse. | Resolve the affected economic identity again and recompute affected account/instrument/currency/settlement partitions and downstream results. |
+| `recorded_through` or `economic_as_of` change | A result belongs to the old context. Advancing a cutoff is incremental only if the operation explicitly supports it and no earlier active input changed; moving backward is not append-only. | Select/resolve inputs for the new complete context, then recompute or use a later verified incremental contract. |
+| `settlement_as_of_date` change | Position may be unchanged, but settled cash and open obligations from the old date are incompatible. | Re-evaluate settlement-dependent folds. In the equity fixture, advancing to `2026-06-04` clears the payable and makes trade cash eligible. |
+| Engine, operation, or policy version change | Prior deterministic output is incompatible even when values happen to compare equal. | Recompute that operation and every downstream consumer using the new declared versions. |
+| Partition-key or merge-policy change | Existing partials do not prove compatibility. | Reject their merge and recompute with the new complete keys/policy. |
+
+The fixtures use `prior_result_reuse: rejected` for lifecycle, policy, and
+context changes. That phrase specifies semantic invalidation only; it is not a
+checkpoint schema or storage command.
+
+## Lineage and explanation
+
+A composed semantic result explains:
+
+- source-record identifiers and resolved economic-event/record identifiers;
+- every intermediate operation identity and version;
+- each operation's policy identity and version;
+- the shared evaluation-context identity and engine version; and
+- separate projection and observation evidence for reconciliation breaks.
+
+The corrected equity result therefore identifies both the original and
+correction source records, the active corrected record, lifecycle resolution,
+the downstream map/fold operations, policies, and context. A composed operation
+must propagate this information from its explicit inputs. It may not recover
+lineage through a hidden database or network lookup.
+
+Canonical bytes, input hashes, output hashes, and state/checkpoint hashes are
+intentionally absent. O3 must define their canonical serialization before a
+hash can be portable. Until then, equal fixture JSON or equal arithmetic is not
+called a canonical LUCA hash.
+
+Host-only data such as job IDs, queue names, worker addresses, attempt counts,
+requesting principals, wall-clock start/end times, storage locations, and
+authorization decisions must be recorded outside the deterministic result. A
+standalone process and a hosted adapter can eventually call the same reviewed
+OSS implementation with the same explicit inputs; this increment implements
+neither host and does not duplicate financial arithmetic for one.
+
+## Fixture and validator responsibilities
+
+The fixture set contains four independently parseable documents:
+
+- `valid-exact-cash-reduction.json` proves exact arithmetic, identity,
+  associativity, commutativity on the bounded declared domain, full/incremental/
+  partitioned equality, and complete event/source lineage;
+- `valid-equity-lifecycle-fold.json` composes fixture normalization, O2
+  resolution, position mapping/reduction, and current cash/settlement semantics;
+  it includes the ordering counterexample and lifecycle/policy/context
+  invalidation expectations;
+- `valid-cash-reconciliation.json` fixes exact comparison arithmetic and keeps
+  projection lineage distinct from observation evidence; and
+- `invalid-compositions.json` fixes the incompatibility categories and the
+  settlement-direction partition counterexample.
+
+`tests/conformance/test_transformation_contract.py` checks JSON shape, stable
+identifiers, all operation declarations, compatible edges, ordering and
+partition metadata, exact `Decimal` assertions, lineage references, law
+examples, invalidation coverage, and stable negative categories. Its arithmetic
+is limited to the equations written in the fixtures. It does not independently
+select events, resolve arbitrary lifecycle graphs, calculate portfolio state,
+or reconcile arbitrary records; those remain responsibilities of reviewed LUCA
+implementations and their engine conformance tests.
+
+## Explicit deferrals and unresolved policy choices
+
+This increment intentionally leaves the following to their roadmap owners:
+
+- canonical wire serialization, input/output hashes, watermarks, and checkpoint
+  compatibility (O3);
+- journal types, charts of accounts, journal mapping signatures, accounting
+  policy versions, trade-date versus settlement-date posting, lots, cost basis,
+  P&L, and accounting rounding (O4);
+- a minimal public composition/policy interface and independent-consumer
+  extension example (the next O5 implementation increment);
+- CLI/Python bindings, standalone and hosted adapters, and pinned platform
+  integration (the portable-execution increment);
+- dynamic loading, a general plugin ABI, expression languages, arbitrary runtime
+  code execution, and acceptance of externally calculated state;
+- FX conversion/netting policy, fees, commissions, taxes, settlement calendars,
+  partial reversals, cross-account corrections, and legal obligation netting;
+  and
+- production schemas, persistence, scheduling, permissions, network access,
+  deployments, and platform host metadata.
+
+These are not silently assigned default financial meaning by the fixtures. In
+particular, no journal policy is encoded as fact, no FX rate is inferred, no
+payable is netted with a receivable, and no custom or externally hosted result
+becomes authoritative merely because it conforms to this design vocabulary.
