@@ -1,21 +1,22 @@
 # Immutable event lifecycle contract
 
-Status: executable design contract for O2. This document and the JSON fixtures
-define the behavior that a later C++ implementation must expose. They do not
-describe an implemented public API or a durable serialization format.
+Status: executable design contract plus the first public C++ lifecycle
+increment. `luca/lifecycle.hpp` implements immutable in-memory acceptance and
+two-cutoff active-event resolution. Projection adoption and durable
+serialization remain later increments.
 
 ## Baseline and boundary
 
 The current core already provides the following contracts:
 
-| Concern | Current contract | Lifecycle gap |
+| Concern | Existing contract | First lifecycle increment |
 | --- | --- | --- |
-| Canonical event | `EventHeader` identifies an immutable cash movement or equity trade by `EventId`, account, economic `effective_at`, and provenance. | There is no lifecycle action, recorded time, stable economic identity across versions, or causal reference. |
-| Evidence | `SourceRecord` identifies immutable evidence. `Provenance` references one or more source records and a named/versioned normalization. | A lifecycle successor must retain its own evidence and must not overwrite its predecessor's provenance. |
-| Ledger | `Ledger` rejects duplicate event IDs and assigns a local acceptance sequence. Economic replay orders by `(effective_at, sequence)`; append order is otherwise retained. | The ledger does not validate causal edges or select knowledge by recorded time. |
-| Position | Economically selected equity trades add signed quantity on trade date. | It cannot yet select the active head of a corrected or cancelled chain. |
-| Settled cash | Cash movements apply at economic time. Trade cash applies only when the supplied settlement date is eligible in the explicit projection context. | Lifecycle knowledge must be resolved before the same cash rule is applied. |
-| Settlement | Economically selected trades create positive payable or receivable magnitudes until the supplied settlement date is reached. | Lifecycle knowledge must be resolved before the same obligation rule is applied. |
+| Canonical event | `EventHeader` identifies an immutable cash movement or equity trade by `EventId`, account, economic `effective_at`, and provenance. | `LifecycleRecord` adds action, stable `EconomicEventId`, recorded time, acceptance sequence, and causal reference while retaining the complete event payload. |
+| Evidence | `SourceRecord` identifies immutable evidence. `Provenance` references one or more source records and a named/versioned normalization. | Each lifecycle record retains its own provenance; accepting a successor does not edit predecessor evidence. |
+| Ledger | `Ledger` rejects duplicate event IDs and assigns a local acceptance sequence. Economic replay orders by `(effective_at, sequence)`; append order is otherwise retained. | Separate `LifecycleLedger` acceptance validates causal edges and resolves knowledge by recorded time without changing `Ledger`. |
+| Position | Economically selected equity trades add signed quantity on trade date. | Projection adoption remains deferred; callers can first obtain the ordered active set from `LifecycleLedger::resolve`. |
+| Settled cash | Cash movements apply at economic time. Trade cash applies only when the supplied settlement date is eligible in the explicit projection context. | Projection adoption remains deferred; settlement evaluation stays an independent projection input. |
+| Settlement | Economically selected trades create positive payable or receivable magnitudes until the supplied settlement date is reached. | Projection adoption remains deferred; lifecycle resolution does not infer a settlement clock. |
 
 The first lifecycle increment extends these contracts; it does not reinterpret
 existing accepted values. External observations and reconciliation breaks remain
@@ -24,16 +25,19 @@ economic event.
 
 ## Identities and immutable records
 
-A future lifecycle-aware ledger accepts immutable **ledger records**. Every
-record has these concepts, named independently of any eventual C++ spelling:
+`LifecycleLedger` accepts immutable **ledger records**. Every record has these
+concepts:
 
 - `record_id` identifies exactly one immutable accepted canonical record. It is
-  unique for the ledger's identity scope and is never reused.
+  spelled `EventId` in the public API, is unique for the ledger's identity
+  scope, and is never reused. For payload-bearing records it is the ID already
+  carried by `EventHeader`.
 - `economic_event_id` identifies one economic intent across an origin and its
-  correction/cancellation chain. Corrections retain it. Reversals use a new one.
+  correction/cancellation chain. It is a distinct strong `EconomicEventId`.
+  Corrections retain it. Reversals use a new one.
 - `acceptance_sequence` is a unique, increasing, ledger-local integer assigned
-  when the record is accepted. It is an ordering input, not source or market
-  order.
+  as `LifecycleSequence` when the record is accepted. It is an ordering input,
+  not source or market order.
 - `recorded_at` is LUCA's knowledge time for the accepted canonical record. It
   is distinct from a source record's observation or source-event time.
 - `effective_at` is the economic time of a payload. A cancellation has no
@@ -45,6 +49,31 @@ record has these concepts, named independently of any eventual C++ spelling:
 The fixtures spell out source records so provenance references can be checked.
 Their JSON is a portable conformance vocabulary, not O3 canonical
 serialization.
+
+## Public C++ API
+
+`LifecycleRecordDraft::originate`, `correct`, `cancel`, and `reverse` make each
+action's payload and causal-reference shape explicit. A draft has no acceptance
+sequence. `LifecycleLedger::accept` validates one draft and
+`LifecycleLedger::accept_batch` validates a span transactionally, assigning
+contiguous ledger-local sequences only after the whole operation succeeds. The
+batch form is necessary to diagnose forward references and causal cycles; any
+validation failure leaves accepted records and the next sequence unchanged.
+
+Accepted records are available in acceptance order through `records()` and by
+record identity through `find()`. `resolve(recorded_through, economic_as_of)`
+returns every knowledge-selected chain, including terminal cancelled chains,
+plus its ordered `active_events()`. An active result exposes its selected record,
+complete same-economic-identity lineage, immutable provenance on every lineage
+record, and the reversed target when applicable. Returned references have the
+same in-memory invalidation constraint as `Ledger` views: later acceptance can
+reallocate record storage, so callers request a fresh resolution after mutation.
+
+`LifecycleError` reports the stable category, offending record ID, optional
+causal target, and a diagnostic message. `category_name` exposes the exact
+portable category spelling. Shape, duplicate-identity, deterministic-ordering,
+and sequence-exhaustion errors are also explicit, but are not added to the
+stable causal-category set below.
 
 ## Lifecycle actions and supersession
 
@@ -99,9 +128,9 @@ and re-origination policy in a future contract; this contract does not infer one
 
 ## Validation and diagnostics
 
-Lifecycle consistency is checked before acceptance and must fail without
-mutating the ledger. The portable contract fixes these diagnostic categories;
-an implementation may attach more detail, record IDs, and field paths:
+Lifecycle consistency is checked before acceptance and fails without mutating
+the ledger. The portable contract fixes these diagnostic categories; the public
+error also attaches the offending record, optional target, and more detail:
 
 | Category | Meaning |
 | --- | --- |
@@ -113,10 +142,10 @@ an implementation may attach more detail, record IDs, and field paths:
 | `incompatible_event_relationship` | Economic identity, event type, natural key, reversal terms, or terminal-action policy are incompatible. |
 | `conflicting_lifecycle_successor` | A target already has a correction, cancellation, or reversal successor. |
 
-Ordinary shape errors, duplicate record/economic-origin identities, invalid
-times, missing provenance, and duplicate ordering inputs are also rejected. The
-fixture validator exercises the stable causal categories above without
-implementing portfolio arithmetic.
+Ordinary shape errors, duplicate record/economic-origin identities, decreasing
+recorded times, missing provenance, and exhausted ordering inputs are also
+rejected. The fixture validator exercises the stable causal categories above
+without implementing portfolio arithmetic.
 
 ## Supported evaluation model
 
@@ -146,6 +175,11 @@ Evaluation is deterministic:
 4. Feed that same ordered active set and the same explicit context to every
    affected projection. Position uses economic time. Settled cash and open
    obligations additionally use `settlement_as_of_date` exactly as today.
+
+The implemented lifecycle method accepts the first two cutoffs and performs
+steps 1–3. It deliberately does not accept or interpret
+`settlement_as_of_date`; that remains an independent input when later increments
+feed the resolved set to cash and settlement projections.
 
 Consequently, a late-recorded correction can change an earlier economic result
 in a newer knowledge view while the old `recorded_through` view stays
@@ -182,13 +216,15 @@ projection is implemented, it must consume the identical resolved active set and
 context; the fixture contract can then add explicit journal expectations without
 changing lifecycle meaning.
 
-## Deferred implementation choices
+## Deferred work
 
-This contract does not choose public class names, persistence layout, canonical
-wire encoding, hashes, checkpoint invalidation metadata, concurrent acceptance,
-or cross-ledger/global sequence allocation. Serialization and checkpoints remain
+This increment does not choose a persistence layout, canonical wire encoding,
+hashes, checkpoint invalidation metadata, concurrent acceptance, or
+cross-ledger/global sequence allocation. Serialization and checkpoints remain
 O3 work. Incremental processing may be added only when it proves equivalent to
-full replay and invalidates state affected by late lifecycle records.
+full replay and invalidates state affected by late lifecycle records. Existing
+position, cash, settlement, and future journal projections do not yet consume
+`LifecycleResolution`.
 
 Partial reversals, multiple independent reversals, changes of account or natural
 key within a correction, and any lifecycle action targeting an accepted

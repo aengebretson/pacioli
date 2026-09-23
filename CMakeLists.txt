@@ -73,6 +73,10 @@ if(PACIOLI_BUILD_TESTS)
   target_link_libraries(pacioli_ledger_test PRIVATE pacioli)
   add_test(NAME pacioli_ledger_test COMMAND pacioli_ledger_test)
 
+  add_executable(pacioli_event_lifecycle_test tests/unit/event_lifecycle_test.cpp)
+  target_link_libraries(pacioli_event_lifecycle_test PRIVATE pacioli)
+  add_test(NAME pacioli_event_lifecycle_test COMMAND pacioli_event_lifecycle_test)
+
   add_executable(pacioli_position_projection_test tests/unit/position_projection_test.cpp)
   target_link_libraries(pacioli_position_projection_test PRIVATE pacioli)
   add_test(NAME pacioli_position_projection_test COMMAND pacioli_position_projection_test)
