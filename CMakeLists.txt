@@ -1,16 +1,52 @@
 cmake_minimum_required(VERSION 3.24)
 project(pacioli VERSION 0.1.0 LANGUAGES CXX)
 
+include(CMakePackageConfigHelpers)
+include(GNUInstallDirs)
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_library(pacioli INTERFACE)
+add_library(luca::luca ALIAS pacioli)
+set_target_properties(pacioli PROPERTIES EXPORT_NAME luca)
+target_compile_features(pacioli INTERFACE cxx_std_23)
 target_include_directories(pacioli INTERFACE
-  ${CMAKE_CURRENT_SOURCE_DIR}/libs/ledger/include
-  ${CMAKE_CURRENT_SOURCE_DIR}/libs/portfolio/include
-  ${CMAKE_CURRENT_SOURCE_DIR}/libs/reconciliation/include
-  ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/libs/ledger/include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/libs/portfolio/include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/libs/reconciliation/include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+
+install(TARGETS pacioli EXPORT LucaTargets)
+install(
+  DIRECTORY
+    libs/ledger/include/
+    libs/portfolio/include/
+    libs/reconciliation/include/
+    include/
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+  FILES_MATCHING PATTERN "*.hpp")
+install(
+  EXPORT LucaTargets
+  FILE LucaTargets.cmake
+  NAMESPACE luca::
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Luca)
+
+configure_package_config_file(
+  cmake/LucaConfig.cmake.in
+  ${CMAKE_CURRENT_BINARY_DIR}/LucaConfig.cmake
+  INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Luca)
+write_basic_package_version_file(
+  ${CMAKE_CURRENT_BINARY_DIR}/LucaConfigVersion.cmake
+  VERSION ${PROJECT_VERSION}
+  COMPATIBILITY SameMajorVersion)
+install(
+  FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/LucaConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/LucaConfigVersion.cmake
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Luca)
 
 option(PACIOLI_BUILD_TESTS "Build tests" ON)
 option(PACIOLI_BUILD_BENCHMARKS "Build reproducible performance benchmarks" OFF)
@@ -82,6 +118,21 @@ if(PACIOLI_BUILD_TESTS)
   target_link_libraries(pacioli_conformance_engine_test PRIVATE pacioli)
   add_test(NAME pacioli_conformance_engine_test
     COMMAND pacioli_conformance_engine_test ${CONFORMANCE_ARTIFACT})
+
+  add_test(
+    NAME luca_package_consumer_test
+    COMMAND ${CMAKE_COMMAND}
+      -DLUCA_SOURCE_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+      -DLUCA_CONSUMER_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/tests/package_consumer
+      -DLUCA_CONSUMER_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/package_consumer
+      -DLUCA_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/package_consumer_prefix
+      -DLUCA_GENERATOR=${CMAKE_GENERATOR}
+      -DLUCA_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}
+      -DLUCA_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}
+      -DLUCA_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+      -DLUCA_BUILD_CONFIG=$<CONFIG>
+      -DLUCA_CTEST_COMMAND=${CMAKE_CTEST_COMMAND}
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/package_consumer/run_test.cmake)
 endif()
 
 if(PACIOLI_BUILD_BENCHMARKS)
