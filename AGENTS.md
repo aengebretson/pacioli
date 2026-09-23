@@ -2,7 +2,7 @@
 
 ## Coordinated development
 
-Follow [docs/DEVELOPMENT_WORKFLOW.md](docs/DEVELOPMENT_WORKFLOW.md), protocol 3,
+Follow [docs/DEVELOPMENT_WORKFLOW.md](docs/DEVELOPMENT_WORKFLOW.md), protocol 4,
 and the coordinator's assigned task before editing. This local copy makes the
 workflow usable independently of Luca Platform. The combined product backlog
 lives in [Luca Platform planning](https://github.com/aengebretson/luca-platform/tree/main/planning).
