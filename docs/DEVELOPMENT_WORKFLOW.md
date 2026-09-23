@@ -1,12 +1,10 @@
-# Development workflow — protocol 2
-
-Local protocol copy for Luca OSS. Canonical source: [Luca Platform development workflow](https://github.com/aengebretson/luca-platform/blob/main/docs/DEVELOPMENT_WORKFLOW.md). Paths under `planning/` refer to the canonical Platform planning worktree; the coordinator supplies a pinned OSS task and feature. Preserve financial rules in the local AGENTS.md.
+# Development workflow — protocol 3
 
 ## Source of truth
 
 The product backlog is versioned in `planning/features/`. Features describe user outcomes, independently of agent sessions. `planning/tasks/` contains bounded assignments created by the coordinator. Existing B/A milestones retain their meaning; the roadmap maps new IDs to them. No historical acceptance evidence is upgraded merely by creating this backlog.
 
-Luca Platform owns the combined roadmap. OSS implementation tasks name repository `oss`; reusable financial architecture, build instructions and conformance tests stay in the OSS repository. An OSS checkout receives a local copy of this protocol and AGENTS.md, version 2, with canonical-source attribution. An agent must not require access to the other repository to understand its assigned task.
+Luca Platform owns the combined roadmap. OSS implementation tasks name repository `oss`; reusable financial architecture, build instructions and conformance tests stay in the OSS repository. An OSS checkout receives a local copy of this protocol and AGENTS.md, version 3, with canonical-source attribution. An agent must not require access to the other repository to understand its assigned task.
 
 Feature and task specifications may be revised through Git. Decisions and state changes are append-only journal events. `planning/STATUS.md` and `planning/COMPLETED.md`, when present, are generated views; they are never separate sources of truth.
 
@@ -49,7 +47,7 @@ See `planning/EVENT_FORMAT.md` and templates. Validate metadata and journal stru
 
 Start independent API, editor and OSS assignments with a coordinator/integrator. Initial workers run in isolated containers with read-only common Git metadata; they cannot commit/push directly. The coordinator is the only process publishing their validated feature branches. Queue the reliability audit until capacity is available. The API worker owns gateway authentication paths; the editor consumes existing source-checkpoint endpoints and owns frontend paths; the OSS worker edits only OSS. Shared lockfiles, deployment manifests and infrastructure stay unassigned unless a reviewed dependency change needs them. Cap concurrency according to measured host/model capacity. Use provider credentials through configured agent tooling; never copy secrets into prompts or task files.
 
-## Server coordination — protocol 2
+## Server coordination — protocol 3
 
 The AI planning cycle and deterministic dispatcher run as separate systemd user services on stbridget. User lingering keeps them available without a desktop login. The planner wakes every 15 minutes, uses the configured server Codex credentials inside an isolated container, and proposes bounded tasks, promotions and advisory notes from the established roadmap. It has read-only inputs and cannot mutate source, canonical planning state, Git credentials, production services or the dispatcher.
 
@@ -57,4 +55,15 @@ Only the dispatcher validates and applies proposals under its existing exclusive
 
 Worker completion still produces a branch for review. The server planner does not itself declare a feature accepted, merge code or deploy production. Requirements requiring user decisions are retained for the next conversation. Changes discussed here must be recorded in the canonical server planning files or inbox to be available when the laptop is offline. The desktop heartbeat is retired to prevent competing coordinators.
 
-Existing assignments stay pinned to protocol 1 until they finish. Protocol 2 adds server-side planning for subsequent assignments without changing those workers' accepted scope. See [server coordinator operations](https://github.com/aengebretson/luca-platform/blob/main/docs/SERVER_DEVELOPMENT_COORDINATOR.md).
+Existing assignments stay pinned to protocol 1 until they finish. Protocol 2 adds server-side planning for subsequent assignments without changing those workers' accepted scope. See [server coordinator operations](SERVER_DEVELOPMENT_COORDINATOR.md).
+
+
+## Review and release pipeline — protocol 3
+
+The user's September 23 pipeline-upgrade request authorizes independent review and verified sequential integration of the established backlog. Existing implementation assignments retain their pinned scope. A separate server process builds a candidate merge against current main, runs deterministic checks in an isolated container, and requests one independent read-only AI review of that candidate. Failed checks consume no review tokens. Changes to source, target main, task specification or test policy invalidate previous approval.
+
+The dispatcher remains the sole assignment/journal writer. It applies passing receipts under its lock, records a durable integration intent before pushing, verifies main still matches the tested base, updates the development clone and records the exact integration commit. Interrupted integration is reconciled from the intent and remote commit before further work; unrelated remote movement stops the operation. Review findings and failed checks remain visible for bounded repair/operator action, not automatic acceptance.
+
+The planner polls on its existing schedule but calls a model only after meaningful input changes or bounded retry of a failed attempt. Timers, tests, state handling, merges and deployment commands use no LLM tokens.
+
+Deployment is a separate recorded state. The release runner stages a pinned gateway image with an isolated database and synthetic data before explicit production promotion. Unsupported runtime/schema changes require a release profile; staging success does not imply full public Authentik, Safari or disaster-recovery acceptance. Integration does not mark the entire feature complete.
