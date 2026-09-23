@@ -79,7 +79,7 @@ Configuration arguments(int argc, char** argv) {
     else if (argument == "--format") configuration.format = value(argument);
     else if (argument == "--filter") configuration.filter = value(argument);
     else if (argument == "--help") {
-      std::cout << "Usage: pacioli_benchmarks [--size 10000|100000|1000000] "
+      std::cout << "Usage: luca_benchmarks [--size 10000|100000|1000000] "
                    "[--repetitions N] [--filter substring] [--format text|json|csv]\n";
       std::exit(0);
     } else throw std::invalid_argument("unknown argument: " + std::string{argument});

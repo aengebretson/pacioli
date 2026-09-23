@@ -1,8 +1,8 @@
-# Pacioli LUCA
+# LUCA
 
 ## What it does
 
-Pacioli LUCA ingests financial activity from existing systems, normalizes it into a compact canonical ledger, and deterministically derives portfolio state.
+LUCA ingests financial activity from existing systems, normalizes it into a compact canonical ledger, and deterministically derives portfolio state.
 
 ```text
 FIX ─────────┐
@@ -20,6 +20,21 @@ Blockchain ──┘       ▼
 The project does **not** require firms to adopt a new interchange standard. FIX, FINOS CDM, SWIFT, broker feeds, custodian files, administrator files, and blockchain data are inputs through adapters. LUCA owns the internal computational representation.
 
 For the deeper architecture and scaling principles, see [docs/design.md](docs/design.md). For phased implementation, ecosystem capabilities, and possible products, see [docs/roadmap.md](docs/roadmap.md).
+
+## Source-tree consumption
+
+```cmake
+add_subdirectory(third_party/luca)
+
+target_link_libraries(my_app PRIVATE luca::portfolio)
+```
+
+Available public targets:
+
+- `luca::ledger`
+- `luca::portfolio`
+- `luca::reconciliation`
+- `luca::luca`
 
 ## Core concepts
 

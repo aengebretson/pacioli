@@ -8,17 +8,17 @@ and entirely outside production libraries.
 
 ## Build and run
 
-Benchmarks are optional (`PACIOLI_BUILD_BENCHMARKS` defaults to `OFF`) and are
-independent of `PACIOLI_BUILD_TESTS`. Build and report meaningful numbers with
+Benchmarks are optional (`LUCA_BUILD_BENCHMARKS` defaults to `OFF`) and are
+independent of `LUCA_BUILD_TESTS`. Build and report meaningful numbers with
 optimizations enabled:
 
 ```sh
 cmake -S . -B build-bench \
   -DCMAKE_BUILD_TYPE=Release \
-  -DPACIOLI_BUILD_TESTS=OFF \
-  -DPACIOLI_BUILD_BENCHMARKS=ON
+  -DLUCA_BUILD_TESTS=OFF \
+  -DLUCA_BUILD_BENCHMARKS=ON
 cmake --build build-bench
-./build-bench/pacioli_benchmarks --size 100000
+./build-bench/luca_benchmarks --size 100000
 ```
 
 Supported sizes are `10000`, `100000` (the default), and `1000000`. Select one
@@ -28,7 +28,7 @@ and is not registered with CTest. `--filter substring` runs selected cases,
 `--format csv` produces capture-friendly output. For example:
 
 ```sh
-./build-bench/pacioli_benchmarks --size 10000 --filter ledger --format json > ledger.json
+./build-bench/luca_benchmarks --size 10000 --filter ledger --format json > ledger.json
 ```
 
 Debug output is useful only as a compile/smoke check, not as a production
