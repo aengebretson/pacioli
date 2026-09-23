@@ -283,15 +283,18 @@ The fixture set contains four independently parseable documents:
 `tests/conformance/test_transformation_contract.py` checks JSON shape, stable
 identifiers, all operation declarations, compatible edges, ordering and
 partition metadata, exact `Decimal` assertions, lineage references, law
-examples, invalidation coverage, and stable negative categories. For the single
-resolved-trade example it also binds the declared position, pre-settlement cash,
-obligation key/direction/amount, and arithmetic operands to the selected active
-record and evaluation context. Reconciliation output lineage must exactly match
-the projected and observed inputs in their distinct roles. This deliberately
-narrow checking does not select events, resolve arbitrary lifecycle graphs,
-calculate general portfolio state, or reconcile arbitrary records; those remain
-responsibilities of reviewed LUCA implementations and their engine conformance
-tests.
+examples, invalidation coverage, and stable negative categories. Fixture-level
+checks bind each demonstrated operation's port types, units/currencies,
+ordering, partition keys and merge, and rounding declaration to the concrete
+cash or equity data; internally compatible but false declarations are rejected.
+For the single resolved-trade example the validator also binds the declared
+position, pre-settlement cash, obligation key/direction/amount, and arithmetic
+operands to the selected active record and evaluation context. Reconciliation
+output lineage must exactly match the projected and observed inputs in their
+distinct roles. This deliberately narrow checking does not select events,
+resolve arbitrary lifecycle graphs, calculate general portfolio state, or
+reconcile arbitrary records; those remain responsibilities of reviewed LUCA
+implementations and their engine conformance tests.
 
 ## Explicit deferrals and unresolved policy choices
 

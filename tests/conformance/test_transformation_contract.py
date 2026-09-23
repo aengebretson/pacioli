@@ -309,6 +309,88 @@ def _operations(document: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return result
 
 
+def _bind_port_declaration(
+    port: dict[str, Any],
+    expected: tuple[str, str, str, str | None],
+    context: str,
+) -> None:
+    expected_name, expected_type, expected_unit, expected_currency = expected
+    if port["name"] != expected_name or port["type"] != expected_type:
+        _fail(
+            "operation_type_mismatch",
+            f"{context} must be {expected_name}:{expected_type}",
+        )
+    if port["unit"] != expected_unit:
+        _fail("unit_mismatch", f"{context} must use {expected_unit}")
+    if port["currency"] != expected_currency:
+        _fail("currency_mismatch", f"{context} must use currency {expected_currency!r}")
+
+
+def _bind_operation_declaration(
+    operation: dict[str, Any],
+    *,
+    operation_id: str,
+    classification: str,
+    input_ports: tuple[tuple[str, str, str, str | None], ...],
+    output_port: tuple[str, str, str, str | None],
+    ordering_keys: tuple[str, ...],
+    partition_keys: tuple[str, ...] | None,
+    merge_operation: str | None,
+    rounding: tuple[str, int | None, str],
+) -> None:
+    """Bind a fixture declaration to the narrow example it accompanies."""
+    context = f"operations[{operation_id}]"
+    if operation["id"] != operation_id or operation["classification"] != classification:
+        _fail(
+            "operation_type_mismatch",
+            f"{context} must declare {classification} operation {operation_id!r}",
+        )
+    if len(operation["input_ports"]) != len(input_ports):
+        _fail(
+            "operation_type_mismatch",
+            f"{context} has the wrong number of input ports",
+        )
+    for index, expected in enumerate(input_ports):
+        _bind_port_declaration(
+            operation["input_ports"][index],
+            expected,
+            f"{context}.input_ports[{index}]",
+        )
+    _bind_port_declaration(operation["output_port"], output_port, f"{context}.output_port")
+
+    ordering = operation["ordering"]
+    expected_ordering = {
+        "required": bool(ordering_keys),
+        "keys": list(ordering_keys),
+        "arbitrary_reordering": "rejected" if ordering_keys else "equivalent",
+    }
+    if ordering != expected_ordering:
+        _fail("ordering_metadata", f"{context}.ordering contradicts the fixture data")
+
+    partitioning = operation["partitioning"]
+    expected_partitioning = {
+        "supported": partition_keys is not None,
+        "keys": list(partition_keys or ()),
+        "merge_operation": merge_operation,
+    }
+    if partitioning != expected_partitioning:
+        _fail(
+            "partition_metadata",
+            f"{context}.partitioning contradicts the demonstrated merge domain",
+        )
+
+    expected_rounding = {
+        "mode": rounding[0],
+        "scale": rounding[1],
+        "applies_at": rounding[2],
+    }
+    if operation["rounding"] != expected_rounding:
+        _fail(
+            "rounding_metadata",
+            f"{context}.rounding contradicts the fixture arithmetic",
+        )
+
+
 def _check_composition(
     value: Any, operations: dict[str, dict[str, Any]], context: str
 ) -> None:
@@ -481,6 +563,19 @@ def _validate_reduction_fixture(
     currencies = {item["currency"] for item in values.values()}
     if len(accounts) != 1 or len(currencies) != 1:
         _fail("partition_metadata", "the exact reduction example requires one compatible key")
+    if set(operations) != {"reduce.cash.exact"}:
+        _fail("operation_type_mismatch", "the cash fixture requires reduce.cash.exact")
+    _bind_operation_declaration(
+        operation,
+        operation_id="reduce.cash.exact",
+        classification="reduction",
+        input_ports=(("deltas", "CashDeltaSet", "money", next(iter(currencies))),),
+        output_port=("balances", "CashBalanceSet", "money", next(iter(currencies))),
+        ordering_keys=(),
+        partition_keys=("account", "currency"),
+        merge_operation="reduce.cash.exact",
+        rounding=("none", 6, "no rounding; checked fixed-point addition only"),
+    )
 
     modes = _object(document.get("execution_modes"), "execution_modes")
     _keys(modes, {"full", "incremental", "partitioned"}, "execution_modes")
@@ -740,6 +835,93 @@ def _validate_ordered_fixture(
                     "incompatible_event_relationship",
                     "correction changes an immutable account or trade natural key",
                 )
+
+    currencies = {record["event"]["quote_currency"] for record in records.values()}
+    if len(currencies) != 1:
+        _fail("currency_mismatch", "the ordered fixture requires one quote currency")
+    currency = next(iter(currencies))
+    ordered_declarations = (
+        (
+            "normalize.fixture-equity",
+            "normalization",
+            (("source-records", "SourceRecordSet", "source_record", None),),
+            ("raw-records", "RawLifecycleRecordSet", "lifecycle_record", currency),
+            (),
+            ("source_id", "external_record_id"),
+            "disjoint-record-union",
+            ("not_applicable", None, "none"),
+        ),
+        (
+            "resolve.lifecycle-knowledge",
+            "ordered_fold",
+            (("raw-records", "RawLifecycleRecordSet", "lifecycle_record", currency),),
+            ("resolved-events", "ResolvedEconomicEventSet", "economic_event", currency),
+            ("recorded_at", "acceptance_sequence"),
+            None,
+            None,
+            ("not_applicable", None, "none"),
+        ),
+        (
+            "map.equity-position-delta",
+            "map",
+            (("resolved-events", "ResolvedEconomicEventSet", "economic_event", currency),),
+            ("position-deltas", "PositionDeltaSet", "share_quantity", None),
+            (),
+            ("account", "instrument"),
+            "disjoint-position-delta-union",
+            ("none", 8, "quantity is copied exactly"),
+        ),
+        (
+            "reduce.position.exact",
+            "reduction",
+            (("position-deltas", "PositionDeltaSet", "share_quantity", None),),
+            ("positions", "PositionSet", "share_quantity", None),
+            (),
+            None,
+            None,
+            ("none", 8, "no rounding; checked fixed-point addition only"),
+        ),
+        (
+            "fold.settled-cash",
+            "ordered_fold",
+            (("resolved-events", "ResolvedEconomicEventSet", "economic_event", currency),),
+            ("cash-balances", "CashBalanceSet", "money", currency),
+            ("effective_at", "acceptance_sequence"),
+            ("account", "currency"),
+            "disjoint-cash-balance-union",
+            ("half_even", 6, "quantity multiplied by price for each eligible trade"),
+        ),
+        (
+            "fold.open-settlement",
+            "ordered_fold",
+            (("resolved-events", "ResolvedEconomicEventSet", "economic_event", currency),),
+            (
+                "open-obligations",
+                "SettlementObligationSet",
+                "money_obligation",
+                currency,
+            ),
+            ("effective_at", "acceptance_sequence"),
+            ("account", "settlement_date", "currency", "direction"),
+            "disjoint-settlement-obligation-union",
+            ("half_even", 6, "quantity multiplied by price for each unsettled trade"),
+        ),
+    )
+    if set(operations) != {declaration[0] for declaration in ordered_declarations}:
+        _fail("operation_type_mismatch", "ordered fixture operation set is incomplete")
+    for declaration in ordered_declarations:
+        operation_id = declaration[0]
+        _bind_operation_declaration(
+            operations[operation_id],
+            operation_id=operation_id,
+            classification=declaration[1],
+            input_ports=declaration[2],
+            output_port=declaration[3],
+            ordering_keys=declaration[4],
+            partition_keys=declaration[5],
+            merge_operation=declaration[6],
+            rounding=declaration[7],
+        )
 
     def reordered_batch_category(order: list[str]) -> str | None:
         """Apply the public lifecycle checks relevant to this validated batch."""
@@ -1158,6 +1340,32 @@ def _validate_comparison_fixture(
             _fail("duplicate_identity", f"{context} repeats observation key {key!r}")
         observed_by_key[key] = item
 
+    currencies = {
+        item["currency"] for item in [*projected_by_key.values(), *observed_by_key.values()]
+    }
+    if len(currencies) != 1:
+        _fail("currency_mismatch", "cash comparison inputs must use one currency")
+    if set(operations) != {"compare.cash.exact"}:
+        _fail("operation_type_mismatch", "comparison fixture requires compare.cash.exact")
+    _bind_operation_declaration(
+        operations["compare.cash.exact"],
+        operation_id="compare.cash.exact",
+        classification="comparison",
+        input_ports=(
+            ("projected-cash", "CashBalanceSet", "money", next(iter(currencies))),
+            ("observations", "CashObservationSet", "money", next(iter(currencies))),
+        ),
+        output_port=("breaks", "CashBreakSet", "money_difference", next(iter(currencies))),
+        ordering_keys=(),
+        partition_keys=("account", "currency"),
+        merge_operation="disjoint-cash-break-union",
+        rounding=(
+            "none",
+            6,
+            "observed minus expected uses checked fixed-point subtraction",
+        ),
+    )
+
     expected = _object(document.get("expected"), "expected")
     _keys(expected, {"breaks", "operation_trace"}, "expected")
     breaks = _objects(expected["breaks"], "expected.breaks", nonempty=True)
@@ -1510,6 +1718,101 @@ class TransformationContractTest(unittest.TestCase):
             "expected_amount"
         ] = "1050.000000"
         with self.assertRaisesRegex(ContractError, "partition_metadata"):
+            validate_document(document)
+
+    def test_cash_reduction_declaration_is_bound_to_fixture_data(self):
+        path = FIXTURE_ROOT / "valid-exact-cash-reduction.json"
+        for mutation, category in (
+            ("currency", "currency_mismatch"),
+            ("unit", "unit_mismatch"),
+            ("partition_keys", "partition_metadata"),
+            ("merge_operation", "partition_metadata"),
+            ("rounding", "rounding_metadata"),
+            ("rounding_stage", "rounding_metadata"),
+        ):
+            with self.subTest(mutation=mutation):
+                document = json.loads(path.read_text())
+                operation = document["operations"][0]
+                if mutation == "currency":
+                    operation["input_ports"][0]["currency"] = "EUR"
+                    operation["output_port"]["currency"] = "EUR"
+                elif mutation == "unit":
+                    operation["input_ports"][0]["unit"] = "share_quantity"
+                    operation["output_port"]["unit"] = "share_quantity"
+                elif mutation == "partition_keys":
+                    operation["partitioning"]["keys"] = ["account"]
+                elif mutation == "merge_operation":
+                    operation["partitioning"]["merge_operation"] = (
+                        "disjoint-cash-balance-union"
+                    )
+                elif mutation == "rounding":
+                    operation["rounding"]["mode"] = "half_even"
+                else:
+                    operation["rounding"]["applies_at"] = "per input delta"
+                with self.assertRaisesRegex(ContractError, category):
+                    validate_document(document)
+
+    def test_comparison_declaration_is_bound_to_fixture_data(self):
+        path = FIXTURE_ROOT / "valid-cash-reconciliation.json"
+        for mutation, category in (
+            ("type", "operation_type_mismatch"),
+            ("currency", "currency_mismatch"),
+            ("unit", "unit_mismatch"),
+            ("partition_keys", "partition_metadata"),
+            ("merge_operation", "partition_metadata"),
+            ("rounding", "rounding_metadata"),
+        ):
+            with self.subTest(mutation=mutation):
+                document = json.loads(path.read_text())
+                operation = document["operations"][0]
+                if mutation == "type":
+                    operation["input_ports"][0]["type"] = "PositionSet"
+                elif mutation == "currency":
+                    for port in [*operation["input_ports"], operation["output_port"]]:
+                        port["currency"] = "EUR"
+                elif mutation == "unit":
+                    for port in operation["input_ports"]:
+                        port["unit"] = "share_quantity"
+                    operation["output_port"]["unit"] = "quantity_difference"
+                elif mutation == "partition_keys":
+                    operation["partitioning"]["keys"] = ["account"]
+                elif mutation == "merge_operation":
+                    operation["partitioning"]["merge_operation"] = "set-union"
+                else:
+                    operation["rounding"]["mode"] = "half_even"
+                with self.assertRaisesRegex(ContractError, category):
+                    validate_document(document)
+
+    def test_ordered_declarations_are_bound_to_equity_data(self):
+        path = FIXTURE_ROOT / "valid-equity-lifecycle-fold.json"
+
+        document = json.loads(path.read_text())
+        for operation in document["operations"]:
+            for port in [*operation["input_ports"], operation["output_port"]]:
+                if port["currency"] is not None:
+                    port["currency"] = "EUR"
+        with self.assertRaisesRegex(ContractError, "currency_mismatch"):
+            validate_document(document)
+
+        document = json.loads(path.read_text())
+        resolution = document["operations"][1]
+        resolution["ordering"]["keys"] = ["acceptance_sequence", "recorded_at"]
+        with self.assertRaisesRegex(ContractError, "ordering_metadata"):
+            validate_document(document)
+
+        document = json.loads(path.read_text())
+        open_settlement = document["operations"][5]
+        open_settlement["partitioning"]["keys"] = [
+            "account",
+            "settlement_date",
+            "currency",
+        ]
+        with self.assertRaisesRegex(ContractError, "partition_metadata"):
+            validate_document(document)
+
+        document = json.loads(path.read_text())
+        document["operations"][5]["rounding"]["scale"] = 2
+        with self.assertRaisesRegex(ContractError, "rounding_metadata"):
             validate_document(document)
 
     def test_stable_invalid_category_cannot_be_relabelled(self):
