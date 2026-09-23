@@ -165,10 +165,11 @@ open settlement before 2026-06-04 = 4400.000000 USD payable
 ```
 
 The ordered fold's valid record order is origin then correction. The
-counterexample presents correction then origin. The correction's causal target
-is unavailable at that point, so the public lifecycle diagnostic is
-`causal_reference_unavailable`; it cannot obtain the resolved result by
-arbitrary reordering. The lifecycle fold
+counterexample presents correction then origin. That permutation puts the
+correction's `2026-06-05` recorded time before the origin's `2026-06-02`
+recorded time. Public `LifecycleLedger::accept_batch` therefore returns
+`deterministic_ordering` before evaluating causal availability; it cannot obtain
+the resolved result by arbitrary reordering. The lifecycle fold
 therefore claims no commutativity, associativity, identity, invertibility, or
 distributivity, and it does not permit a raw chain to be split and merged.
 

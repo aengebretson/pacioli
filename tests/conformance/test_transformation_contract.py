@@ -741,6 +741,39 @@ def _validate_ordered_fixture(
                     "correction changes an immutable account or trade natural key",
                 )
 
+    def reordered_batch_category(order: list[str]) -> str | None:
+        """Apply the public lifecycle checks relevant to this validated batch."""
+        ordered_records = [records[record_id] for record_id in order]
+        prior_recorded_at: datetime | None = None
+        for record in ordered_records:
+            recorded_at = datetime.fromisoformat(
+                record["recorded_at"].replace("Z", "+00:00")
+            )
+            if prior_recorded_at is not None and recorded_at < prior_recorded_at:
+                return "deterministic_ordering"
+            prior_recorded_at = recorded_at
+
+        batch_sequences = {
+            record_id: sequence for sequence, record_id in enumerate(order, start=1)
+        }
+        for record_id in order:
+            record = records[record_id]
+            predecessor = record["supersedes_record_id"]
+            if predecessor is None:
+                continue
+            target = records[predecessor]
+            target_key = (
+                datetime.fromisoformat(target["recorded_at"].replace("Z", "+00:00")),
+                batch_sequences[predecessor],
+            )
+            record_key = (
+                datetime.fromisoformat(record["recorded_at"].replace("Z", "+00:00")),
+                batch_sequences[record_id],
+            )
+            if target_key >= record_key:
+                return "causal_reference_unavailable"
+        return None
+
     expected = _object(document.get("expected"), "expected")
     _keys(
         expected,
@@ -1005,9 +1038,17 @@ def _validate_ordered_fixture(
         _fail("lineage_reference_missing", "ordering counterexample must use the fixture records")
     if [records[item]["acceptance_sequence"] for item in permuted] == sorted(sequences):
         _fail("ordering_metadata", "ordering counterexample does not reorder the records")
-    if counterexample.get("expected_category") != "causal_reference_unavailable":
-        _fail("expected_category_mismatch", "ordering counterexample category is not stable")
-    if counterexample["expected_category"] not in operations[operation_id]["errors"]:
+    expected_category = _identifier(
+        counterexample.get("expected_category"),
+        "ordering_counterexample.expected_category",
+    )
+    actual_category = reordered_batch_category(permuted)
+    if actual_category != expected_category:
+        _fail(
+            "expected_category_mismatch",
+            f"ordering counterexample expected {expected_category}, received {actual_category}",
+        )
+    if expected_category not in operations[operation_id]["errors"]:
         _fail(
             "schema_shape",
             "ordering counterexample category is absent from the lifecycle declaration",
@@ -1417,14 +1458,21 @@ class TransformationContractTest(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "context_mismatch"):
             validate_document(document)
 
-    def test_public_lifecycle_category_cannot_be_relabelled(self):
-        document = json.loads(
-            (FIXTURE_ROOT / "valid-equity-lifecycle-fold.json").read_text()
+    def test_public_lifecycle_category_is_derived_from_record_metadata(self):
+        path = FIXTURE_ROOT / "valid-equity-lifecycle-fold.json"
+        document = json.loads(path.read_text())
+        document["ordering_counterexample"]["expected_category"] = (
+            "causal_reference_unavailable"
         )
-        document["operations"][1]["errors"][0] = "ordering_violation"
-        document["ordering_counterexample"]["expected_category"] = "ordering_violation"
         with self.assertRaisesRegex(ContractError, "expected_category_mismatch"):
             validate_document(document)
+
+        document = json.loads(path.read_text())
+        document["records"][1]["recorded_at"] = document["records"][0]["recorded_at"]
+        document["ordering_counterexample"]["expected_category"] = (
+            "causal_reference_unavailable"
+        )
+        validate_document(document)
 
     def test_reconciliation_lineage_must_match_each_input_role(self):
         path = FIXTURE_ROOT / "valid-cash-reconciliation.json"

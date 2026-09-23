@@ -124,6 +124,7 @@
         "applies_at": "none"
       },
       "errors": [
+        "deterministic_ordering",
         "causal_reference_unavailable",
         "causal_reference_missing",
         "conflicting_lifecycle_successor"
@@ -657,8 +658,8 @@
       "trade-record-2",
       "trade-record-1"
     ],
-    "expected_category": "causal_reference_unavailable",
-    "reason": "A correction cannot be resolved before its predecessor is available; arbitrary reordering is not equivalent."
+    "expected_category": "deterministic_ordering",
+    "reason": "The permutation makes recorded_at decrease from the correction to its predecessor, which public lifecycle acceptance rejects before checking causal availability."
   },
   "invalidation_cases": [
     {
