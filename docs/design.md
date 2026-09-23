@@ -307,3 +307,12 @@ As the domain grows, publish reproducible benchmark scenarios measuring:
 The long-term performance objective is simple:
 
 > **financial semantics rigorous enough for accounting, implemented like a modern compute engine.**
+
+
+## Planned transformation contract (O5)
+
+This is a design direction for review, not an implemented public API. Build a small typed contract around existing projections and accounting policy: explicit immutable inputs, evaluation context, named/versioned transform, typed result or diagnostic and provenance. Distinguish stateless mappings from ordered state transitions and reducible summaries; composition requires compatible domain types, units and context.
+
+Document each transform's actual algebraic properties. Associative reduction may permit partition merging, but commutativity and invertibility are independent claims. Lot allocation and causal corrections retain ordering. Reversing an economic event does not imply every derived computation has an inverse. Conformance fixtures must prove supported full, incremental and partitioned execution agree and demonstrate cases where reordering is invalid.
+
+Engine, policy, context and input identities accompany canonical results; operational job IDs/timestamps are separate. Hosting layers supply storage, network access, authorization and scheduling. An external tool or hosted app uses the same OSS arithmetic. Custom financial output is not accepted into authoritative platform state solely because an agent or external program supplied it. See [roadmap clarification](roadmap.md#backlog-clarification--transformations-and-portable-accounting-2026-09-23) for scope and sequencing.

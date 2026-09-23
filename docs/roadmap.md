@@ -251,3 +251,23 @@ The four-slice program is complete when:
 - all behavior is demonstrated through reusable conformance fixtures.
 
 Only after these foundations are stable should broader adapters, cloud execution, extensive UI, distributed orchestration, or agent layers become active open-source engineering priorities.
+
+## Backlog clarification — transformations and portable accounting (2026-09-23)
+
+The combined execution backlog lives in [Luca Platform planning](https://github.com/aengebretson/luca-platform/tree/main/planning/ROADMAP.md). It is the sole cross-repository assignment source; this roadmap retains the OSS financial requirements. This clarification is planned work, not a claim of new implementation, and does not expand the active packaging task.
+
+- **O2 — lifecycle:** corrections/reversals preserve original evidence and causal lineage, with consistent position/cash/settlement and later journal outcomes. Design economic, knowledge and settlement time semantics explicitly.
+- **O3 — portable replay:** canonical input hashes, partition/watermark, evaluation context, engine/projection/policy versions and output hashes identify a calculation. Reject incompatible checkpoints; prove full replay equals incremental replay, including correction invalidation.
+- **O4 — accounting:** source evidence → economic events → immutable ledger → versioned accounting transformations → journals/balances → reconciliation against separate observations. Prove balanced cash/equity accounting, trade/settlement views and side-by-side narrow policy versions with full lineage and explicit rounding/currency rules.
+- **O5 — composable transformations/projection contracts:** design a small typed public interface for normalization, mappings, ordered folds, reductions and reconciliation. State which algebraic laws apply to each operation and prove claimed identities/associativity/commutativity with domain fixtures. Do not assume order independence for lots, corrections or dependent state. An independent consumer must be able to define a narrow policy/projection without modifying core source.
+- **Portable execution:** authoritative summarization, accounting and reconciliation stay in OSS libraries. C++ consumers, CLI/Python tools, local cron processes, third-party infrastructure and Luca-hosted jobs reuse the same implementation with explicit authorized inputs. Platform identity, API transport, storage, scheduling and UI remain outside the core.
+
+### Concrete acceptance demonstration
+
+From a contribution, equity purchase, settlement and correction/reversal fixture, produce positions, cash, settlement obligations and balanced journals; reconcile them with deliberately differing external observations. Reproduce canonical results with the same versioned inputs/policy through standalone and hosted execution. Show source/intermediate/output lineage and an independent custom policy, then display the result in an externally developed app using platform APIs.
+
+### Sequencing and design decisions
+
+Preserve slices 1–4. Review O5's minimal contracts alongside the accounting policy boundary, without blocking narrow accounting on a generic framework. Follow with portable hosts and a platform adapter pinned to a reviewed OSS revision. General plugin loading/ABI, expression languages and expanded accounting remain separately justified work. User-defined transformations do not make external results authoritative without validation. Precise extension signatures and supported algebraic laws require a reviewed design and conformance evidence.
+
+Feature detail: [O4](https://github.com/aengebretson/luca-platform/blob/main/planning/features/O4.md), [O5](https://github.com/aengebretson/luca-platform/blob/main/planning/features/O5.md), [F1](https://github.com/aengebretson/luca-platform/blob/main/planning/features/F1.md). Developer API, editor, app packaging/publication and external Git live in platform D1–D4; they are not dependencies of standalone OSS use.
