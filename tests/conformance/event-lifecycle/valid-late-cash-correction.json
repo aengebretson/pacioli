@@ -1,0 +1,259 @@
+{
+  "contract_version": "luca.event-lifecycle.v1",
+  "name": "late-cash-correction-and-cancellation",
+  "description": "A late correction replaces an earlier cash interpretation in a newer knowledge view, then a cancellation closes the chain without deleting evidence.",
+  "valid": true,
+  "source_records": [
+    {
+      "source_record_id": "cash-source-original",
+      "source_id": "bank-file",
+      "observed_at": "2026-01-02T08:00:00Z",
+      "source_event_at": "2026-01-02T00:00:00Z",
+      "payload_hash": {
+        "algorithm": "sha256",
+        "value": "fixture-cash-original"
+      },
+      "kind": "cash-movement"
+    },
+    {
+      "source_record_id": "cash-source-correction",
+      "source_id": "bank-file",
+      "observed_at": "2026-01-10T09:00:00Z",
+      "source_event_at": "2026-01-02T00:00:00Z",
+      "payload_hash": {
+        "algorithm": "sha256",
+        "value": "fixture-cash-correction"
+      },
+      "kind": "cash-correction"
+    },
+    {
+      "source_record_id": "cash-source-cancellation",
+      "source_id": "bank-file",
+      "observed_at": "2026-01-12T11:00:00Z",
+      "source_event_at": "2026-01-02T00:00:00Z",
+      "payload_hash": {
+        "algorithm": "sha256",
+        "value": "fixture-cash-cancellation"
+      },
+      "kind": "cash-cancellation"
+    }
+  ],
+  "records": [
+    {
+      "record_id": "cash-record-v1",
+      "economic_event_id": "cash-economic-1",
+      "account": "fund-a",
+      "action": "originate",
+      "recorded_at": "2026-01-02T08:01:00Z",
+      "acceptance_sequence": 1,
+      "effective_at": "2026-01-02T00:00:00Z",
+      "provenance": {
+        "source_record_ids": [
+          "cash-source-original"
+        ],
+        "transformation_name": "fixture.cash-normalization",
+        "transformation_version": "1"
+      },
+      "event": {
+        "type": "cash_movement",
+        "currency": "USD",
+        "amount": "1000.000000"
+      }
+    },
+    {
+      "record_id": "cash-record-v2",
+      "economic_event_id": "cash-economic-1",
+      "account": "fund-a",
+      "action": "correct",
+      "supersedes_record_id": "cash-record-v1",
+      "recorded_at": "2026-01-10T09:01:00Z",
+      "acceptance_sequence": 2,
+      "effective_at": "2026-01-02T00:00:00Z",
+      "provenance": {
+        "source_record_ids": [
+          "cash-source-correction"
+        ],
+        "transformation_name": "fixture.cash-normalization",
+        "transformation_version": "1"
+      },
+      "event": {
+        "type": "cash_movement",
+        "currency": "USD",
+        "amount": "1200.000000"
+      }
+    },
+    {
+      "record_id": "cash-record-v3",
+      "economic_event_id": "cash-economic-1",
+      "account": "fund-a",
+      "action": "cancel",
+      "supersedes_record_id": "cash-record-v2",
+      "recorded_at": "2026-01-12T11:01:00Z",
+      "acceptance_sequence": 3,
+      "effective_at": null,
+      "provenance": {
+        "source_record_ids": [
+          "cash-source-cancellation"
+        ],
+        "transformation_name": "fixture.cash-normalization",
+        "transformation_version": "1"
+      },
+      "event": null
+    }
+  ],
+  "evaluations": [
+    {
+      "name": "before-late-correction-is-known",
+      "context": {
+        "economic_as_of": "2026-01-31T23:59:59Z",
+        "recorded_through": "2026-01-05T23:59:59Z",
+        "settlement_as_of_date": "2026-01-31"
+      },
+      "expected": {
+        "active_event_chains": [
+          {
+            "economic_event_id": "cash-economic-1",
+            "record_ids": [
+              "cash-record-v1"
+            ],
+            "active_record_id": "cash-record-v1",
+            "reverses_record_id": null,
+            "source_lineage": [
+              {
+                "record_id": "cash-record-v1",
+                "source_record_ids": [
+                  "cash-source-original"
+                ]
+              }
+            ]
+          }
+        ],
+        "inactive_event_chains": [],
+        "positions": [],
+        "settled_cash": [
+          {
+            "account": "fund-a",
+            "currency": "USD",
+            "amount": "1000.000000"
+          }
+        ],
+        "open_settlement_obligations": [],
+        "journals": {
+          "status": "deferred",
+          "reason": "O4 journal projection is not implemented."
+        },
+        "arithmetic": [
+          "Known active cash payload is +1000.000000 USD.",
+          "Settled cash is 0 + 1000.000000 = 1000.000000 USD."
+        ]
+      }
+    },
+    {
+      "name": "after-late-correction-is-known",
+      "context": {
+        "economic_as_of": "2026-01-31T23:59:59Z",
+        "recorded_through": "2026-01-11T23:59:59Z",
+        "settlement_as_of_date": "2026-01-31"
+      },
+      "expected": {
+        "active_event_chains": [
+          {
+            "economic_event_id": "cash-economic-1",
+            "record_ids": [
+              "cash-record-v1",
+              "cash-record-v2"
+            ],
+            "active_record_id": "cash-record-v2",
+            "reverses_record_id": null,
+            "source_lineage": [
+              {
+                "record_id": "cash-record-v1",
+                "source_record_ids": [
+                  "cash-source-original"
+                ]
+              },
+              {
+                "record_id": "cash-record-v2",
+                "source_record_ids": [
+                  "cash-source-correction"
+                ]
+              }
+            ]
+          }
+        ],
+        "inactive_event_chains": [],
+        "positions": [],
+        "settled_cash": [
+          {
+            "account": "fund-a",
+            "currency": "USD",
+            "amount": "1200.000000"
+          }
+        ],
+        "open_settlement_obligations": [],
+        "journals": {
+          "status": "deferred",
+          "reason": "O4 journal projection is not implemented."
+        },
+        "arithmetic": [
+          "The correction supersedes rather than adds to +1000.000000 USD.",
+          "Settled cash is 0 + 1200.000000 = 1200.000000 USD."
+        ]
+      }
+    },
+    {
+      "name": "after-cancellation-is-known",
+      "context": {
+        "economic_as_of": "2026-01-31T23:59:59Z",
+        "recorded_through": "2026-01-13T23:59:59Z",
+        "settlement_as_of_date": "2026-01-31"
+      },
+      "expected": {
+        "active_event_chains": [],
+        "inactive_event_chains": [
+          {
+            "economic_event_id": "cash-economic-1",
+            "record_ids": [
+              "cash-record-v1",
+              "cash-record-v2",
+              "cash-record-v3"
+            ],
+            "terminal_record_id": "cash-record-v3",
+            "disposition": "cancelled",
+            "source_lineage": [
+              {
+                "record_id": "cash-record-v1",
+                "source_record_ids": [
+                  "cash-source-original"
+                ]
+              },
+              {
+                "record_id": "cash-record-v2",
+                "source_record_ids": [
+                  "cash-source-correction"
+                ]
+              },
+              {
+                "record_id": "cash-record-v3",
+                "source_record_ids": [
+                  "cash-source-cancellation"
+                ]
+              }
+            ]
+          }
+        ],
+        "positions": [],
+        "settled_cash": [],
+        "open_settlement_obligations": [],
+        "journals": {
+          "status": "deferred",
+          "reason": "O4 journal projection is not implemented."
+        },
+        "arithmetic": [
+          "The terminal cancellation makes the cash chain contribute no active payload.",
+          "Sparse settled cash omits the resulting 0.000000 USD balance."
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,568 @@
+{
+  "contract_version": "luca.event-lifecycle.v1",
+  "name": "equity-correction-and-late-reversal",
+  "description": "An equity trade correction changes trade-date and settlement-date state, then a late-recorded reversal offsets position and cash under explicit evaluation cutoffs.",
+  "valid": true,
+  "source_records": [
+    {
+      "source_record_id": "opening-cash-source",
+      "source_id": "bank-file",
+      "observed_at": "2026-05-29T09:00:00Z",
+      "source_event_at": "2026-05-29T00:00:00Z",
+      "payload_hash": {
+        "algorithm": "sha256",
+        "value": "fixture-opening-cash"
+      },
+      "kind": "cash-movement"
+    },
+    {
+      "source_record_id": "trade-source-original",
+      "source_id": "broker-feed",
+      "observed_at": "2026-06-02T14:01:00Z",
+      "source_event_at": "2026-06-02T14:00:00Z",
+      "payload_hash": {
+        "algorithm": "sha256",
+        "value": "fixture-trade-original"
+      },
+      "kind": "equity-trade"
+    },
+    {
+      "source_record_id": "trade-source-correction",
+      "source_id": "broker-feed",
+      "observed_at": "2026-06-03T09:00:00Z",
+      "source_event_at": "2026-06-02T14:00:00Z",
+      "payload_hash": {
+        "algorithm": "sha256",
+        "value": "fixture-trade-correction"
+      },
+      "kind": "equity-trade-correction"
+    },
+    {
+      "source_record_id": "trade-source-reversal",
+      "source_id": "broker-feed",
+      "observed_at": "2026-06-07T09:00:00Z",
+      "source_event_at": "2026-06-05T10:00:00Z",
+      "payload_hash": {
+        "algorithm": "sha256",
+        "value": "fixture-trade-reversal"
+      },
+      "kind": "equity-trade-reversal"
+    }
+  ],
+  "records": [
+    {
+      "record_id": "opening-cash-record",
+      "economic_event_id": "opening-cash-economic",
+      "account": "fund-a",
+      "action": "originate",
+      "recorded_at": "2026-05-29T09:01:00Z",
+      "acceptance_sequence": 1,
+      "effective_at": "2026-05-29T00:00:00Z",
+      "provenance": {
+        "source_record_ids": [
+          "opening-cash-source"
+        ],
+        "transformation_name": "fixture.cash-normalization",
+        "transformation_version": "1"
+      },
+      "event": {
+        "type": "cash_movement",
+        "currency": "USD",
+        "amount": "100000.000000"
+      }
+    },
+    {
+      "record_id": "trade-record-v1",
+      "economic_event_id": "trade-economic-1",
+      "account": "fund-a",
+      "action": "originate",
+      "recorded_at": "2026-06-02T14:02:00Z",
+      "acceptance_sequence": 2,
+      "effective_at": "2026-06-02T14:00:00Z",
+      "provenance": {
+        "source_record_ids": [
+          "trade-source-original"
+        ],
+        "transformation_name": "fixture.trade-normalization",
+        "transformation_version": "1"
+      },
+      "event": {
+        "type": "equity_trade",
+        "instrument": "MSFT",
+        "quantity": "100.00000000",
+        "price": "50.000000",
+        "quote_currency": "USD",
+        "settlement_date": "2026-06-04"
+      }
+    },
+    {
+      "record_id": "trade-record-v2",
+      "economic_event_id": "trade-economic-1",
+      "account": "fund-a",
+      "action": "correct",
+      "supersedes_record_id": "trade-record-v1",
+      "recorded_at": "2026-06-03T09:01:00Z",
+      "acceptance_sequence": 3,
+      "effective_at": "2026-06-02T14:00:00Z",
+      "provenance": {
+        "source_record_ids": [
+          "trade-source-correction"
+        ],
+        "transformation_name": "fixture.trade-normalization",
+        "transformation_version": "1"
+      },
+      "event": {
+        "type": "equity_trade",
+        "instrument": "MSFT",
+        "quantity": "80.00000000",
+        "price": "55.000000",
+        "quote_currency": "USD",
+        "settlement_date": "2026-06-04"
+      }
+    },
+    {
+      "record_id": "reversal-record-v1",
+      "economic_event_id": "trade-reversal-economic-1",
+      "account": "fund-a",
+      "action": "reverse",
+      "reverses_record_id": "trade-record-v2",
+      "recorded_at": "2026-06-07T09:01:00Z",
+      "acceptance_sequence": 4,
+      "effective_at": "2026-06-05T10:00:00Z",
+      "provenance": {
+        "source_record_ids": [
+          "trade-source-reversal"
+        ],
+        "transformation_name": "fixture.trade-normalization",
+        "transformation_version": "1"
+      },
+      "event": {
+        "type": "equity_trade",
+        "instrument": "MSFT",
+        "quantity": "-80.00000000",
+        "price": "55.000000",
+        "quote_currency": "USD",
+        "settlement_date": "2026-06-06"
+      }
+    }
+  ],
+  "evaluations": [
+    {
+      "name": "trade-date-before-correction",
+      "context": {
+        "economic_as_of": "2026-06-02T23:59:59Z",
+        "recorded_through": "2026-06-02T23:59:59Z",
+        "settlement_as_of_date": "2026-06-02"
+      },
+      "expected": {
+        "active_event_chains": [
+          {
+            "economic_event_id": "opening-cash-economic",
+            "record_ids": [
+              "opening-cash-record"
+            ],
+            "active_record_id": "opening-cash-record",
+            "reverses_record_id": null,
+            "source_lineage": [
+              {
+                "record_id": "opening-cash-record",
+                "source_record_ids": [
+                  "opening-cash-source"
+                ]
+              }
+            ]
+          },
+          {
+            "economic_event_id": "trade-economic-1",
+            "record_ids": [
+              "trade-record-v1"
+            ],
+            "active_record_id": "trade-record-v1",
+            "reverses_record_id": null,
+            "source_lineage": [
+              {
+                "record_id": "trade-record-v1",
+                "source_record_ids": [
+                  "trade-source-original"
+                ]
+              }
+            ]
+          }
+        ],
+        "inactive_event_chains": [],
+        "positions": [
+          {
+            "account": "fund-a",
+            "instrument": "MSFT",
+            "quantity": "100.00000000"
+          }
+        ],
+        "settled_cash": [
+          {
+            "account": "fund-a",
+            "currency": "USD",
+            "amount": "100000.000000"
+          }
+        ],
+        "open_settlement_obligations": [
+          {
+            "account": "fund-a",
+            "settlement_date": "2026-06-04",
+            "currency": "USD",
+            "direction": "payable",
+            "amount": "5000.000000"
+          }
+        ],
+        "journals": {
+          "status": "deferred",
+          "reason": "O4 journal projection is not implemented."
+        },
+        "arithmetic": [
+          "Original trade position is +100.00000000 MSFT.",
+          "100.00000000 x 50.000000 = 5000.000000 USD payable.",
+          "Settlement date 2026-06-04 is after evaluation date 2026-06-02, so settled cash stays 100000.000000 USD."
+        ]
+      }
+    },
+    {
+      "name": "trade-date-after-correction",
+      "context": {
+        "economic_as_of": "2026-06-02T23:59:59Z",
+        "recorded_through": "2026-06-03T23:59:59Z",
+        "settlement_as_of_date": "2026-06-02"
+      },
+      "expected": {
+        "active_event_chains": [
+          {
+            "economic_event_id": "opening-cash-economic",
+            "record_ids": [
+              "opening-cash-record"
+            ],
+            "active_record_id": "opening-cash-record",
+            "reverses_record_id": null,
+            "source_lineage": [
+              {
+                "record_id": "opening-cash-record",
+                "source_record_ids": [
+                  "opening-cash-source"
+                ]
+              }
+            ]
+          },
+          {
+            "economic_event_id": "trade-economic-1",
+            "record_ids": [
+              "trade-record-v1",
+              "trade-record-v2"
+            ],
+            "active_record_id": "trade-record-v2",
+            "reverses_record_id": null,
+            "source_lineage": [
+              {
+                "record_id": "trade-record-v1",
+                "source_record_ids": [
+                  "trade-source-original"
+                ]
+              },
+              {
+                "record_id": "trade-record-v2",
+                "source_record_ids": [
+                  "trade-source-correction"
+                ]
+              }
+            ]
+          }
+        ],
+        "inactive_event_chains": [],
+        "positions": [
+          {
+            "account": "fund-a",
+            "instrument": "MSFT",
+            "quantity": "80.00000000"
+          }
+        ],
+        "settled_cash": [
+          {
+            "account": "fund-a",
+            "currency": "USD",
+            "amount": "100000.000000"
+          }
+        ],
+        "open_settlement_obligations": [
+          {
+            "account": "fund-a",
+            "settlement_date": "2026-06-04",
+            "currency": "USD",
+            "direction": "payable",
+            "amount": "4400.000000"
+          }
+        ],
+        "journals": {
+          "status": "deferred",
+          "reason": "O4 journal projection is not implemented."
+        },
+        "arithmetic": [
+          "Corrected payload replaces rather than adds to the original trade, producing +80.00000000 MSFT.",
+          "80.00000000 x 55.000000 = 4400.000000 USD payable.",
+          "Settlement is not yet eligible, so settled cash stays 100000.000000 USD."
+        ]
+      }
+    },
+    {
+      "name": "corrected-trade-settlement-date",
+      "context": {
+        "economic_as_of": "2026-06-04T23:59:59Z",
+        "recorded_through": "2026-06-06T23:59:59Z",
+        "settlement_as_of_date": "2026-06-04"
+      },
+      "expected": {
+        "active_event_chains": [
+          {
+            "economic_event_id": "opening-cash-economic",
+            "record_ids": [
+              "opening-cash-record"
+            ],
+            "active_record_id": "opening-cash-record",
+            "reverses_record_id": null,
+            "source_lineage": [
+              {
+                "record_id": "opening-cash-record",
+                "source_record_ids": [
+                  "opening-cash-source"
+                ]
+              }
+            ]
+          },
+          {
+            "economic_event_id": "trade-economic-1",
+            "record_ids": [
+              "trade-record-v1",
+              "trade-record-v2"
+            ],
+            "active_record_id": "trade-record-v2",
+            "reverses_record_id": null,
+            "source_lineage": [
+              {
+                "record_id": "trade-record-v1",
+                "source_record_ids": [
+                  "trade-source-original"
+                ]
+              },
+              {
+                "record_id": "trade-record-v2",
+                "source_record_ids": [
+                  "trade-source-correction"
+                ]
+              }
+            ]
+          }
+        ],
+        "inactive_event_chains": [],
+        "positions": [
+          {
+            "account": "fund-a",
+            "instrument": "MSFT",
+            "quantity": "80.00000000"
+          }
+        ],
+        "settled_cash": [
+          {
+            "account": "fund-a",
+            "currency": "USD",
+            "amount": "95600.000000"
+          }
+        ],
+        "open_settlement_obligations": [],
+        "journals": {
+          "status": "deferred",
+          "reason": "O4 journal projection is not implemented."
+        },
+        "arithmetic": [
+          "Corrected position remains +80.00000000 MSFT.",
+          "Settled cash is 100000.000000 - (80.00000000 x 55.000000) = 95600.000000 USD.",
+          "The 2026-06-04 payable is no longer open on its settlement date."
+        ]
+      }
+    },
+    {
+      "name": "after-late-reversal-is-known-before-reversal-settlement",
+      "context": {
+        "economic_as_of": "2026-06-05T23:59:59Z",
+        "recorded_through": "2026-06-07T12:00:00Z",
+        "settlement_as_of_date": "2026-06-05"
+      },
+      "expected": {
+        "active_event_chains": [
+          {
+            "economic_event_id": "opening-cash-economic",
+            "record_ids": [
+              "opening-cash-record"
+            ],
+            "active_record_id": "opening-cash-record",
+            "reverses_record_id": null,
+            "source_lineage": [
+              {
+                "record_id": "opening-cash-record",
+                "source_record_ids": [
+                  "opening-cash-source"
+                ]
+              }
+            ]
+          },
+          {
+            "economic_event_id": "trade-economic-1",
+            "record_ids": [
+              "trade-record-v1",
+              "trade-record-v2"
+            ],
+            "active_record_id": "trade-record-v2",
+            "reverses_record_id": null,
+            "source_lineage": [
+              {
+                "record_id": "trade-record-v1",
+                "source_record_ids": [
+                  "trade-source-original"
+                ]
+              },
+              {
+                "record_id": "trade-record-v2",
+                "source_record_ids": [
+                  "trade-source-correction"
+                ]
+              }
+            ]
+          },
+          {
+            "economic_event_id": "trade-reversal-economic-1",
+            "record_ids": [
+              "reversal-record-v1"
+            ],
+            "active_record_id": "reversal-record-v1",
+            "reverses_record_id": "trade-record-v2",
+            "source_lineage": [
+              {
+                "record_id": "reversal-record-v1",
+                "source_record_ids": [
+                  "trade-source-reversal"
+                ]
+              }
+            ]
+          }
+        ],
+        "inactive_event_chains": [],
+        "positions": [],
+        "settled_cash": [
+          {
+            "account": "fund-a",
+            "currency": "USD",
+            "amount": "95600.000000"
+          }
+        ],
+        "open_settlement_obligations": [
+          {
+            "account": "fund-a",
+            "settlement_date": "2026-06-06",
+            "currency": "USD",
+            "direction": "receivable",
+            "amount": "4400.000000"
+          }
+        ],
+        "journals": {
+          "status": "deferred",
+          "reason": "O4 journal projection is not implemented."
+        },
+        "arithmetic": [
+          "Position is +80.00000000 + -80.00000000 = 0 and is omitted from sparse output.",
+          "Original trade cash has settled, but reversal cash has not: 100000.000000 - 4400.000000 = 95600.000000 USD.",
+          "Reversal receivable is abs(-80.00000000 x 55.000000) = 4400.000000 USD due 2026-06-06."
+        ]
+      }
+    },
+    {
+      "name": "after-reversal-settlement",
+      "context": {
+        "economic_as_of": "2026-06-06T23:59:59Z",
+        "recorded_through": "2026-06-07T12:00:00Z",
+        "settlement_as_of_date": "2026-06-06"
+      },
+      "expected": {
+        "active_event_chains": [
+          {
+            "economic_event_id": "opening-cash-economic",
+            "record_ids": [
+              "opening-cash-record"
+            ],
+            "active_record_id": "opening-cash-record",
+            "reverses_record_id": null,
+            "source_lineage": [
+              {
+                "record_id": "opening-cash-record",
+                "source_record_ids": [
+                  "opening-cash-source"
+                ]
+              }
+            ]
+          },
+          {
+            "economic_event_id": "trade-economic-1",
+            "record_ids": [
+              "trade-record-v1",
+              "trade-record-v2"
+            ],
+            "active_record_id": "trade-record-v2",
+            "reverses_record_id": null,
+            "source_lineage": [
+              {
+                "record_id": "trade-record-v1",
+                "source_record_ids": [
+                  "trade-source-original"
+                ]
+              },
+              {
+                "record_id": "trade-record-v2",
+                "source_record_ids": [
+                  "trade-source-correction"
+                ]
+              }
+            ]
+          },
+          {
+            "economic_event_id": "trade-reversal-economic-1",
+            "record_ids": [
+              "reversal-record-v1"
+            ],
+            "active_record_id": "reversal-record-v1",
+            "reverses_record_id": "trade-record-v2",
+            "source_lineage": [
+              {
+                "record_id": "reversal-record-v1",
+                "source_record_ids": [
+                  "trade-source-reversal"
+                ]
+              }
+            ]
+          }
+        ],
+        "inactive_event_chains": [],
+        "positions": [],
+        "settled_cash": [
+          {
+            "account": "fund-a",
+            "currency": "USD",
+            "amount": "100000.000000"
+          }
+        ],
+        "open_settlement_obligations": [],
+        "journals": {
+          "status": "deferred",
+          "reason": "O4 journal projection is not implemented."
+        },
+        "arithmetic": [
+          "Position remains +80.00000000 + -80.00000000 = 0 and is omitted.",
+          "Settled cash is 95600.000000 + 4400.000000 = 100000.000000 USD.",
+          "The reversal receivable is no longer open on 2026-06-06."
+        ]
+      }
+    }
+  ]
+}
