@@ -1,0 +1,80 @@
+{
+  "contract_version": "luca.event-lifecycle.v1",
+  "name": "invalid-conflicting-successors",
+  "description": "An accepted record cannot have two lifecycle successors.",
+  "valid": false,
+  "source_records": [
+    {
+      "source_record_id": "invalid-source",
+      "source_id": "fixture",
+      "observed_at": "2026-01-01T00:00:00Z",
+      "source_event_at": null,
+      "payload_hash": {
+        "algorithm": "sha256",
+        "value": "invalid-conflicting-successors"
+      },
+      "kind": "fixture"
+    }
+  ],
+  "records": [
+    {
+      "record_id": "cash-v1",
+      "economic_event_id": "cash-economic",
+      "account": "fund-a",
+      "action": "originate",
+      "recorded_at": "2026-01-02T00:00:00Z",
+      "acceptance_sequence": 1,
+      "effective_at": "2026-01-02T00:00:00Z",
+      "provenance": {
+        "source_record_ids": ["invalid-source"],
+        "transformation_name": "fixture",
+        "transformation_version": "1"
+      },
+      "event": {
+        "type": "cash_movement",
+        "currency": "USD",
+        "amount": "10.000000"
+      }
+    },
+    {
+      "record_id": "cash-v2",
+      "economic_event_id": "cash-economic",
+      "account": "fund-a",
+      "action": "correct",
+      "supersedes_record_id": "cash-v1",
+      "recorded_at": "2026-01-03T00:00:00Z",
+      "acceptance_sequence": 2,
+      "effective_at": "2026-01-02T00:00:00Z",
+      "provenance": {
+        "source_record_ids": ["invalid-source"],
+        "transformation_name": "fixture",
+        "transformation_version": "1"
+      },
+      "event": {
+        "type": "cash_movement",
+        "currency": "USD",
+        "amount": "12.000000"
+      }
+    },
+    {
+      "record_id": "cash-cancel",
+      "economic_event_id": "cash-economic",
+      "account": "fund-a",
+      "action": "cancel",
+      "supersedes_record_id": "cash-v1",
+      "recorded_at": "2026-01-04T00:00:00Z",
+      "acceptance_sequence": 3,
+      "effective_at": null,
+      "provenance": {
+        "source_record_ids": ["invalid-source"],
+        "transformation_name": "fixture",
+        "transformation_version": "1"
+      },
+      "event": null
+    }
+  ],
+  "expected_diagnostic": {
+    "category": "conflicting_lifecycle_successor",
+    "record_id": "cash-cancel"
+  }
+}

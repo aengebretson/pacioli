@@ -56,6 +56,32 @@ and compares normalized, fixed-point state to guard deterministic replay.
 Fixture timestamps are converted to epoch nanoseconds using exact integer
 arithmetic; floating-point time conversion is not used.
 
+## Immutable event lifecycle contract
+
+`event-lifecycle/` is a separate, contract-first fixture set for the lifecycle
+API planned by O2. Its files are not discovered by the existing `scenario.json`
+engine translator because production ledger and projection APIs do not implement
+the contract yet. Each JSON document is independently parseable. Valid documents
+contain immutable source records, lifecycle-aware ledger records, explicit
+economic, recorded, and settlement evaluation inputs, expected active/inactive
+chains and lineage, projection state, and arithmetic notes. Invalid documents
+fix stable causal diagnostic categories.
+
+`test_event_lifecycle_contract.py` is dependency-free and checks the portable
+schema, identity uniqueness, provenance references, time and ordering inputs,
+causal consistency, terminal reversal and relationship compatibility, and the
+complete lifecycle paths and heads selected by each recorded-time cutoff. It
+also checks expected-output structure, but intentionally does not calculate
+positions, cash, or settlement state; that would duplicate the production
+projection engine. Expected financial arithmetic is recorded in the fixtures
+and in [`docs/event-lifecycle.md`](../../docs/event-lifecycle.md) for independent
+human review.
+
+The lifecycle fixture vocabulary is a semantic interchange contract for tests,
+not canonical serialization or a promise that future public C++ types use the
+same field names. See the design document for supported as-of behavior and
+explicitly deferred queries and checkpoint behavior.
+
 Run the validator through CTest (`ctest --preset dev`) or directly with:
 
 ```bash

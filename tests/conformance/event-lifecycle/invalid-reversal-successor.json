@@ -1,0 +1,84 @@
+{
+  "contract_version": "luca.event-lifecycle.v1",
+  "name": "invalid-reversal-successor",
+  "description": "A complete reversal is terminal and cannot itself be corrected.",
+  "valid": false,
+  "source_records": [
+    {
+      "source_record_id": "invalid-source",
+      "source_id": "fixture",
+      "observed_at": "2026-01-01T00:00:00Z",
+      "source_event_at": null,
+      "payload_hash": {
+        "algorithm": "sha256",
+        "value": "invalid-reversal-successor"
+      },
+      "kind": "fixture"
+    }
+  ],
+  "records": [
+    {
+      "record_id": "cash-origin",
+      "economic_event_id": "cash-economic",
+      "account": "fund-a",
+      "action": "originate",
+      "recorded_at": "2026-01-02T00:00:00Z",
+      "acceptance_sequence": 1,
+      "effective_at": "2026-01-02T00:00:00Z",
+      "provenance": {
+        "source_record_ids": ["invalid-source"],
+        "transformation_name": "fixture",
+        "transformation_version": "1"
+      },
+      "event": {
+        "type": "cash_movement",
+        "currency": "USD",
+        "amount": "100.000000"
+      }
+    },
+    {
+      "record_id": "cash-reversal",
+      "economic_event_id": "cash-reversal-economic",
+      "account": "fund-a",
+      "action": "reverse",
+      "reverses_record_id": "cash-origin",
+      "recorded_at": "2026-01-03T00:00:00Z",
+      "acceptance_sequence": 2,
+      "effective_at": "2026-01-03T00:00:00Z",
+      "provenance": {
+        "source_record_ids": ["invalid-source"],
+        "transformation_name": "fixture",
+        "transformation_version": "1"
+      },
+      "event": {
+        "type": "cash_movement",
+        "currency": "USD",
+        "amount": "-100.000000"
+      }
+    },
+    {
+      "record_id": "cash-reversal-correction",
+      "economic_event_id": "cash-reversal-economic",
+      "account": "fund-a",
+      "action": "correct",
+      "supersedes_record_id": "cash-reversal",
+      "recorded_at": "2026-01-04T00:00:00Z",
+      "acceptance_sequence": 3,
+      "effective_at": "2026-01-03T00:00:00Z",
+      "provenance": {
+        "source_record_ids": ["invalid-source"],
+        "transformation_name": "fixture",
+        "transformation_version": "1"
+      },
+      "event": {
+        "type": "cash_movement",
+        "currency": "USD",
+        "amount": "-100.000000"
+      }
+    }
+  ],
+  "expected_diagnostic": {
+    "category": "incompatible_event_relationship",
+    "record_id": "cash-reversal-correction"
+  }
+}
