@@ -1,0 +1,659 @@
+{
+  "contract_version": "luca.transformation-contract.v1",
+  "fixture_id": "invalid.compositions",
+  "fixture_kind": "invalid_composition",
+  "operations": [
+    {
+      "id": "map.cash-delta-usd",
+      "classification": "map",
+      "input_ports": [
+        {
+          "name": "events",
+          "type": "ResolvedEconomicEventSet",
+          "unit": "economic_event",
+          "currency": "USD"
+        }
+      ],
+      "output_port": {
+        "name": "deltas",
+        "type": "MoneyDeltaSet",
+        "unit": "money",
+        "currency": "USD"
+      },
+      "operation_version": "1",
+      "policy": {
+        "id": "cash-delta-map",
+        "version": "1"
+      },
+      "evaluation_context": {
+        "id": "compatibility-context-a",
+        "engine_version": "contract-fixture-1",
+        "recorded_through": "2026-06-10T00:00:00Z",
+        "economic_as_of": "2026-06-05T23:59:59Z",
+        "settlement_as_of_date": "2026-06-05"
+      },
+      "ordering": {
+        "required": false,
+        "keys": [],
+        "arbitrary_reordering": "equivalent"
+      },
+      "partitioning": {
+        "supported": false,
+        "keys": [],
+        "merge_operation": null
+      },
+      "rounding": {
+        "mode": "half_even",
+        "scale": 6,
+        "applies_at": "quantity multiplied by price"
+      },
+      "errors": [
+        "valuation_overflow"
+      ],
+      "lineage": {
+        "requires": [
+          "source_event_ids"
+        ],
+        "emits": [
+          "source_event_ids",
+          "operation_version",
+          "policy_version",
+          "engine_version",
+          "context_id"
+        ]
+      },
+      "laws": {
+        "identity": "not_claimed",
+        "associativity": "not_claimed",
+        "commutativity": "not_claimed",
+        "invertibility": "not_claimed",
+        "distributivity": "not_claimed",
+        "domain": "Resolved USD cash effects in compatibility context A."
+      }
+    },
+    {
+      "id": "reduce.cash-eur",
+      "classification": "reduction",
+      "input_ports": [
+        {
+          "name": "deltas",
+          "type": "MoneyDeltaSet",
+          "unit": "money",
+          "currency": "EUR"
+        }
+      ],
+      "output_port": {
+        "name": "balances",
+        "type": "CashBalanceSet",
+        "unit": "money",
+        "currency": "EUR"
+      },
+      "operation_version": "1",
+      "policy": {
+        "id": "exact-cash-sum",
+        "version": "1"
+      },
+      "evaluation_context": {
+        "id": "compatibility-context-a",
+        "engine_version": "contract-fixture-1",
+        "recorded_through": "2026-06-10T00:00:00Z",
+        "economic_as_of": "2026-06-05T23:59:59Z",
+        "settlement_as_of_date": "2026-06-05"
+      },
+      "ordering": {
+        "required": false,
+        "keys": [],
+        "arbitrary_reordering": "equivalent"
+      },
+      "partitioning": {
+        "supported": true,
+        "keys": [
+          "account",
+          "currency"
+        ],
+        "merge_operation": "reduce.cash-eur"
+      },
+      "rounding": {
+        "mode": "none",
+        "scale": 6,
+        "applies_at": "checked fixed-point addition"
+      },
+      "errors": [
+        "currency_mismatch",
+        "amount_overflow"
+      ],
+      "lineage": {
+        "requires": [
+          "source_event_ids"
+        ],
+        "emits": [
+          "source_event_ids",
+          "operation_version",
+          "policy_version",
+          "engine_version",
+          "context_id"
+        ]
+      },
+      "laws": {
+        "identity": "not_claimed",
+        "associativity": "not_claimed",
+        "commutativity": "not_claimed",
+        "invertibility": "not_claimed",
+        "distributivity": "not_claimed",
+        "domain": "EUR values only; the case exists to prove cross-currency rejection."
+      }
+    },
+    {
+      "id": "reduce.quantity-usd",
+      "classification": "reduction",
+      "input_ports": [
+        {
+          "name": "deltas",
+          "type": "MoneyDeltaSet",
+          "unit": "share_quantity",
+          "currency": "USD"
+        }
+      ],
+      "output_port": {
+        "name": "quantities",
+        "type": "QuantitySet",
+        "unit": "share_quantity",
+        "currency": "USD"
+      },
+      "operation_version": "1",
+      "policy": {
+        "id": "exact-quantity-sum",
+        "version": "1"
+      },
+      "evaluation_context": {
+        "id": "compatibility-context-a",
+        "engine_version": "contract-fixture-1",
+        "recorded_through": "2026-06-10T00:00:00Z",
+        "economic_as_of": "2026-06-05T23:59:59Z",
+        "settlement_as_of_date": "2026-06-05"
+      },
+      "ordering": {
+        "required": false,
+        "keys": [],
+        "arbitrary_reordering": "equivalent"
+      },
+      "partitioning": {
+        "supported": false,
+        "keys": [],
+        "merge_operation": null
+      },
+      "rounding": {
+        "mode": "none",
+        "scale": 8,
+        "applies_at": "checked fixed-point addition"
+      },
+      "errors": [
+        "unit_mismatch",
+        "quantity_overflow"
+      ],
+      "lineage": {
+        "requires": [
+          "source_event_ids"
+        ],
+        "emits": [
+          "source_event_ids",
+          "operation_version",
+          "policy_version",
+          "engine_version",
+          "context_id"
+        ]
+      },
+      "laws": {
+        "identity": "not_claimed",
+        "associativity": "not_claimed",
+        "commutativity": "not_claimed",
+        "invertibility": "not_claimed",
+        "distributivity": "not_claimed",
+        "domain": "Share quantities only; a matching container spelling does not erase unit incompatibility."
+      }
+    },
+    {
+      "id": "reduce.cash-context-b",
+      "classification": "reduction",
+      "input_ports": [
+        {
+          "name": "deltas",
+          "type": "MoneyDeltaSet",
+          "unit": "money",
+          "currency": "USD"
+        }
+      ],
+      "output_port": {
+        "name": "balances",
+        "type": "CashBalanceSet",
+        "unit": "money",
+        "currency": "USD"
+      },
+      "operation_version": "1",
+      "policy": {
+        "id": "exact-cash-sum",
+        "version": "1"
+      },
+      "evaluation_context": {
+        "id": "compatibility-context-b",
+        "engine_version": "contract-fixture-1",
+        "recorded_through": "2026-06-10T00:00:00Z",
+        "economic_as_of": "2026-06-05T23:59:59Z",
+        "settlement_as_of_date": "2026-06-06"
+      },
+      "ordering": {
+        "required": false,
+        "keys": [],
+        "arbitrary_reordering": "equivalent"
+      },
+      "partitioning": {
+        "supported": true,
+        "keys": [
+          "account",
+          "currency"
+        ],
+        "merge_operation": "reduce.cash-context-b"
+      },
+      "rounding": {
+        "mode": "none",
+        "scale": 6,
+        "applies_at": "checked fixed-point addition"
+      },
+      "errors": [
+        "context_mismatch",
+        "amount_overflow"
+      ],
+      "lineage": {
+        "requires": [
+          "source_event_ids"
+        ],
+        "emits": [
+          "source_event_ids",
+          "operation_version",
+          "policy_version",
+          "engine_version",
+          "context_id"
+        ]
+      },
+      "laws": {
+        "identity": "not_claimed",
+        "associativity": "not_claimed",
+        "commutativity": "not_claimed",
+        "invertibility": "not_claimed",
+        "distributivity": "not_claimed",
+        "domain": "USD cash evaluated at settlement context B."
+      }
+    },
+    {
+      "id": "reduce.position-type",
+      "classification": "reduction",
+      "input_ports": [
+        {
+          "name": "deltas",
+          "type": "PositionDeltaSet",
+          "unit": "money",
+          "currency": "USD"
+        }
+      ],
+      "output_port": {
+        "name": "positions",
+        "type": "PositionSet",
+        "unit": "money",
+        "currency": "USD"
+      },
+      "operation_version": "1",
+      "policy": {
+        "id": "position-type-test",
+        "version": "1"
+      },
+      "evaluation_context": {
+        "id": "compatibility-context-a",
+        "engine_version": "contract-fixture-1",
+        "recorded_through": "2026-06-10T00:00:00Z",
+        "economic_as_of": "2026-06-05T23:59:59Z",
+        "settlement_as_of_date": "2026-06-05"
+      },
+      "ordering": {
+        "required": false,
+        "keys": [],
+        "arbitrary_reordering": "equivalent"
+      },
+      "partitioning": {
+        "supported": false,
+        "keys": [],
+        "merge_operation": null
+      },
+      "rounding": {
+        "mode": "none",
+        "scale": 8,
+        "applies_at": "checked fixed-point addition"
+      },
+      "errors": [
+        "operation_type_mismatch"
+      ],
+      "lineage": {
+        "requires": [
+          "source_event_ids"
+        ],
+        "emits": [
+          "source_event_ids",
+          "operation_version",
+          "policy_version",
+          "engine_version",
+          "context_id"
+        ]
+      },
+      "laws": {
+        "identity": "not_claimed",
+        "associativity": "not_claimed",
+        "commutativity": "not_claimed",
+        "invertibility": "not_claimed",
+        "distributivity": "not_claimed",
+        "domain": "A deliberately different port type used only by the negative fixture."
+      }
+    },
+    {
+      "id": "normalize.raw-lifecycle",
+      "classification": "normalization",
+      "input_ports": [
+        {
+          "name": "sources",
+          "type": "SourceRecordSet",
+          "unit": "source_record",
+          "currency": null
+        }
+      ],
+      "output_port": {
+        "name": "raw-records",
+        "type": "RawLifecycleRecordSet",
+        "unit": "lifecycle_record",
+        "currency": "USD"
+      },
+      "operation_version": "1",
+      "policy": {
+        "id": "fixture-normalization",
+        "version": "1"
+      },
+      "evaluation_context": {
+        "id": "compatibility-context-a",
+        "engine_version": "contract-fixture-1",
+        "recorded_through": "2026-06-10T00:00:00Z",
+        "economic_as_of": "2026-06-05T23:59:59Z",
+        "settlement_as_of_date": "2026-06-05"
+      },
+      "ordering": {
+        "required": false,
+        "keys": [],
+        "arbitrary_reordering": "equivalent"
+      },
+      "partitioning": {
+        "supported": false,
+        "keys": [],
+        "merge_operation": null
+      },
+      "rounding": {
+        "mode": "not_applicable",
+        "scale": null,
+        "applies_at": "none"
+      },
+      "errors": [
+        "invalid_source_record"
+      ],
+      "lineage": {
+        "requires": [
+          "source_record_id"
+        ],
+        "emits": [
+          "record_id",
+          "source_record_ids",
+          "operation_version",
+          "policy_version",
+          "engine_version",
+          "context_id"
+        ]
+      },
+      "laws": {
+        "identity": "not_claimed",
+        "associativity": "not_claimed",
+        "commutativity": "not_claimed",
+        "invertibility": "not_claimed",
+        "distributivity": "not_claimed",
+        "domain": "Raw lifecycle records before causal resolution."
+      }
+    },
+    {
+      "id": "fold.position-resolved",
+      "classification": "ordered_fold",
+      "input_ports": [
+        {
+          "name": "resolved-events",
+          "type": "ResolvedEconomicEventSet",
+          "unit": "economic_event",
+          "currency": "USD"
+        }
+      ],
+      "output_port": {
+        "name": "positions",
+        "type": "PositionSet",
+        "unit": "share_quantity",
+        "currency": null
+      },
+      "operation_version": "1",
+      "policy": {
+        "id": "current-position-projection",
+        "version": "1"
+      },
+      "evaluation_context": {
+        "id": "compatibility-context-a",
+        "engine_version": "contract-fixture-1",
+        "recorded_through": "2026-06-10T00:00:00Z",
+        "economic_as_of": "2026-06-05T23:59:59Z",
+        "settlement_as_of_date": "2026-06-05"
+      },
+      "ordering": {
+        "required": true,
+        "keys": [
+          "effective_at",
+          "acceptance_sequence"
+        ],
+        "arbitrary_reordering": "rejected"
+      },
+      "partitioning": {
+        "supported": true,
+        "keys": [
+          "account",
+          "instrument"
+        ],
+        "merge_operation": "disjoint-position-union"
+      },
+      "rounding": {
+        "mode": "none",
+        "scale": 8,
+        "applies_at": "checked fixed-point addition"
+      },
+      "errors": [
+        "unresolved_lifecycle_input",
+        "quantity_overflow"
+      ],
+      "lineage": {
+        "requires": [
+          "active_record_id",
+          "source_record_ids"
+        ],
+        "emits": [
+          "source_event_ids",
+          "source_record_ids",
+          "operation_version",
+          "policy_version",
+          "engine_version",
+          "context_id"
+        ]
+      },
+      "laws": {
+        "identity": "not_claimed",
+        "associativity": "not_claimed",
+        "commutativity": "not_claimed",
+        "invertibility": "not_claimed",
+        "distributivity": "not_claimed",
+        "domain": "Resolved economic events only."
+      }
+    },
+    {
+      "id": "reduce.settlement-obligation",
+      "classification": "reduction",
+      "input_ports": [
+        {
+          "name": "obligations",
+          "type": "SettlementObligationSet",
+          "unit": "money_obligation",
+          "currency": "USD"
+        }
+      ],
+      "output_port": {
+        "name": "obligations",
+        "type": "SettlementObligationSet",
+        "unit": "money_obligation",
+        "currency": "USD"
+      },
+      "operation_version": "1",
+      "policy": {
+        "id": "current-settlement-aggregation",
+        "version": "1"
+      },
+      "evaluation_context": {
+        "id": "compatibility-context-a",
+        "engine_version": "contract-fixture-1",
+        "recorded_through": "2026-06-10T00:00:00Z",
+        "economic_as_of": "2026-06-05T23:59:59Z",
+        "settlement_as_of_date": "2026-06-05"
+      },
+      "ordering": {
+        "required": false,
+        "keys": [],
+        "arbitrary_reordering": "equivalent"
+      },
+      "partitioning": {
+        "supported": true,
+        "keys": [
+          "account",
+          "settlement_date",
+          "currency",
+          "direction"
+        ],
+        "merge_operation": "reduce.settlement-obligation"
+      },
+      "rounding": {
+        "mode": "none",
+        "scale": 6,
+        "applies_at": "checked fixed-point addition within a complete obligation key"
+      },
+      "errors": [
+        "partition_key_mismatch",
+        "amount_overflow"
+      ],
+      "lineage": {
+        "requires": [
+          "source_event_ids"
+        ],
+        "emits": [
+          "source_event_ids",
+          "operation_version",
+          "policy_version",
+          "engine_version",
+          "context_id"
+        ]
+      },
+      "laws": {
+        "identity": "not_claimed",
+        "associativity": "not_claimed",
+        "commutativity": "not_claimed",
+        "invertibility": "not_claimed",
+        "distributivity": "not_claimed",
+        "domain": "Positive obligation magnitudes keyed by account, date, currency, and direction."
+      }
+    }
+  ],
+  "composition_cases": [
+    {
+      "id": "reject-cross-currency",
+      "edge": {
+        "from": "map.cash-delta-usd",
+        "to": "reduce.cash-eur",
+        "to_port": "deltas"
+      },
+      "expected_category": "currency_mismatch",
+      "reason": "USD money cannot enter a EUR reduction without an explicit FX operation and policy."
+    },
+    {
+      "id": "reject-cross-unit",
+      "edge": {
+        "from": "map.cash-delta-usd",
+        "to": "reduce.quantity-usd",
+        "to_port": "deltas"
+      },
+      "expected_category": "unit_mismatch",
+      "reason": "Money and share quantity remain different units even when a container type name matches."
+    },
+    {
+      "id": "reject-context-change",
+      "edge": {
+        "from": "map.cash-delta-usd",
+        "to": "reduce.cash-context-b",
+        "to_port": "deltas"
+      },
+      "expected_category": "context_mismatch",
+      "reason": "Results at different settlement cutoffs cannot be silently composed."
+    },
+    {
+      "id": "reject-operation-type",
+      "edge": {
+        "from": "map.cash-delta-usd",
+        "to": "reduce.position-type",
+        "to_port": "deltas"
+      },
+      "expected_category": "operation_type_mismatch",
+      "reason": "A money-delta output is not a position-delta input."
+    },
+    {
+      "id": "reject-unresolved-lifecycle",
+      "edge": {
+        "from": "normalize.raw-lifecycle",
+        "to": "fold.position-resolved",
+        "to_port": "resolved-events"
+      },
+      "expected_category": "unresolved_lifecycle_input",
+      "reason": "Raw originate/correct records must be resolved to one active economic event before projection."
+    }
+  ],
+  "partition_counterexamples": [
+    {
+      "id": "preserve-settlement-direction",
+      "operation_id": "reduce.settlement-obligation",
+      "left_key": {
+        "account": "fund-a",
+        "settlement_date": "2026-06-07",
+        "currency": "USD",
+        "direction": "payable"
+      },
+      "right_key": {
+        "account": "fund-a",
+        "settlement_date": "2026-06-07",
+        "currency": "USD",
+        "direction": "receivable"
+      },
+      "declared_merge_keys": [
+        "account",
+        "settlement_date",
+        "currency"
+      ],
+      "required_merge_keys": [
+        "account",
+        "settlement_date",
+        "currency",
+        "direction"
+      ],
+      "expected_category": "partition_key_mismatch",
+      "reason": "Payables and receivables are distinct obligations and cannot be netted by dropping direction from the merge key."
+    }
+  ]
+}
