@@ -1,22 +1,24 @@
 # Immutable event lifecycle contract
 
-Status: executable design contract plus the first public C++ lifecycle
-increment. `luca/lifecycle.hpp` implements immutable in-memory acceptance and
-two-cutoff active-event resolution. Projection adoption and durable
-serialization remain later increments.
+Status: executable design contract plus public C++ lifecycle resolution and
+portfolio projection adoption. `luca/lifecycle.hpp` implements immutable
+in-memory acceptance and two-cutoff active-event resolution;
+`luca/portfolio/lifecycle_projection.hpp` feeds one resolved active set to the
+existing position, settled-cash, and open-settlement projections. Durable
+serialization remains a later increment.
 
 ## Baseline and boundary
 
 The current core already provides the following contracts:
 
-| Concern | Existing contract | First lifecycle increment |
+| Concern | Existing contract | Implemented lifecycle increments |
 | --- | --- | --- |
 | Canonical event | `EventHeader` identifies an immutable cash movement or equity trade by `EventId`, account, economic `effective_at`, and provenance. | `LifecycleRecord` adds action, stable `EconomicEventId`, recorded time, acceptance sequence, and causal reference while retaining the complete event payload. |
 | Evidence | `SourceRecord` identifies immutable evidence. `Provenance` references one or more source records and a named/versioned normalization. | Each lifecycle record retains its own provenance; accepting a successor does not edit predecessor evidence. |
 | Ledger | `Ledger` rejects duplicate event IDs and assigns a local acceptance sequence. Economic replay orders by `(effective_at, sequence)`; append order is otherwise retained. | Separate `LifecycleLedger` acceptance validates causal edges and resolves knowledge by recorded time without changing `Ledger`. |
-| Position | Economically selected equity trades add signed quantity on trade date. | Projection adoption remains deferred; callers can first obtain the ordered active set from `LifecycleLedger::resolve`. |
-| Settled cash | Cash movements apply at economic time. Trade cash applies only when the supplied settlement date is eligible in the explicit projection context. | Projection adoption remains deferred; settlement evaluation stays an independent projection input. |
-| Settlement | Economically selected trades create positive payable or receivable magnitudes until the supplied settlement date is reached. | Projection adoption remains deferred; lifecycle resolution does not infer a settlement clock. |
+| Position | Economically selected equity trades add signed quantity on trade date. | `project_lifecycle` derives positions from the resolution's active set at the explicit economic cutoff. |
+| Settled cash | Cash movements apply at economic time. Trade cash applies only when the supplied settlement date is eligible in the explicit projection context. | `project_lifecycle` derives settled cash from that same active set while settlement evaluation stays an independent input. |
+| Settlement | Economically selected trades create positive payable or receivable magnitudes until the supplied settlement date is reached. | `project_lifecycle` derives open obligations from that same active set and explicit settlement date; no settlement clock is inferred. |
 
 The first lifecycle increment extends these contracts; it does not reinterpret
 existing accepted values. External observations and reconciliation breaks remain
@@ -68,6 +70,25 @@ complete same-economic-identity lineage, immutable provenance on every lineage
 record, and the reversed target when applicable. Returned references have the
 same in-memory invalidation constraint as `Ledger` views: later acceptance can
 reallocate record storage, so callers request a fresh resolution after mutation.
+
+`project_lifecycle(resolution, context)` is the narrow portfolio adapter. Its
+`LifecycleProjectionContext` names the economic cutoff separately from the
+settlement evaluation date. The adapter consumes only
+`resolution.active_events()`; it does not select lifecycle heads, validate
+causal references, or reinterpret the recorded-time cutoff. It materializes the
+ordered active payloads once through the existing `Ledger` API and invokes the
+unchanged position, cash, and settlement projection functions on that identical
+set. `LifecycleProjectionResult` retains each existing projection's
+`std::expected` and error type, so one overflow does not hide the independently
+evaluated results of the other views.
+
+Callers should pass the same economic cutoff to `LifecycleLedger::resolve` and
+`project_lifecycle`. The adapter reapplies that cutoff through the existing
+projection APIs, but a resolution made with an earlier economic cutoff has
+already omitted later payloads and cannot be widened. The supplied resolution
+remains the inspection surface for chains, original records, provenance,
+acceptance sequences, and reversal targets; projection does not copy or mutate
+that lineage.
 
 `LifecycleError` reports the stable category, offending record ID, optional
 causal target, and a diagnostic message. `category_name` exposes the exact
@@ -176,10 +197,11 @@ Evaluation is deterministic:
    affected projection. Position uses economic time. Settled cash and open
    obligations additionally use `settlement_as_of_date` exactly as today.
 
-The implemented lifecycle method accepts the first two cutoffs and performs
-steps 1–3. It deliberately does not accept or interpret
-`settlement_as_of_date`; that remains an independent input when later increments
-feed the resolved set to cash and settlement projections.
+The lifecycle resolver accepts the first two cutoffs and performs steps 1–3.
+The portfolio adapter accepts the already resolved result plus the explicit
+economic and settlement inputs, then performs step 4 through the existing
+projection APIs. `LifecycleLedger::resolve` deliberately does not accept or
+interpret `settlement_as_of_date`.
 
 Consequently, a late-recorded correction can change an earlier economic result
 in a newer knowledge view while the old `recorded_through` view stays
@@ -200,6 +222,9 @@ LUCA accepted canonical knowledge, not when a source first knew a fact.
 The portable fixtures under `tests/conformance/event-lifecycle/` contain source
 records, ledger records, complete evaluation contexts, active and inactive
 chains, source lineage, projection expectations, and human-checkable arithmetic.
+The focused C++ lifecycle-projection test executes the cash and equity fixture
+expectations across their recorded-time, economic-time, and settlement-date
+boundaries while retaining lineage inspection through the supplied resolution.
 
 The late cash fixture proves `1,000 -> 1,200 -> 0`: the correction replaces the
 original `+1,000` with `+1,200` once known, and the later cancellation removes
@@ -222,9 +247,10 @@ This increment does not choose a persistence layout, canonical wire encoding,
 hashes, checkpoint invalidation metadata, concurrent acceptance, or
 cross-ledger/global sequence allocation. Serialization and checkpoints remain
 O3 work. Incremental processing may be added only when it proves equivalent to
-full replay and invalidates state affected by late lifecycle records. Existing
-position, cash, settlement, and future journal projections do not yet consume
-`LifecycleResolution`.
+full replay and invalidates state affected by late lifecycle records. Journal
+projection remains deferred; when introduced, it must consume the same resolved
+active set and explicit evaluation context rather than independently resolving
+lifecycle knowledge.
 
 Partial reversals, multiple independent reversals, changes of account or natural
 key within a correction, and any lifecycle action targeting an accepted
