@@ -1,12 +1,12 @@
-# Development workflow — protocol 1
+# Development workflow — protocol 2
 
-Local protocol copy for Luca OSS. Canonical source: [Luca Platform development workflow](https://github.com/aengebretson/luca-platform/blob/main/docs/DEVELOPMENT_WORKFLOW.md). Paths under `planning/` in this document refer to the canonical Platform planning worktree; the coordinator supplies an OSS task and feature as pinned launch inputs. Preserve the OSS financial rules in the repository AGENTS.md.
+Local protocol copy for Luca OSS. Canonical source: [Luca Platform development workflow](https://github.com/aengebretson/luca-platform/blob/main/docs/DEVELOPMENT_WORKFLOW.md). Paths under `planning/` refer to the canonical Platform planning worktree; the coordinator supplies a pinned OSS task and feature. Preserve financial rules in the local AGENTS.md.
 
 ## Source of truth
 
 The product backlog is versioned in `planning/features/`. Features describe user outcomes, independently of agent sessions. `planning/tasks/` contains bounded assignments created by the coordinator. Existing B/A milestones retain their meaning; the roadmap maps new IDs to them. No historical acceptance evidence is upgraded merely by creating this backlog.
 
-Luca Platform owns the combined roadmap. OSS implementation tasks name repository `oss`; reusable financial architecture, build instructions and conformance tests stay in the OSS repository. An OSS checkout receives a local copy of this protocol and AGENTS.md, version 1, with canonical-source attribution. An agent must not require access to the other repository to understand its assigned task.
+Luca Platform owns the combined roadmap. OSS implementation tasks name repository `oss`; reusable financial architecture, build instructions and conformance tests stay in the OSS repository. An OSS checkout receives a local copy of this protocol and AGENTS.md, version 2, with canonical-source attribution. An agent must not require access to the other repository to understand its assigned task.
 
 Feature and task specifications may be revised through Git. Decisions and state changes are append-only journal events. `planning/STATUS.md` and `planning/COMPLETED.md`, when present, are generated views; they are never separate sources of truth.
 
@@ -29,7 +29,7 @@ The coordinator may split a feature into tasks with different lanes (`api`, `edi
 
 ## Handoff and integration
 
-A worker handoff includes task/feature IDs, base commit, working-tree diff (or final commit if supplied by the coordinator), changed paths, acceptance-criterion results, exact check commands and results, interface/schema changes, remaining limitations and deployment impact. No secret values or production customer data belong in the report. In the initial isolated-worker mode, workers do not commit or push: the common Git directory is mounted read-only. They leave changes and a handoff. The coordinator validates the diff and permitted paths, then commits and pushes the assigned feature branch for review. Never force-push shared history. A future change of worker permissions requires an explicit recorded operating-policy update.
+A worker writes `output/handoff.json` with exactly `status` (`review` or `blocked`), `summary` (string), `tests` (array of strings) and `limitations` (array of strings); see `planning/templates/handoff.json`. The summary identifies delivered criteria and changed behavior; tests include exact commands and actual results; limitations include unverified criteria, blockers and interface/schema/deployment impact. The coordinator adds task/feature IDs, base commit, changed paths and any resulting branch commit as assignment evidence. The combined handoff must identify a reviewable working-tree diff. No secret values or production customer data belong in the report. In the initial isolated-worker mode, workers do not commit or push: the common Git directory is mounted read-only. They leave changes and a handoff. The coordinator validates the diff and permitted paths, then commits and pushes the assigned feature branch for review. Never force-push shared history. A future change of worker permissions requires an explicit recorded operating-policy update.
 
 The integrator checks scope, reviews the diff and evidence, incorporates the current target branch and runs checks appropriate to combined changes. Failures return the task to implementation or blocked with a reason. Merge one accepted branch at a time and record the resulting integration commit. Tests that require unavailable credentials, external login or infrastructure remain explicitly pending.
 
@@ -48,3 +48,13 @@ See `planning/EVENT_FORMAT.md` and templates. Validate metadata and journal stru
 ## Initial operating policy
 
 Start independent API, editor and OSS assignments with a coordinator/integrator. Initial workers run in isolated containers with read-only common Git metadata; they cannot commit/push directly. The coordinator is the only process publishing their validated feature branches. Queue the reliability audit until capacity is available. The API worker owns gateway authentication paths; the editor consumes existing source-checkpoint endpoints and owns frontend paths; the OSS worker edits only OSS. Shared lockfiles, deployment manifests and infrastructure stay unassigned unless a reviewed dependency change needs them. Cap concurrency according to measured host/model capacity. Use provider credentials through configured agent tooling; never copy secrets into prompts or task files.
+
+## Server coordination — protocol 2
+
+The AI planning cycle and deterministic dispatcher run as separate systemd user services on stbridget. User lingering keeps them available without a desktop login. The planner wakes every 15 minutes, uses the configured server Codex credentials inside an isolated container, and proposes bounded tasks, promotions and advisory notes from the established roadmap. It has read-only inputs and cannot mutate source, canonical planning state, Git credentials, production services or the dispatcher.
+
+Only the dispatcher validates and applies proposals under its existing exclusive writer lock. Task IDs, feature references, dependencies, ownership, scope and freshness are checked again at application time. No task-ID allowlist applies. Concurrency remains three implementation workers. New work must serve an established requirement; deferred features remain deferred. Invalid or stale proposals are retained as rejected evidence rather than silently expanding authority.
+
+Worker completion still produces a branch for review. The server planner does not itself declare a feature accepted, merge code or deploy production. Requirements requiring user decisions are retained for the next conversation. Changes discussed here must be recorded in the canonical server planning files or inbox to be available when the laptop is offline. The desktop heartbeat is retired to prevent competing coordinators.
+
+Existing assignments stay pinned to protocol 1 until they finish. Protocol 2 adds server-side planning for subsequent assignments without changing those workers' accepted scope. See [server coordinator operations](https://github.com/aengebretson/luca-platform/blob/main/docs/SERVER_DEVELOPMENT_COORDINATOR.md).
