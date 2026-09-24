@@ -1,7 +1,7 @@
 # Canonical serialization and replay-checkpoint contract
 
-Status: executable O3 design contract with production exact-scalar and lifecycle
-C++ encoding slices.
+Status: executable O3 design contract with production typed encoding, manifest,
+and conservative checkpoint-resume compatibility slices.
 The fixtures and dependency-free validator under
 `tests/conformance/serialization-checkpoints/` fix the first portable byte,
 digest, manifest, and checkpoint-resume semantics. This contract is grounded in
@@ -309,9 +309,46 @@ replay-ordered active lineage entry.
 
 `luca::serialization::canonical_bytes(const CheckpointManifest&)` emits the
 fixed LCB1 representation, and `canonical_digest` hashes those complete bytes
-with SHA-256. These APIs only exchange and identify a manifest. They do not make
-a checkpoint-resume decision, load state, apply an event suffix, decode bytes,
-or introduce persistence, authorization, compression, or signatures.
+with SHA-256.
+
+### Typed checkpoint-resume decision
+
+`<luca/portfolio/checkpoint_resume.hpp>` exposes the closed
+`CheckpointResumeRequest` value for `luca.checkpoint-resume.v1`. Its validating
+factory receives the request and serialization schema identities explicitly,
+rejects unsupported versions, and owns copies of the repeated manifest digest,
+projection, engine, policy, partition, evaluation context, event prefix, and
+state digest only after all factory validation succeeds. The request has the
+same typed canonical-bytes and SHA-256 helpers as the manifest; callers cannot
+add fields or select another schema through this API.
+
+`check_checkpoint_resume_compatibility(request, manifest, checkpoint_state,
+accepted_prefix, proposed_suffix)` returns either success or a
+`CheckpointResumeError`. All inputs are const views or values. The operation
+does not mutate the lifecycle ledger, checkpoint state, manifest, request, or
+caller collections. It performs the following bounded work:
+
+1. Bind the accepted prefix count, last record, lifecycle/source/active lineage,
+   context-selected heads, and resolved-event watermark to the manifest.
+2. Re-encode and verify the complete accepted-prefix sequence and portfolio
+   state, then hash the supplied manifest and verify the request's manifest
+   digest.
+3. Require exact request/manifest equality for projection, engine, policy,
+   partition, evaluation context, prefix, and state digest.
+4. Require every prefix, checkpoint-state, and suffix account to be a member of
+   the account-set partition.
+5. Require a non-empty suffix contiguous from `event_prefix.last_sequence + 1`,
+   with unique origins and record IDs, earlier causal targets, same-account and
+   compatible event relationships, and at most one direct successor per target.
+6. Reject every correction, cancellation, or reversal of a prefix record, and
+   every payload whose economic replay key sorts at or before the verified
+   resolved-event watermark, as `late_lifecycle_knowledge`.
+
+The compatibility API deliberately accepts already typed lifecycle records; it
+does not decode or trust transport bytes. A caller can split an accepted
+`LifecycleLedger::records()` span at the checkpoint boundary. Cross-process
+callers first construct the same typed values through an authorized decoder
+outside this slice.
 
 ## Verification and compatibility algorithm
 
@@ -417,11 +454,12 @@ second financial projection engine in Python.
 ## Deliberately deferred
 
 This increment does not select a storage medium, persistence service, decoding
-API, arbitrary-schema runtime, checkpoint-manifest C++ API, platform adapter,
-journal policy, production schema, migration process, compression, signature
-scheme, Merkle structure, streaming frame, or release behavior. General
-advancing-context incremental replay, partial-partition repair, an empty-event
-checkpoint, and additional event/projection variants require later versioned
-contracts and fixtures. There is no unresolved encoding default inside the
-covered v1 values: unsupported types or versions are rejected rather than
-guessed.
+API, arbitrary-schema runtime, platform adapter, journal policy, production
+schema, migration process, compression, signature scheme, Merkle structure,
+streaming frame, or release behavior. It does not apply a compatible suffix,
+calculate resumed state, advance evaluation context, or repair a partition.
+General advancing-context incremental replay, partial-partition repair, an
+empty-event checkpoint, and additional event/projection variants require later
+versioned contracts and fixtures. There is no unresolved encoding default
+inside the covered v1 values: unsupported types or versions are rejected rather
+than guessed.
