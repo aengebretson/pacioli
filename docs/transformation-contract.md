@@ -400,9 +400,9 @@ called a canonical LUCA hash.
 Host-only data such as job IDs, queue names, worker addresses, attempt counts,
 requesting principals, wall-clock start/end times, storage locations, and
 authorization decisions must be recorded outside the deterministic result. A
-standalone process and a hosted adapter can eventually call the same reviewed
-OSS implementation with the same explicit inputs; this increment implements
-neither host and does not duplicate financial arithmetic for one.
+hosted adapter can eventually call the same reviewed OSS implementation and
+fixtures as the standalone process. This increment implements only the bounded
+standalone host and does not duplicate financial arithmetic in it.
 
 ## Fixture and validator responsibilities
 

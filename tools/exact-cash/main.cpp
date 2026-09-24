@@ -361,7 +361,7 @@ private:
       auto name = parse_string();
       if (std::ranges::any_of(result.object,
                               [&name](const auto &member) { return member.first == name; })) {
-        fail("duplicate_member", "duplicate JSON member '" + name + "'");
+        fail("duplicate_member", "duplicate JSON member");
       }
       skip_space();
       expect(':');
@@ -415,7 +415,7 @@ void require_closed_object(const JsonValue &value, std::string_view path,
   for (const auto &[name, member] : value.object) {
     (void)member;
     if (!listed(name, required) && !listed(name, optional))
-      fail("unknown_member", std::string{path} + " contains unknown member '" + name + "'");
+      fail("unknown_member", std::string{path} + " contains an unknown member");
   }
   for (const auto name : required) {
     const auto found = std::ranges::find_if(

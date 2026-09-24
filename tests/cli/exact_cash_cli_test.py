@@ -259,6 +259,17 @@ class ExactCashCliTest(unittest.TestCase):
         unknown["host_job_id"] = "hidden-runtime-metadata"
         self.invalid(self.request_bytes(unknown), "unknown_member")
 
+        hostile_name = "host\njob\rid\x1b\x00"
+        hostile_unknown = copy.deepcopy(self.base)
+        hostile_unknown[hostile_name] = "hidden-runtime-metadata"
+        unknown_result = self.invoke(self.request_bytes(hostile_unknown))
+        self.assertNotEqual(unknown_result.returncode, 0)
+        self.assertEqual(unknown_result.stdout, b"")
+        self.assertEqual(
+            unknown_result.stderr,
+            b"luca-exact-cash: unknown_member: $ contains an unknown member\n",
+        )
+
         duplicate = self.base_bytes.replace(
             b'"schema_version": "luca.exact-cash-cli.v1",',
             b'"schema_version": "luca.exact-cash-cli.v1",\n'
@@ -266,6 +277,16 @@ class ExactCashCliTest(unittest.TestCase):
             1,
         )
         self.invalid(duplicate, "duplicate_member")
+
+        hostile_member = b'"host\\njob\\rid\\u001b\\u0000":null'
+        hostile_duplicate = b"{" + hostile_member + b"," + hostile_member + b"}"
+        duplicate_result = self.invoke(hostile_duplicate)
+        self.assertNotEqual(duplicate_result.returncode, 0)
+        self.assertEqual(duplicate_result.stdout, b"")
+        self.assertEqual(
+            duplicate_result.stderr,
+            b"luca-exact-cash: duplicate_member: duplicate JSON member\n",
+        )
 
         malformed = (self.fixture_root / "malformed.json").read_bytes()
         self.invalid(malformed, "invalid_json")
