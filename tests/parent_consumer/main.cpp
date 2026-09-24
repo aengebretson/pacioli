@@ -50,7 +50,14 @@ int main() {
   }
 
   const auto checkpoint_digest = luca::Sha256Digest::create(state_digest);
-  const auto input_digest = luca::Sha256Digest::create(std::string(64, '0'));
+  luca::LifecycleLedger lifecycle;
+  const auto accepted_prefix = lifecycle.accept(luca::LifecycleRecordDraft::originate(
+      luca::EconomicEventId{"parent-deposit-economic"}, effective_at,
+      luca::CashMovement::create(*header, *amount)));
+  if (!accepted_prefix)
+    return 6;
+  const auto input_digest =
+      luca::Sha256Digest::create(luca::serialization::canonical_digest(lifecycle));
   if (!checkpoint_digest || !input_digest)
     return 6;
   const auto projection = luca::CheckpointIdentity::create("parent.portfolio-state", "1");
@@ -63,8 +70,9 @@ int main() {
       luca::SettlementDate::create(std::chrono::year{2026} / std::chrono::January / 1);
   if (!projection || !policy || !partition || !prefix || !settlement_as_of)
     return 6;
+  constexpr luca::Timestamp resume_through{2s};
   const auto context =
-      luca::CheckpointEvaluationContext::create(effective_at, effective_at, *settlement_as_of);
+      luca::CheckpointEvaluationContext::create(resume_through, resume_through, *settlement_as_of);
   const auto watermark =
       luca::ResolvedEventWatermark::create(effective_at, 1, luca::EventId{"parent-deposit-1"});
   const auto lineage = luca::CheckpointLineage::create(
@@ -97,8 +105,29 @@ int main() {
     return 7;
   }
 
+  const auto suffix_header =
+      luca::EventHeader::create(luca::EventId{"parent-deposit-2"},
+                                luca::AccountId{"parent-account-1"}, resume_through, *provenance);
+  const auto suffix_amount = luca::Money::parse("25.00", *usd);
+  if (!suffix_header || !suffix_amount ||
+      !lifecycle
+           .accept(luca::LifecycleRecordDraft::originate(
+               luca::EconomicEventId{"parent-deposit-2-economic"}, resume_through,
+               luca::CashMovement::create(*suffix_header, *suffix_amount)))
+           .has_value()) {
+    return 8;
+  }
+  const auto applied = luca::apply_checkpoint_suffix(
+      *resume, *manifest, state, lifecycle.records().first(1), lifecycle.records().subspan(1));
+  if (!applied || applied->settled_cash().size() != 1 ||
+      applied->settled_cash().front().amount().scaled_value() != 150'000'000) {
+    return 8;
+  }
+
   std::cout << "cash_scaled=" << balance.amount().scaled_value()
             << " currency=" << balance.amount().currency().code()
-            << " state_digest=" << state_digest << '\n';
+            << " state_digest=" << state_digest
+            << " resumed_cash_scaled=" << applied->settled_cash().front().amount().scaled_value()
+            << '\n';
   return 0;
 }

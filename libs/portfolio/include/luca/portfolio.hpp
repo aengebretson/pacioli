@@ -3,6 +3,7 @@
 #include "luca/portfolio/cash.hpp"
 #include "luca/portfolio/cash_projection.hpp"
 #include "luca/portfolio/checkpoint.hpp"
+#include "luca/portfolio/checkpoint_apply.hpp"
 #include "luca/portfolio/checkpoint_resume.hpp"
 #include "luca/portfolio/checkpoint_serialization.hpp"
 #include "luca/portfolio/lifecycle_projection.hpp"
