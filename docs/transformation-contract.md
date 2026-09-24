@@ -380,19 +380,27 @@ result = run_exact_cash(
 print(result["breaks"])
 ```
 
-Request serialization is strict UTF-8 JSON, rejects non-JSON constants such as
-`NaN`, and stops at the configured request-byte limit. The adapter concurrently
-drains standard output and standard error into separate bounded buffers,
-terminates the child on either output limit or the configured timeout, and
-waits for the explicitly named process. It returns only after standard output
-decodes as one JSON object (surrounding JSON whitespace is allowed), has exactly
-the supported `luca.exact-cash-cli.v1` identity, and contains list-valued
-`operation_trace`, `projections`, `matches`, and `breaks` collections. A second
-JSON value, log text, unsupported identity, duplicate JSON member, or missing or
-non-list result collection is rejected. The adapter deliberately does not
-validate accounts, currencies, amounts, context compatibility, lineage,
-policies, or financial results; all such validation and all reduction and
-comparison arithmetic remain in the C++ host.
+Request serialization is strict UTF-8 JSON and rejects non-JSON constants such
+as `NaN`. A bounded preflight accounts for UTF-8 width and JSON escaping before
+encoding, stopping as soon as the complete request cannot fit; an oversized
+scalar is therefore never materialized as an oversized encoded fragment. The
+adapter concurrently drains standard output and standard error into separate
+bounded buffers. Process exit alone is not communication completion: inherited
+pipe descriptors remain supervised until EOF or the same invocation deadline.
+On POSIX, each invocation runs in an isolated process group that is terminated
+on an output limit or timeout, so ordinary descendants cannot retain the pipes
+or outlive a failed invocation. Process waits and reader joins use the original
+deadline rather than adding an unbounded cleanup interval.
+
+The adapter returns only after standard output decodes as one JSON object
+(surrounding JSON whitespace is allowed), has exactly the supported
+`luca.exact-cash-cli.v1` identity, and contains list-valued `operation_trace`,
+`projections`, `matches`, and `breaks` collections. A second JSON value, log
+text, unsupported identity, duplicate JSON member, or missing or non-list
+result collection is rejected. The adapter deliberately does not validate
+accounts, currencies, amounts, context compatibility, lineage, policies, or
+financial results; all such validation and all reduction and comparison
+arithmetic remain in the C++ host.
 
 Every client failure derives from `ExactCashClientError` and exposes a stable
 `code`. Separate typed failures cover invalid limits or requests, missing or

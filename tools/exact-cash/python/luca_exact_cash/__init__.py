@@ -10,6 +10,7 @@ import json
 import math
 import os
 import re
+import signal
 import subprocess
 import threading
 import time
@@ -174,6 +175,141 @@ class Limits:
             raise InvalidLimitsError
 
 
+class _RequestSizeBudget:
+    def __init__(self, limit: int) -> None:
+        self.remaining = limit
+
+    def consume(self, size: int, limit: int) -> None:
+        if size > self.remaining:
+            raise RequestTooLargeError(limit)
+        self.remaining -= size
+
+
+def _measure_json_string(
+    value: str, budget: _RequestSizeBudget, limit: int
+) -> None:
+    budget.consume(1, limit)
+    for character in value:
+        code_point = ord(character)
+        if character in {'"', "\\", "\b", "\f", "\n", "\r", "\t"}:
+            size = 2
+        elif code_point <= 0x1F:
+            size = 6
+        elif 0xD800 <= code_point <= 0xDFFF:
+            raise RequestEncodingError
+        elif code_point <= 0x7F:
+            size = 1
+        elif code_point <= 0x7FF:
+            size = 2
+        elif code_point <= 0xFFFF:
+            size = 3
+        else:
+            size = 4
+        budget.consume(size, limit)
+    budget.consume(1, limit)
+
+
+def _bounded_integer_text(value: int, maximum: int, limit: int) -> str:
+    negative = value < 0
+    magnitude = -value if negative else value
+    digit_capacity = maximum - int(negative)
+    if digit_capacity <= 0:
+        raise RequestTooLargeError(limit)
+
+    if magnitude:
+        bits = magnitude.bit_length()
+        maximum_digits = (bits * 30103 + 99999) // 100000
+        if maximum_digits > digit_capacity and magnitude >= 10**digit_capacity:
+            raise RequestTooLargeError(limit)
+
+    text = int.__repr__(value)
+    if len(text) > maximum:
+        raise RequestTooLargeError(limit)
+    return text
+
+
+def _measure_json_value(
+    value: Any,
+    budget: _RequestSizeBudget,
+    markers: set[int],
+    limit: int,
+) -> None:
+    if isinstance(value, str):
+        _measure_json_string(value, budget, limit)
+        return
+    if value is None:
+        budget.consume(4, limit)
+        return
+    if value is True:
+        budget.consume(4, limit)
+        return
+    if value is False:
+        budget.consume(5, limit)
+        return
+    if isinstance(value, int):
+        budget.consume(
+            len(_bounded_integer_text(value, budget.remaining, limit)), limit
+        )
+        return
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise RequestEncodingError
+        budget.consume(len(float.__repr__(value)), limit)
+        return
+
+    if isinstance(value, (list, tuple)):
+        marker = id(value)
+        if marker in markers:
+            raise RequestEncodingError
+        markers.add(marker)
+        try:
+            budget.consume(1, limit)
+            for index, member in enumerate(value):
+                if index:
+                    budget.consume(1, limit)
+                _measure_json_value(member, budget, markers, limit)
+            budget.consume(1, limit)
+        finally:
+            markers.remove(marker)
+        return
+
+    if isinstance(value, dict):
+        marker = id(value)
+        if marker in markers:
+            raise RequestEncodingError
+        markers.add(marker)
+        try:
+            budget.consume(1, limit)
+            for index, (key, member) in enumerate(value.items()):
+                if index:
+                    budget.consume(1, limit)
+                if isinstance(key, str):
+                    key_text = key
+                elif key is None:
+                    key_text = "null"
+                elif key is True:
+                    key_text = "true"
+                elif key is False:
+                    key_text = "false"
+                elif isinstance(key, int):
+                    key_text = _bounded_integer_text(
+                        key, budget.remaining, limit
+                    )
+                elif isinstance(key, float) and math.isfinite(key):
+                    key_text = float.__repr__(key)
+                else:
+                    raise RequestEncodingError
+                _measure_json_string(key_text, budget, limit)
+                budget.consume(1, limit)
+                _measure_json_value(member, budget, markers, limit)
+            budget.consume(1, limit)
+        finally:
+            markers.remove(marker)
+        return
+
+    raise RequestEncodingError
+
+
 def _serialize_request(request: Any, limit: int) -> bytes:
     encoder = json.JSONEncoder(
         ensure_ascii=False,
@@ -182,6 +318,7 @@ def _serialize_request(request: Any, limit: int) -> bytes:
     )
     encoded = bytearray()
     try:
+        _measure_json_value(request, _RequestSizeBudget(limit), set(), limit)
         for fragment in encoder.iterencode(request):
             chunk = fragment.encode("utf-8")
             if len(encoded) + len(chunk) > limit:
@@ -222,6 +359,8 @@ def _read_bounded(
         with state_lock:
             failures.add(name)
         state_changed.set()
+    finally:
+        state_changed.set()
 
 
 def _write_request(
@@ -245,9 +384,16 @@ def _write_request(
             stream.close()
         except OSError:
             pass
+        state_changed.set()
 
 
 def _terminate(process: subprocess.Popen[bytes]) -> None:
+    if os.name == "posix":
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+            return
+        except OSError:
+            pass
     try:
         process.kill()
     except OSError:
@@ -265,6 +411,7 @@ def _communicate_bounded(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             shell=False,
+            start_new_session=os.name == "posix",
         )
     except FileNotFoundError:
         raise ExecutableNotFoundError from None
@@ -325,7 +472,8 @@ def _communicate_bounded(
             if exceeded:
                 stop_reason = "output_limit"
                 break
-        if process.poll() is not None:
+        communication_finished = not any(thread.is_alive() for thread in threads)
+        if process.poll() is not None and communication_finished:
             break
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -336,21 +484,27 @@ def _communicate_bounded(
 
     if stop_reason is not None:
         _terminate(process)
-    returncode = process.wait()
-    for thread in threads:
-        thread.join(timeout=1.0)
 
-    if any(thread.is_alive() for thread in threads):
+    remaining = max(0.0, deadline - time.monotonic())
+    if process.poll() is None and remaining:
         try:
+            process.wait(timeout=remaining)
+        except subprocess.TimeoutExpired:
+            pass
+    for thread in threads:
+        remaining = max(0.0, deadline - time.monotonic())
+        if not remaining:
+            break
+        thread.join(timeout=remaining)
+
+    threads_alive = any(thread.is_alive() for thread in threads)
+    if not threads_alive:
+        try:
+            process.stdin.close()
             process.stdout.close()
             process.stderr.close()
-        except OSError:
+        except (OSError, ValueError):
             pass
-        for thread in threads:
-            thread.join(timeout=0.1)
-    else:
-        process.stdout.close()
-        process.stderr.close()
 
     with state_lock:
         output_limits = set(exceeded)
@@ -361,7 +515,8 @@ def _communicate_bounded(
         raise OutputTooLargeError("stderr", limits.max_stderr_bytes)
     if stop_reason == "timeout":
         raise ExecutionTimeoutError(limits.timeout_seconds)
-    if communication_failures or any(thread.is_alive() for thread in threads):
+    returncode = process.poll()
+    if communication_failures or threads_alive or returncode is None:
         raise ProcessCommunicationError
     return returncode, bytes(stdout), bytes(stderr)
 

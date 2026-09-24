@@ -10,7 +10,9 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 import unittest
+from unittest import mock
 
 if len(sys.argv) != 4:
     raise RuntimeError(
@@ -213,6 +215,39 @@ class ExactCashPythonTest(unittest.TestCase):
                 self.assertEqual(terminated.exception.code, "signal_termination")
                 self.assertEqual(terminated.exception.signal_number, signal.SIGTERM)
 
+    @unittest.skipUnless(os.name == "posix", "process-group semantics require POSIX")
+    def test_timeout_covers_descendants_that_inherit_output_pipes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            survivor_marker = pathlib.Path(directory) / "descendant-survived"
+            inherited_pipes = self.helper(
+                directory,
+                "inherited-pipes",
+                f"""
+                import os
+                import pathlib
+                import time
+
+                if os.fork() == 0:
+                    time.sleep(0.4)
+                    pathlib.Path({str(survivor_marker)!r}).write_text("survived")
+                    os._exit(0)
+                os._exit(0)
+                """,
+            )
+            started_at = time.monotonic()
+            with self.assertRaises(ExecutionTimeoutError) as timeout:
+                run_exact_cash(
+                    {},
+                    inherited_pipes,
+                    limits=Limits(timeout_seconds=0.2),
+                )
+            elapsed = time.monotonic() - started_at
+
+            self.assertEqual(timeout.exception.code, "timeout")
+            self.assertLess(elapsed, 1.0)
+            time.sleep(0.5)
+            self.assertFalse(survivor_marker.exists())
+
     def test_nonzero_diagnostic_does_not_expose_tool_output(self):
         secret = "observation-secret-with-complete-lineage"
         with tempfile.TemporaryDirectory() as directory:
@@ -306,6 +341,20 @@ class ExactCashPythonTest(unittest.TestCase):
                 limits=Limits(max_request_bytes=8),
             )
         self.assertEqual(request_limit.exception.code, "request_too_large")
+
+        very_large_scalar = "x" * (4 * 1024 * 1024)
+        with mock.patch.object(
+            json.encoder,
+            "encode_basestring",
+            side_effect=AssertionError("over-limit scalar reached JSON encoding"),
+        ):
+            with self.assertRaises(RequestTooLargeError) as scalar_limit:
+                run_exact_cash(
+                    {"payload": very_large_scalar},
+                    self.executable,
+                    limits=Limits(max_request_bytes=64),
+                )
+        self.assertEqual(scalar_limit.exception.code, "request_too_large")
 
         with self.assertRaises(RequestEncodingError) as encoding_error:
             run_exact_cash({"value": float("nan")}, self.executable)
