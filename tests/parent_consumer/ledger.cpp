@@ -1,4 +1,6 @@
 #include <luca/ledger.hpp>
+#include <luca/lifecycle.hpp>
+#include <luca/serialization/canonical.hpp>
 
 #include <chrono>
 #include <iostream>
@@ -25,10 +27,18 @@ int main() {
     return 2;
 
   luca::Ledger ledger;
-  if (!ledger.append(luca::CashMovement::create(*header, *amount)))
+  const auto event = luca::CashMovement::create(*header, *amount);
+  if (!ledger.append(event))
     return 3;
   if (ledger.entries().size() != 1)
     return 4;
+
+  luca::LifecycleLedger lifecycle;
+  if (!lifecycle.accept(luca::LifecycleRecordDraft::originate(
+          luca::EconomicEventId{"parent-ledger-economic-deposit-1"}, effective_at, event)))
+    return 5;
+  if (luca::serialization::canonical_digest(lifecycle).size() != 64)
+    return 6;
 
   std::cout << "ledger_entries=" << ledger.entries().size() << '\n';
   return 0;

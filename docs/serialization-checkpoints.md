@@ -1,6 +1,7 @@
 # Canonical serialization and replay-checkpoint contract
 
-Status: executable O3 design contract with a production exact-scalar C++ slice.
+Status: executable O3 design contract with production exact-scalar and lifecycle
+C++ encoding slices.
 The fixtures and dependency-free validator under
 `tests/conformance/serialization-checkpoints/` fix the first portable byte,
 digest, manifest, and checkpoint-resume semantics. This contract is grounded in
@@ -90,15 +91,17 @@ point and sequence values use canonical strings in the schema before LCB
 encoding. Binary floating point is never accepted for money, quantity, price,
 rate, sequence, or watermark values.
 
-### Exact-scalar C++ API
+### Typed C++ encoding API
 
-`<luca/serialization/canonical.hpp>` provides the first production encoding
-slice. `luca::serialization::canonical_bytes` and `canonical_digest` are
-overloaded only for `Money`, `Quantity`, and `Price`. Bytes are returned as an
-owned `CanonicalBytes` (`std::vector<std::byte>`), and the digest is returned as
-64 lower-case hexadecimal characters. The API is header-only and is available
-to installed-package and `add_subdirectory` consumers through `luca::luca`; it
-has no third-party dependency.
+`<luca/serialization/canonical.hpp>` provides the production encoding slices.
+`luca::serialization::canonical_bytes` and `canonical_digest` are a closed,
+typed overload set for `Money`, `Quantity`, `Price`, `Provenance`,
+`EventHeader`, `CashMovement`, `EquityTrade`, `EconomicEvent`,
+`LifecycleRecord`, and `LifecycleLedger`. Bytes are returned as an owned
+`CanonicalBytes` (`std::vector<std::byte>`), and the digest is returned as 64
+lower-case hexadecimal characters. The API is header-only and is available to
+installed-package and `add_subdirectory` consumers through the existing Luca
+targets; it has no third-party dependency.
 
 Each overload emits the closed v1 map defined here. Money owns its currency,
 scale `6`, scaled value, and `luca.money.v1` schema identity. Quantity and price
@@ -106,6 +109,14 @@ own scale `8`, their scaled value, and their distinct `luca.quantity.v1` or
 `luca.price.v1` identity. The encoder formats signed 64-bit values directly as
 canonical decimal text and hashes the complete LCB1 sequence. It does not expose
 a generic value tree or accept caller-selected schema names, scale, or version.
+The event overloads emit explicit closed variant tags and nested scalar maps.
+The record overload retains the accepted action, causal reference, unsigned
+sequence text, redundant header identity and optional event exactly as defined
+below. `LifecycleLedger` is the complete-sequence boundary: lifecycle
+acceptance has already established a contiguous unsigned 64-bit order beginning
+at one, and its overload hashes one `luca.lifecycle-record-sequence.v1` value
+rather than concatenating record encodings or hashes. Timestamps are rendered
+in UTC with nanosecond precision and settlement dates retain date granularity.
 
 ## Covered public values
 
@@ -372,11 +383,12 @@ second financial projection engine in Python.
 
 ## Deliberately deferred
 
-This increment does not select a storage medium, persistence service, lifecycle
-or state C++ serialization API, platform adapter, journal policy, production
-schema, migration process, compression, signature scheme, Merkle structure,
-streaming frame, or release behavior. General advancing-context incremental
-replay, partial-partition repair, an empty-event checkpoint, and additional
-event/projection variants require later versioned contracts and fixtures. There
-is no unresolved encoding default inside the covered v1 values: unsupported
-types or versions are rejected rather than guessed.
+This increment does not select a storage medium, persistence service, decoding
+API, arbitrary-schema runtime, portfolio-state/checkpoint-manifest C++ API,
+platform adapter, journal policy, production schema, migration process,
+compression, signature scheme, Merkle structure, streaming frame, or release
+behavior. General advancing-context incremental replay, partial-partition
+repair, an empty-event checkpoint, and additional event/projection variants
+require later versioned contracts and fixtures. There is no unresolved encoding
+default inside the covered v1 values: unsupported types or versions are rejected
+rather than guessed.
