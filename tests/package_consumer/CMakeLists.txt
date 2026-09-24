@@ -72,6 +72,11 @@ target_link_libraries(
 add_executable(luca_package_exact_cash_consumer exact_cash_reduction.cpp)
 target_link_libraries(luca_package_exact_cash_consumer PRIVATE luca::portfolio)
 
+add_executable(luca_package_exact_cash_comparison_consumer
+  exact_cash_comparison.cpp)
+target_link_libraries(luca_package_exact_cash_comparison_consumer
+  PRIVATE luca::reconciliation)
+
 enable_testing()
 add_test(NAME luca_package_consumer_run COMMAND luca_package_consumer)
 set_tests_properties(luca_package_consumer_run PROPERTIES
@@ -97,3 +102,9 @@ add_test(
 set_tests_properties(luca_package_exact_cash_consumer_run PROPERTIES
   PASS_REGULAR_EXPRESSION
     "exact_cash_scaled=800000000 currency=USD policy=package-consumer.cash-policy")
+add_test(
+  NAME luca_package_exact_cash_comparison_consumer_run
+  COMMAND luca_package_exact_cash_comparison_consumer)
+set_tests_properties(luca_package_exact_cash_comparison_consumer_run PROPERTIES
+  PASS_REGULAR_EXPRESSION
+    "exact_cash_break=amount_mismatch difference_scaled=-10000000 currency=USD operation=compare.cash.exact")
