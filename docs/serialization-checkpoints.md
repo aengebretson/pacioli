@@ -1,11 +1,12 @@
 # Canonical serialization and replay-checkpoint contract
 
-Status: executable O3 design contract. The fixtures and dependency-free validator
-under `tests/conformance/serialization-checkpoints/` fix the first portable byte,
+Status: executable O3 design contract with a production exact-scalar C++ slice.
+The fixtures and dependency-free validator under
+`tests/conformance/serialization-checkpoints/` fix the first portable byte,
 digest, manifest, and checkpoint-resume semantics. This contract is grounded in
 the immutable lifecycle resolution and the position, settled-cash, and open-
-settlement projections already implemented. It does not add a public C++ API or
-a persistence format.
+settlement projections already implemented. It does not add a persistence
+format.
 
 ## Boundary and purpose
 
@@ -88,6 +89,23 @@ JSON numbers appear only in the primitive grammar vector. Authoritative fixed-
 point and sequence values use canonical strings in the schema before LCB
 encoding. Binary floating point is never accepted for money, quantity, price,
 rate, sequence, or watermark values.
+
+### Exact-scalar C++ API
+
+`<luca/serialization/canonical.hpp>` provides the first production encoding
+slice. `luca::serialization::canonical_bytes` and `canonical_digest` are
+overloaded only for `Money`, `Quantity`, and `Price`. Bytes are returned as an
+owned `CanonicalBytes` (`std::vector<std::byte>`), and the digest is returned as
+64 lower-case hexadecimal characters. The API is header-only and is available
+to installed-package and `add_subdirectory` consumers through `luca::luca`; it
+has no third-party dependency.
+
+Each overload emits the closed v1 map defined here. Money owns its currency,
+scale `6`, scaled value, and `luca.money.v1` schema identity. Quantity and price
+own scale `8`, their scaled value, and their distinct `luca.quantity.v1` or
+`luca.price.v1` identity. The encoder formats signed 64-bit values directly as
+canonical decimal text and hashes the complete LCB1 sequence. It does not expose
+a generic value tree or accept caller-selected schema names, scale, or version.
 
 ## Covered public values
 
@@ -354,11 +372,11 @@ second financial projection engine in Python.
 
 ## Deliberately deferred
 
-This increment does not select a storage medium, persistence service, C++ public
-serialization API, package or build configuration, platform adapter, journal
-policy, production schema, migration process, compression, signature scheme,
-Merkle structure, streaming frame, or release behavior. General advancing-
-context incremental replay, partial-partition repair, an empty-event checkpoint,
-and additional event/projection variants require later versioned contracts and
-fixtures. There is no unresolved encoding default inside the covered v1 values:
-unsupported types or versions are rejected rather than guessed.
+This increment does not select a storage medium, persistence service, lifecycle
+or state C++ serialization API, platform adapter, journal policy, production
+schema, migration process, compression, signature scheme, Merkle structure,
+streaming frame, or release behavior. General advancing-context incremental
+replay, partial-partition repair, an empty-event checkpoint, and additional
+event/projection variants require later versioned contracts and fixtures. There
+is no unresolved encoding default inside the covered v1 values: unsupported
+types or versions are rejected rather than guessed.
