@@ -1,0 +1,2580 @@
+{
+  "contract_version": "luca.accounting-foundations.v1",
+  "fixture_id": "valid.cash-equity-lifecycle",
+  "fixture_kind": "accounting_scenario",
+  "engine_version": "fixture-accounting-engine-1",
+  "projection_version": "fixture-journal-projection-1",
+  "lifecycle_contract_version": "luca.event-lifecycle.v1",
+  "scope": {
+    "fixture_only": true,
+    "production_accounting_approval": false,
+    "standards_claimed": [],
+    "hidden_io": false
+  },
+  "policies": [
+    {
+      "policy_id": "fixture.trade-date.v1",
+      "version": "1",
+      "fixture_only": true,
+      "compliance_claim": "none",
+      "supported_event_types": [
+        "cash_movement",
+        "equity_trade"
+      ],
+      "currency": "USD",
+      "accounts": {
+        "cash": "asset.cash",
+        "securities": "asset.equity-securities",
+        "receivable": "asset.trade-receivable",
+        "payable": "liability.trade-payable",
+        "contributed_capital": "equity.contributed-capital"
+      },
+      "rounding": {
+        "money_scale": 6,
+        "quantity_scale": 8,
+        "mode": "half_even",
+        "applies_at": "abs(quantity) * price once; no balance rounding"
+      },
+      "ordering": {
+        "lifecycle": [
+          "recorded_at",
+          "acceptance_sequence"
+        ],
+        "economic_replay": [
+          "effective_at",
+          "acceptance_sequence"
+        ],
+        "journal_presentation": [
+          "recognized_on",
+          "acceptance_sequence",
+          "phase_ordinal",
+          "journal_entry_id"
+        ]
+      },
+      "unsupported_cases": [
+        "withdrawals",
+        "ordinary_equity_sells",
+        "non_usd_or_cross_currency_activity",
+        "fx",
+        "fees_commissions_or_taxes",
+        "lots_or_cost_basis_selection",
+        "accruals_income_or_corporate_actions",
+        "partial_or_multiple_reversals",
+        "cancellation_reinterpretation",
+        "settlement_calendar_or_failed_settlement",
+        "legal_netting",
+        "impairment_fair_value_or_pnl",
+        "nav_tax_or_financial_statements"
+      ],
+      "recognition": {
+        "cash_movement": "effective_date",
+        "positive_equity_trade": "trade_date_then_settlement",
+        "negative_exact_reversal": "trade_date_then_settlement"
+      }
+    },
+    {
+      "policy_id": "fixture.settlement-date.v1",
+      "version": "1",
+      "fixture_only": true,
+      "compliance_claim": "none",
+      "supported_event_types": [
+        "cash_movement",
+        "equity_trade"
+      ],
+      "currency": "USD",
+      "accounts": {
+        "cash": "asset.cash",
+        "securities": "asset.equity-securities",
+        "receivable": "asset.trade-receivable",
+        "payable": "liability.trade-payable",
+        "contributed_capital": "equity.contributed-capital"
+      },
+      "rounding": {
+        "money_scale": 6,
+        "quantity_scale": 8,
+        "mode": "half_even",
+        "applies_at": "abs(quantity) * price once; no balance rounding"
+      },
+      "ordering": {
+        "lifecycle": [
+          "recorded_at",
+          "acceptance_sequence"
+        ],
+        "economic_replay": [
+          "effective_at",
+          "acceptance_sequence"
+        ],
+        "journal_presentation": [
+          "recognized_on",
+          "acceptance_sequence",
+          "phase_ordinal",
+          "journal_entry_id"
+        ]
+      },
+      "unsupported_cases": [
+        "withdrawals",
+        "ordinary_equity_sells",
+        "non_usd_or_cross_currency_activity",
+        "fx",
+        "fees_commissions_or_taxes",
+        "lots_or_cost_basis_selection",
+        "accruals_income_or_corporate_actions",
+        "partial_or_multiple_reversals",
+        "cancellation_reinterpretation",
+        "settlement_calendar_or_failed_settlement",
+        "legal_netting",
+        "impairment_fair_value_or_pnl",
+        "nav_tax_or_financial_statements"
+      ],
+      "recognition": {
+        "cash_movement": "effective_date",
+        "positive_equity_trade": "settlement_date",
+        "negative_exact_reversal": "settlement_date"
+      }
+    }
+  ],
+  "source_records": [
+    {
+      "source_record_id": "opening-cash-source",
+      "source_id": "bank-file",
+      "observed_at": "2026-05-29T09:00:00Z",
+      "payload_hash": {
+        "algorithm": "sha256",
+        "value": "fixture-opening-cash"
+      }
+    },
+    {
+      "source_record_id": "trade-source-original",
+      "source_id": "broker-feed",
+      "observed_at": "2026-06-02T14:01:00Z",
+      "payload_hash": {
+        "algorithm": "sha256",
+        "value": "fixture-trade-original"
+      }
+    },
+    {
+      "source_record_id": "trade-source-correction",
+      "source_id": "broker-feed",
+      "observed_at": "2026-06-03T09:00:00Z",
+      "payload_hash": {
+        "algorithm": "sha256",
+        "value": "fixture-trade-correction"
+      }
+    },
+    {
+      "source_record_id": "trade-source-reversal",
+      "source_id": "broker-feed",
+      "observed_at": "2026-06-07T09:00:00Z",
+      "payload_hash": {
+        "algorithm": "sha256",
+        "value": "fixture-trade-reversal"
+      }
+    }
+  ],
+  "lifecycle_records": [
+    {
+      "record_id": "opening-cash-record",
+      "economic_event_id": "opening-cash-economic",
+      "account": "fund-a",
+      "action": "originate",
+      "recorded_at": "2026-05-29T09:01:00Z",
+      "acceptance_sequence": 1,
+      "effective_at": "2026-05-29T00:00:00Z",
+      "supersedes_record_id": null,
+      "reverses_record_id": null,
+      "provenance": {
+        "source_record_ids": [
+          "opening-cash-source"
+        ],
+        "transformation_name": "fixture.cash-normalization",
+        "transformation_version": "1"
+      },
+      "event": {
+        "type": "cash_movement",
+        "currency": "USD",
+        "amount": "100000.000000"
+      }
+    },
+    {
+      "record_id": "trade-record-v1",
+      "economic_event_id": "trade-economic-1",
+      "account": "fund-a",
+      "action": "originate",
+      "recorded_at": "2026-06-02T14:02:00Z",
+      "acceptance_sequence": 2,
+      "effective_at": "2026-06-02T14:00:00Z",
+      "supersedes_record_id": null,
+      "reverses_record_id": null,
+      "provenance": {
+        "source_record_ids": [
+          "trade-source-original"
+        ],
+        "transformation_name": "fixture.trade-normalization",
+        "transformation_version": "1"
+      },
+      "event": {
+        "type": "equity_trade",
+        "instrument": "MSFT",
+        "quantity": "100.00000000",
+        "price": "50.000000",
+        "quote_currency": "USD",
+        "settlement_date": "2026-06-04"
+      }
+    },
+    {
+      "record_id": "trade-record-v2",
+      "economic_event_id": "trade-economic-1",
+      "account": "fund-a",
+      "action": "correct",
+      "recorded_at": "2026-06-03T09:01:00Z",
+      "acceptance_sequence": 3,
+      "effective_at": "2026-06-02T14:00:00Z",
+      "supersedes_record_id": "trade-record-v1",
+      "reverses_record_id": null,
+      "provenance": {
+        "source_record_ids": [
+          "trade-source-correction"
+        ],
+        "transformation_name": "fixture.trade-normalization",
+        "transformation_version": "1"
+      },
+      "event": {
+        "type": "equity_trade",
+        "instrument": "MSFT",
+        "quantity": "80.00000000",
+        "price": "55.000000",
+        "quote_currency": "USD",
+        "settlement_date": "2026-06-04"
+      }
+    },
+    {
+      "record_id": "reversal-record-v1",
+      "economic_event_id": "trade-reversal-economic-1",
+      "account": "fund-a",
+      "action": "reverse",
+      "recorded_at": "2026-06-07T09:01:00Z",
+      "acceptance_sequence": 4,
+      "effective_at": "2026-06-05T10:00:00Z",
+      "supersedes_record_id": null,
+      "reverses_record_id": "trade-record-v2",
+      "provenance": {
+        "source_record_ids": [
+          "trade-source-reversal"
+        ],
+        "transformation_name": "fixture.trade-normalization",
+        "transformation_version": "1"
+      },
+      "event": {
+        "type": "equity_trade",
+        "instrument": "MSFT",
+        "quantity": "-80.00000000",
+        "price": "55.000000",
+        "quote_currency": "USD",
+        "settlement_date": "2026-06-06"
+      }
+    }
+  ],
+  "journal_entries": [
+    {
+      "journal_entry_id": "td.opening-cash.immediate",
+      "policy": {
+        "policy_id": "fixture.trade-date.v1",
+        "version": "1"
+      },
+      "event_type": "cash_movement",
+      "active_record_id": "opening-cash-record",
+      "effective_at": "2026-05-29T00:00:00Z",
+      "recorded_at": "2026-05-29T09:01:00Z",
+      "recognized_on": "2026-05-29",
+      "recognition_phase": "immediate",
+      "phase_ordinal": 0,
+      "settlement_context": {
+        "trade_date": null,
+        "settlement_date": null,
+        "recognition_rule": "immediate"
+      },
+      "lineage": {
+        "record_ids": [
+          "opening-cash-record"
+        ],
+        "economic_event_ids": [
+          "opening-cash-economic"
+        ],
+        "source_record_ids": [
+          "opening-cash-source"
+        ],
+        "reverses_record_id": null
+      },
+      "lines": [
+        {
+          "journal_line_id": "td.opening-cash.immediate.debit",
+          "journal_entry_id": "td.opening-cash.immediate",
+          "account_id": "asset.cash",
+          "side": "debit",
+          "amount": "100000.000000",
+          "currency": "USD",
+          "lineage": {
+            "record_ids": [
+              "opening-cash-record"
+            ],
+            "economic_event_ids": [
+              "opening-cash-economic"
+            ],
+            "source_record_ids": [
+              "opening-cash-source"
+            ],
+            "reverses_record_id": null
+          }
+        },
+        {
+          "journal_line_id": "td.opening-cash.immediate.credit",
+          "journal_entry_id": "td.opening-cash.immediate",
+          "account_id": "equity.contributed-capital",
+          "side": "credit",
+          "amount": "100000.000000",
+          "currency": "USD",
+          "lineage": {
+            "record_ids": [
+              "opening-cash-record"
+            ],
+            "economic_event_ids": [
+              "opening-cash-economic"
+            ],
+            "source_record_ids": [
+              "opening-cash-source"
+            ],
+            "reverses_record_id": null
+          }
+        }
+      ]
+    },
+    {
+      "journal_entry_id": "td.trade-v1.trade",
+      "policy": {
+        "policy_id": "fixture.trade-date.v1",
+        "version": "1"
+      },
+      "event_type": "equity_trade",
+      "active_record_id": "trade-record-v1",
+      "effective_at": "2026-06-02T14:00:00Z",
+      "recorded_at": "2026-06-02T14:02:00Z",
+      "recognized_on": "2026-06-02",
+      "recognition_phase": "trade_date",
+      "phase_ordinal": 0,
+      "settlement_context": {
+        "trade_date": "2026-06-02",
+        "settlement_date": "2026-06-04",
+        "recognition_rule": "trade_date_then_settlement"
+      },
+      "lineage": {
+        "record_ids": [
+          "trade-record-v1"
+        ],
+        "economic_event_ids": [
+          "trade-economic-1"
+        ],
+        "source_record_ids": [
+          "trade-source-original"
+        ],
+        "reverses_record_id": null
+      },
+      "lines": [
+        {
+          "journal_line_id": "td.trade-v1.trade.debit",
+          "journal_entry_id": "td.trade-v1.trade",
+          "account_id": "asset.equity-securities",
+          "side": "debit",
+          "amount": "5000.000000",
+          "currency": "USD",
+          "lineage": {
+            "record_ids": [
+              "trade-record-v1"
+            ],
+            "economic_event_ids": [
+              "trade-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-original"
+            ],
+            "reverses_record_id": null
+          }
+        },
+        {
+          "journal_line_id": "td.trade-v1.trade.credit",
+          "journal_entry_id": "td.trade-v1.trade",
+          "account_id": "liability.trade-payable",
+          "side": "credit",
+          "amount": "5000.000000",
+          "currency": "USD",
+          "lineage": {
+            "record_ids": [
+              "trade-record-v1"
+            ],
+            "economic_event_ids": [
+              "trade-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-original"
+            ],
+            "reverses_record_id": null
+          }
+        }
+      ]
+    },
+    {
+      "journal_entry_id": "td.trade-v1.settlement",
+      "policy": {
+        "policy_id": "fixture.trade-date.v1",
+        "version": "1"
+      },
+      "event_type": "equity_trade",
+      "active_record_id": "trade-record-v1",
+      "effective_at": "2026-06-02T14:00:00Z",
+      "recorded_at": "2026-06-02T14:02:00Z",
+      "recognized_on": "2026-06-04",
+      "recognition_phase": "settlement_date",
+      "phase_ordinal": 1,
+      "settlement_context": {
+        "trade_date": "2026-06-02",
+        "settlement_date": "2026-06-04",
+        "recognition_rule": "trade_date_then_settlement"
+      },
+      "lineage": {
+        "record_ids": [
+          "trade-record-v1"
+        ],
+        "economic_event_ids": [
+          "trade-economic-1"
+        ],
+        "source_record_ids": [
+          "trade-source-original"
+        ],
+        "reverses_record_id": null
+      },
+      "lines": [
+        {
+          "journal_line_id": "td.trade-v1.settlement.debit",
+          "journal_entry_id": "td.trade-v1.settlement",
+          "account_id": "liability.trade-payable",
+          "side": "debit",
+          "amount": "5000.000000",
+          "currency": "USD",
+          "lineage": {
+            "record_ids": [
+              "trade-record-v1"
+            ],
+            "economic_event_ids": [
+              "trade-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-original"
+            ],
+            "reverses_record_id": null
+          }
+        },
+        {
+          "journal_line_id": "td.trade-v1.settlement.credit",
+          "journal_entry_id": "td.trade-v1.settlement",
+          "account_id": "asset.cash",
+          "side": "credit",
+          "amount": "5000.000000",
+          "currency": "USD",
+          "lineage": {
+            "record_ids": [
+              "trade-record-v1"
+            ],
+            "economic_event_ids": [
+              "trade-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-original"
+            ],
+            "reverses_record_id": null
+          }
+        }
+      ]
+    },
+    {
+      "journal_entry_id": "td.trade-v2.trade",
+      "policy": {
+        "policy_id": "fixture.trade-date.v1",
+        "version": "1"
+      },
+      "event_type": "equity_trade",
+      "active_record_id": "trade-record-v2",
+      "effective_at": "2026-06-02T14:00:00Z",
+      "recorded_at": "2026-06-03T09:01:00Z",
+      "recognized_on": "2026-06-02",
+      "recognition_phase": "trade_date",
+      "phase_ordinal": 0,
+      "settlement_context": {
+        "trade_date": "2026-06-02",
+        "settlement_date": "2026-06-04",
+        "recognition_rule": "trade_date_then_settlement"
+      },
+      "lineage": {
+        "record_ids": [
+          "trade-record-v1",
+          "trade-record-v2"
+        ],
+        "economic_event_ids": [
+          "trade-economic-1"
+        ],
+        "source_record_ids": [
+          "trade-source-original",
+          "trade-source-correction"
+        ],
+        "reverses_record_id": null
+      },
+      "lines": [
+        {
+          "journal_line_id": "td.trade-v2.trade.debit",
+          "journal_entry_id": "td.trade-v2.trade",
+          "account_id": "asset.equity-securities",
+          "side": "debit",
+          "amount": "4400.000000",
+          "currency": "USD",
+          "lineage": {
+            "record_ids": [
+              "trade-record-v1",
+              "trade-record-v2"
+            ],
+            "economic_event_ids": [
+              "trade-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-original",
+              "trade-source-correction"
+            ],
+            "reverses_record_id": null
+          }
+        },
+        {
+          "journal_line_id": "td.trade-v2.trade.credit",
+          "journal_entry_id": "td.trade-v2.trade",
+          "account_id": "liability.trade-payable",
+          "side": "credit",
+          "amount": "4400.000000",
+          "currency": "USD",
+          "lineage": {
+            "record_ids": [
+              "trade-record-v1",
+              "trade-record-v2"
+            ],
+            "economic_event_ids": [
+              "trade-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-original",
+              "trade-source-correction"
+            ],
+            "reverses_record_id": null
+          }
+        }
+      ]
+    },
+    {
+      "journal_entry_id": "td.trade-v2.settlement",
+      "policy": {
+        "policy_id": "fixture.trade-date.v1",
+        "version": "1"
+      },
+      "event_type": "equity_trade",
+      "active_record_id": "trade-record-v2",
+      "effective_at": "2026-06-02T14:00:00Z",
+      "recorded_at": "2026-06-03T09:01:00Z",
+      "recognized_on": "2026-06-04",
+      "recognition_phase": "settlement_date",
+      "phase_ordinal": 1,
+      "settlement_context": {
+        "trade_date": "2026-06-02",
+        "settlement_date": "2026-06-04",
+        "recognition_rule": "trade_date_then_settlement"
+      },
+      "lineage": {
+        "record_ids": [
+          "trade-record-v1",
+          "trade-record-v2"
+        ],
+        "economic_event_ids": [
+          "trade-economic-1"
+        ],
+        "source_record_ids": [
+          "trade-source-original",
+          "trade-source-correction"
+        ],
+        "reverses_record_id": null
+      },
+      "lines": [
+        {
+          "journal_line_id": "td.trade-v2.settlement.debit",
+          "journal_entry_id": "td.trade-v2.settlement",
+          "account_id": "liability.trade-payable",
+          "side": "debit",
+          "amount": "4400.000000",
+          "currency": "USD",
+          "lineage": {
+            "record_ids": [
+              "trade-record-v1",
+              "trade-record-v2"
+            ],
+            "economic_event_ids": [
+              "trade-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-original",
+              "trade-source-correction"
+            ],
+            "reverses_record_id": null
+          }
+        },
+        {
+          "journal_line_id": "td.trade-v2.settlement.credit",
+          "journal_entry_id": "td.trade-v2.settlement",
+          "account_id": "asset.cash",
+          "side": "credit",
+          "amount": "4400.000000",
+          "currency": "USD",
+          "lineage": {
+            "record_ids": [
+              "trade-record-v1",
+              "trade-record-v2"
+            ],
+            "economic_event_ids": [
+              "trade-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-original",
+              "trade-source-correction"
+            ],
+            "reverses_record_id": null
+          }
+        }
+      ]
+    },
+    {
+      "journal_entry_id": "td.reversal.trade",
+      "policy": {
+        "policy_id": "fixture.trade-date.v1",
+        "version": "1"
+      },
+      "event_type": "equity_trade",
+      "active_record_id": "reversal-record-v1",
+      "effective_at": "2026-06-05T10:00:00Z",
+      "recorded_at": "2026-06-07T09:01:00Z",
+      "recognized_on": "2026-06-05",
+      "recognition_phase": "trade_date",
+      "phase_ordinal": 0,
+      "settlement_context": {
+        "trade_date": "2026-06-05",
+        "settlement_date": "2026-06-06",
+        "recognition_rule": "trade_date_then_settlement"
+      },
+      "lineage": {
+        "record_ids": [
+          "reversal-record-v1"
+        ],
+        "economic_event_ids": [
+          "trade-reversal-economic-1"
+        ],
+        "source_record_ids": [
+          "trade-source-reversal"
+        ],
+        "reverses_record_id": "trade-record-v2"
+      },
+      "lines": [
+        {
+          "journal_line_id": "td.reversal.trade.debit",
+          "journal_entry_id": "td.reversal.trade",
+          "account_id": "asset.trade-receivable",
+          "side": "debit",
+          "amount": "4400.000000",
+          "currency": "USD",
+          "lineage": {
+            "record_ids": [
+              "reversal-record-v1"
+            ],
+            "economic_event_ids": [
+              "trade-reversal-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-reversal"
+            ],
+            "reverses_record_id": "trade-record-v2"
+          }
+        },
+        {
+          "journal_line_id": "td.reversal.trade.credit",
+          "journal_entry_id": "td.reversal.trade",
+          "account_id": "asset.equity-securities",
+          "side": "credit",
+          "amount": "4400.000000",
+          "currency": "USD",
+          "lineage": {
+            "record_ids": [
+              "reversal-record-v1"
+            ],
+            "economic_event_ids": [
+              "trade-reversal-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-reversal"
+            ],
+            "reverses_record_id": "trade-record-v2"
+          }
+        }
+      ]
+    },
+    {
+      "journal_entry_id": "td.reversal.settlement",
+      "policy": {
+        "policy_id": "fixture.trade-date.v1",
+        "version": "1"
+      },
+      "event_type": "equity_trade",
+      "active_record_id": "reversal-record-v1",
+      "effective_at": "2026-06-05T10:00:00Z",
+      "recorded_at": "2026-06-07T09:01:00Z",
+      "recognized_on": "2026-06-06",
+      "recognition_phase": "settlement_date",
+      "phase_ordinal": 1,
+      "settlement_context": {
+        "trade_date": "2026-06-05",
+        "settlement_date": "2026-06-06",
+        "recognition_rule": "trade_date_then_settlement"
+      },
+      "lineage": {
+        "record_ids": [
+          "reversal-record-v1"
+        ],
+        "economic_event_ids": [
+          "trade-reversal-economic-1"
+        ],
+        "source_record_ids": [
+          "trade-source-reversal"
+        ],
+        "reverses_record_id": "trade-record-v2"
+      },
+      "lines": [
+        {
+          "journal_line_id": "td.reversal.settlement.debit",
+          "journal_entry_id": "td.reversal.settlement",
+          "account_id": "asset.cash",
+          "side": "debit",
+          "amount": "4400.000000",
+          "currency": "USD",
+          "lineage": {
+            "record_ids": [
+              "reversal-record-v1"
+            ],
+            "economic_event_ids": [
+              "trade-reversal-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-reversal"
+            ],
+            "reverses_record_id": "trade-record-v2"
+          }
+        },
+        {
+          "journal_line_id": "td.reversal.settlement.credit",
+          "journal_entry_id": "td.reversal.settlement",
+          "account_id": "asset.trade-receivable",
+          "side": "credit",
+          "amount": "4400.000000",
+          "currency": "USD",
+          "lineage": {
+            "record_ids": [
+              "reversal-record-v1"
+            ],
+            "economic_event_ids": [
+              "trade-reversal-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-reversal"
+            ],
+            "reverses_record_id": "trade-record-v2"
+          }
+        }
+      ]
+    },
+    {
+      "journal_entry_id": "sd.opening-cash.immediate",
+      "policy": {
+        "policy_id": "fixture.settlement-date.v1",
+        "version": "1"
+      },
+      "event_type": "cash_movement",
+      "active_record_id": "opening-cash-record",
+      "effective_at": "2026-05-29T00:00:00Z",
+      "recorded_at": "2026-05-29T09:01:00Z",
+      "recognized_on": "2026-05-29",
+      "recognition_phase": "immediate",
+      "phase_ordinal": 0,
+      "settlement_context": {
+        "trade_date": null,
+        "settlement_date": null,
+        "recognition_rule": "immediate"
+      },
+      "lineage": {
+        "record_ids": [
+          "opening-cash-record"
+        ],
+        "economic_event_ids": [
+          "opening-cash-economic"
+        ],
+        "source_record_ids": [
+          "opening-cash-source"
+        ],
+        "reverses_record_id": null
+      },
+      "lines": [
+        {
+          "journal_line_id": "sd.opening-cash.immediate.debit",
+          "journal_entry_id": "sd.opening-cash.immediate",
+          "account_id": "asset.cash",
+          "side": "debit",
+          "amount": "100000.000000",
+          "currency": "USD",
+          "lineage": {
+            "record_ids": [
+              "opening-cash-record"
+            ],
+            "economic_event_ids": [
+              "opening-cash-economic"
+            ],
+            "source_record_ids": [
+              "opening-cash-source"
+            ],
+            "reverses_record_id": null
+          }
+        },
+        {
+          "journal_line_id": "sd.opening-cash.immediate.credit",
+          "journal_entry_id": "sd.opening-cash.immediate",
+          "account_id": "equity.contributed-capital",
+          "side": "credit",
+          "amount": "100000.000000",
+          "currency": "USD",
+          "lineage": {
+            "record_ids": [
+              "opening-cash-record"
+            ],
+            "economic_event_ids": [
+              "opening-cash-economic"
+            ],
+            "source_record_ids": [
+              "opening-cash-source"
+            ],
+            "reverses_record_id": null
+          }
+        }
+      ]
+    },
+    {
+      "journal_entry_id": "sd.trade-v1.settlement",
+      "policy": {
+        "policy_id": "fixture.settlement-date.v1",
+        "version": "1"
+      },
+      "event_type": "equity_trade",
+      "active_record_id": "trade-record-v1",
+      "effective_at": "2026-06-02T14:00:00Z",
+      "recorded_at": "2026-06-02T14:02:00Z",
+      "recognized_on": "2026-06-04",
+      "recognition_phase": "settlement_date",
+      "phase_ordinal": 1,
+      "settlement_context": {
+        "trade_date": "2026-06-02",
+        "settlement_date": "2026-06-04",
+        "recognition_rule": "settlement_date"
+      },
+      "lineage": {
+        "record_ids": [
+          "trade-record-v1"
+        ],
+        "economic_event_ids": [
+          "trade-economic-1"
+        ],
+        "source_record_ids": [
+          "trade-source-original"
+        ],
+        "reverses_record_id": null
+      },
+      "lines": [
+        {
+          "journal_line_id": "sd.trade-v1.settlement.debit",
+          "journal_entry_id": "sd.trade-v1.settlement",
+          "account_id": "asset.equity-securities",
+          "side": "debit",
+          "amount": "5000.000000",
+          "currency": "USD",
+          "lineage": {
+            "record_ids": [
+              "trade-record-v1"
+            ],
+            "economic_event_ids": [
+              "trade-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-original"
+            ],
+            "reverses_record_id": null
+          }
+        },
+        {
+          "journal_line_id": "sd.trade-v1.settlement.credit",
+          "journal_entry_id": "sd.trade-v1.settlement",
+          "account_id": "asset.cash",
+          "side": "credit",
+          "amount": "5000.000000",
+          "currency": "USD",
+          "lineage": {
+            "record_ids": [
+              "trade-record-v1"
+            ],
+            "economic_event_ids": [
+              "trade-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-original"
+            ],
+            "reverses_record_id": null
+          }
+        }
+      ]
+    },
+    {
+      "journal_entry_id": "sd.trade-v2.settlement",
+      "policy": {
+        "policy_id": "fixture.settlement-date.v1",
+        "version": "1"
+      },
+      "event_type": "equity_trade",
+      "active_record_id": "trade-record-v2",
+      "effective_at": "2026-06-02T14:00:00Z",
+      "recorded_at": "2026-06-03T09:01:00Z",
+      "recognized_on": "2026-06-04",
+      "recognition_phase": "settlement_date",
+      "phase_ordinal": 1,
+      "settlement_context": {
+        "trade_date": "2026-06-02",
+        "settlement_date": "2026-06-04",
+        "recognition_rule": "settlement_date"
+      },
+      "lineage": {
+        "record_ids": [
+          "trade-record-v1",
+          "trade-record-v2"
+        ],
+        "economic_event_ids": [
+          "trade-economic-1"
+        ],
+        "source_record_ids": [
+          "trade-source-original",
+          "trade-source-correction"
+        ],
+        "reverses_record_id": null
+      },
+      "lines": [
+        {
+          "journal_line_id": "sd.trade-v2.settlement.debit",
+          "journal_entry_id": "sd.trade-v2.settlement",
+          "account_id": "asset.equity-securities",
+          "side": "debit",
+          "amount": "4400.000000",
+          "currency": "USD",
+          "lineage": {
+            "record_ids": [
+              "trade-record-v1",
+              "trade-record-v2"
+            ],
+            "economic_event_ids": [
+              "trade-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-original",
+              "trade-source-correction"
+            ],
+            "reverses_record_id": null
+          }
+        },
+        {
+          "journal_line_id": "sd.trade-v2.settlement.credit",
+          "journal_entry_id": "sd.trade-v2.settlement",
+          "account_id": "asset.cash",
+          "side": "credit",
+          "amount": "4400.000000",
+          "currency": "USD",
+          "lineage": {
+            "record_ids": [
+              "trade-record-v1",
+              "trade-record-v2"
+            ],
+            "economic_event_ids": [
+              "trade-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-original",
+              "trade-source-correction"
+            ],
+            "reverses_record_id": null
+          }
+        }
+      ]
+    },
+    {
+      "journal_entry_id": "sd.reversal.settlement",
+      "policy": {
+        "policy_id": "fixture.settlement-date.v1",
+        "version": "1"
+      },
+      "event_type": "equity_trade",
+      "active_record_id": "reversal-record-v1",
+      "effective_at": "2026-06-05T10:00:00Z",
+      "recorded_at": "2026-06-07T09:01:00Z",
+      "recognized_on": "2026-06-06",
+      "recognition_phase": "settlement_date",
+      "phase_ordinal": 1,
+      "settlement_context": {
+        "trade_date": "2026-06-05",
+        "settlement_date": "2026-06-06",
+        "recognition_rule": "settlement_date"
+      },
+      "lineage": {
+        "record_ids": [
+          "reversal-record-v1"
+        ],
+        "economic_event_ids": [
+          "trade-reversal-economic-1"
+        ],
+        "source_record_ids": [
+          "trade-source-reversal"
+        ],
+        "reverses_record_id": "trade-record-v2"
+      },
+      "lines": [
+        {
+          "journal_line_id": "sd.reversal.settlement.debit",
+          "journal_entry_id": "sd.reversal.settlement",
+          "account_id": "asset.cash",
+          "side": "debit",
+          "amount": "4400.000000",
+          "currency": "USD",
+          "lineage": {
+            "record_ids": [
+              "reversal-record-v1"
+            ],
+            "economic_event_ids": [
+              "trade-reversal-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-reversal"
+            ],
+            "reverses_record_id": "trade-record-v2"
+          }
+        },
+        {
+          "journal_line_id": "sd.reversal.settlement.credit",
+          "journal_entry_id": "sd.reversal.settlement",
+          "account_id": "asset.equity-securities",
+          "side": "credit",
+          "amount": "4400.000000",
+          "currency": "USD",
+          "lineage": {
+            "record_ids": [
+              "reversal-record-v1"
+            ],
+            "economic_event_ids": [
+              "trade-reversal-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-reversal"
+            ],
+            "reverses_record_id": "trade-record-v2"
+          }
+        }
+      ]
+    }
+  ],
+  "evaluations": [
+    {
+      "evaluation_id": "original-trade-before-correction",
+      "context": {
+        "resolution_id": "resolution.original-v1",
+        "recorded_through": "2026-06-02T23:59:59Z",
+        "economic_as_of": "2026-06-02T23:59:59Z",
+        "settlement_as_of_date": "2026-06-02"
+      },
+      "resolved_inputs": [
+        {
+          "active_record_id": "opening-cash-record",
+          "lineage": {
+            "record_ids": [
+              "opening-cash-record"
+            ],
+            "economic_event_ids": [
+              "opening-cash-economic"
+            ],
+            "source_record_ids": [
+              "opening-cash-source"
+            ],
+            "reverses_record_id": null
+          }
+        },
+        {
+          "active_record_id": "trade-record-v1",
+          "lineage": {
+            "record_ids": [
+              "trade-record-v1"
+            ],
+            "economic_event_ids": [
+              "trade-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-original"
+            ],
+            "reverses_record_id": null
+          }
+        }
+      ],
+      "portfolio_state": {
+        "positions": [
+          {
+            "account": "fund-a",
+            "instrument": "MSFT",
+            "quantity": "100.00000000"
+          }
+        ],
+        "settled_cash": [
+          {
+            "account": "fund-a",
+            "currency": "USD",
+            "amount": "100000.000000"
+          }
+        ],
+        "open_settlement_obligations": [
+          {
+            "account": "fund-a",
+            "currency": "USD",
+            "direction": "payable",
+            "amount": "5000.000000",
+            "settlement_date": "2026-06-04"
+          }
+        ]
+      },
+      "results": [
+        {
+          "result_id": "original-trade-before-correction.td",
+          "engine_version": "fixture-accounting-engine-1",
+          "projection_version": "fixture-journal-projection-1",
+          "policy": {
+            "policy_id": "fixture.trade-date.v1",
+            "version": "1"
+          },
+          "evaluation_context": {
+            "resolution_id": "resolution.original-v1",
+            "recorded_through": "2026-06-02T23:59:59Z",
+            "economic_as_of": "2026-06-02T23:59:59Z",
+            "settlement_as_of_date": "2026-06-02"
+          },
+          "inputs": {
+            "lifecycle_contract_version": "luca.event-lifecycle.v1",
+            "resolution_id": "resolution.original-v1",
+            "active_record_ids": [
+              "opening-cash-record",
+              "trade-record-v1"
+            ],
+            "economic_event_ids": [
+              "opening-cash-economic",
+              "trade-economic-1"
+            ],
+            "source_record_ids": [
+              "opening-cash-source",
+              "trade-source-original"
+            ]
+          },
+          "journal_entry_ids": [
+            "td.opening-cash.immediate",
+            "td.trade-v1.trade"
+          ],
+          "balances": {
+            "currency_totals": [
+              {
+                "balance_id": "original-trade-before-correction.td.balances.usd-total",
+                "currency": "USD",
+                "debits": "105000.000000",
+                "credits": "105000.000000",
+                "journal_entry_ids": [
+                  "td.opening-cash.immediate",
+                  "td.trade-v1.trade"
+                ]
+              }
+            ],
+            "account_balances": [
+              {
+                "balance_id": "original-trade-before-correction.td.balances.asset.cash.USD",
+                "account_id": "asset.cash",
+                "currency": "USD",
+                "side": "debit",
+                "amount": "100000.000000",
+                "journal_line_ids": [
+                  "td.opening-cash.immediate.debit"
+                ]
+              },
+              {
+                "balance_id": "original-trade-before-correction.td.balances.asset.equity-securities.USD",
+                "account_id": "asset.equity-securities",
+                "currency": "USD",
+                "side": "debit",
+                "amount": "5000.000000",
+                "journal_line_ids": [
+                  "td.trade-v1.trade.debit"
+                ]
+              },
+              {
+                "balance_id": "original-trade-before-correction.td.balances.equity.contributed-capital.USD",
+                "account_id": "equity.contributed-capital",
+                "currency": "USD",
+                "side": "credit",
+                "amount": "100000.000000",
+                "journal_line_ids": [
+                  "td.opening-cash.immediate.credit"
+                ]
+              },
+              {
+                "balance_id": "original-trade-before-correction.td.balances.liability.trade-payable.USD",
+                "account_id": "liability.trade-payable",
+                "currency": "USD",
+                "side": "credit",
+                "amount": "5000.000000",
+                "journal_line_ids": [
+                  "td.trade-v1.trade.credit"
+                ]
+              }
+            ]
+          },
+          "cross_check": {
+            "account": "fund-a",
+            "instrument": "MSFT",
+            "currency": "USD",
+            "position_quantity": "100.00000000",
+            "settled_cash_amount": "100000.000000",
+            "open_settlement_direction": "payable",
+            "open_settlement_amount": "5000.000000",
+            "journal_cash_balance": "100000.000000",
+            "journal_control_account": "liability.trade-payable",
+            "journal_control_balance": "5000.000000",
+            "status": "consistent"
+          },
+          "policy_difference": "Recognizes equity and any payable/receivable on trade date, then clears the control on settlement.",
+          "compatibility": {
+            "reuse_key": {
+              "engine_version": "fixture-accounting-engine-1",
+              "projection_version": "fixture-journal-projection-1",
+              "policy_id": "fixture.trade-date.v1",
+              "policy_version": "1",
+              "resolution_id": "resolution.original-v1",
+              "recorded_through": "2026-06-02T23:59:59Z",
+              "economic_as_of": "2026-06-02T23:59:59Z",
+              "settlement_as_of_date": "2026-06-02"
+            },
+            "prior_result_reuse": "rejected_on_any_key_change"
+          }
+        },
+        {
+          "result_id": "original-trade-before-correction.sd",
+          "engine_version": "fixture-accounting-engine-1",
+          "projection_version": "fixture-journal-projection-1",
+          "policy": {
+            "policy_id": "fixture.settlement-date.v1",
+            "version": "1"
+          },
+          "evaluation_context": {
+            "resolution_id": "resolution.original-v1",
+            "recorded_through": "2026-06-02T23:59:59Z",
+            "economic_as_of": "2026-06-02T23:59:59Z",
+            "settlement_as_of_date": "2026-06-02"
+          },
+          "inputs": {
+            "lifecycle_contract_version": "luca.event-lifecycle.v1",
+            "resolution_id": "resolution.original-v1",
+            "active_record_ids": [
+              "opening-cash-record",
+              "trade-record-v1"
+            ],
+            "economic_event_ids": [
+              "opening-cash-economic",
+              "trade-economic-1"
+            ],
+            "source_record_ids": [
+              "opening-cash-source",
+              "trade-source-original"
+            ]
+          },
+          "journal_entry_ids": [
+            "sd.opening-cash.immediate"
+          ],
+          "balances": {
+            "currency_totals": [
+              {
+                "balance_id": "original-trade-before-correction.sd.balances.usd-total",
+                "currency": "USD",
+                "debits": "100000.000000",
+                "credits": "100000.000000",
+                "journal_entry_ids": [
+                  "sd.opening-cash.immediate"
+                ]
+              }
+            ],
+            "account_balances": [
+              {
+                "balance_id": "original-trade-before-correction.sd.balances.asset.cash.USD",
+                "account_id": "asset.cash",
+                "currency": "USD",
+                "side": "debit",
+                "amount": "100000.000000",
+                "journal_line_ids": [
+                  "sd.opening-cash.immediate.debit"
+                ]
+              },
+              {
+                "balance_id": "original-trade-before-correction.sd.balances.equity.contributed-capital.USD",
+                "account_id": "equity.contributed-capital",
+                "currency": "USD",
+                "side": "credit",
+                "amount": "100000.000000",
+                "journal_line_ids": [
+                  "sd.opening-cash.immediate.credit"
+                ]
+              }
+            ]
+          },
+          "cross_check": {
+            "account": "fund-a",
+            "instrument": "MSFT",
+            "currency": "USD",
+            "position_quantity": "100.00000000",
+            "settled_cash_amount": "100000.000000",
+            "open_settlement_direction": "payable",
+            "open_settlement_amount": "5000.000000",
+            "journal_cash_balance": "100000.000000",
+            "journal_control_account": null,
+            "journal_control_balance": "0.000000",
+            "status": "consistent"
+          },
+          "policy_difference": "Defers the equity posting until the supplied settlement date and carries no unsettled control.",
+          "compatibility": {
+            "reuse_key": {
+              "engine_version": "fixture-accounting-engine-1",
+              "projection_version": "fixture-journal-projection-1",
+              "policy_id": "fixture.settlement-date.v1",
+              "policy_version": "1",
+              "resolution_id": "resolution.original-v1",
+              "recorded_through": "2026-06-02T23:59:59Z",
+              "economic_as_of": "2026-06-02T23:59:59Z",
+              "settlement_as_of_date": "2026-06-02"
+            },
+            "prior_result_reuse": "rejected_on_any_key_change"
+          }
+        }
+      ],
+      "hand_calculations": {
+        "position": "100.00000000 MSFT",
+        "trade_value": "100.00000000 * 50.000000 = 5000.000000 USD",
+        "settled_cash": "100000.000000 USD; trade not settled",
+        "journal": "trade-date debits = credits = 105000.000000 USD; settlement-date debits = credits = 100000.000000 USD"
+      }
+    },
+    {
+      "evaluation_id": "corrected-trade-before-settlement",
+      "context": {
+        "resolution_id": "resolution.corrected-pre-settlement",
+        "recorded_through": "2026-06-03T23:59:59Z",
+        "economic_as_of": "2026-06-02T23:59:59Z",
+        "settlement_as_of_date": "2026-06-02"
+      },
+      "resolved_inputs": [
+        {
+          "active_record_id": "opening-cash-record",
+          "lineage": {
+            "record_ids": [
+              "opening-cash-record"
+            ],
+            "economic_event_ids": [
+              "opening-cash-economic"
+            ],
+            "source_record_ids": [
+              "opening-cash-source"
+            ],
+            "reverses_record_id": null
+          }
+        },
+        {
+          "active_record_id": "trade-record-v2",
+          "lineage": {
+            "record_ids": [
+              "trade-record-v1",
+              "trade-record-v2"
+            ],
+            "economic_event_ids": [
+              "trade-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-original",
+              "trade-source-correction"
+            ],
+            "reverses_record_id": null
+          }
+        }
+      ],
+      "portfolio_state": {
+        "positions": [
+          {
+            "account": "fund-a",
+            "instrument": "MSFT",
+            "quantity": "80.00000000"
+          }
+        ],
+        "settled_cash": [
+          {
+            "account": "fund-a",
+            "currency": "USD",
+            "amount": "100000.000000"
+          }
+        ],
+        "open_settlement_obligations": [
+          {
+            "account": "fund-a",
+            "currency": "USD",
+            "direction": "payable",
+            "amount": "4400.000000",
+            "settlement_date": "2026-06-04"
+          }
+        ]
+      },
+      "results": [
+        {
+          "result_id": "corrected-trade-before-settlement.td",
+          "engine_version": "fixture-accounting-engine-1",
+          "projection_version": "fixture-journal-projection-1",
+          "policy": {
+            "policy_id": "fixture.trade-date.v1",
+            "version": "1"
+          },
+          "evaluation_context": {
+            "resolution_id": "resolution.corrected-pre-settlement",
+            "recorded_through": "2026-06-03T23:59:59Z",
+            "economic_as_of": "2026-06-02T23:59:59Z",
+            "settlement_as_of_date": "2026-06-02"
+          },
+          "inputs": {
+            "lifecycle_contract_version": "luca.event-lifecycle.v1",
+            "resolution_id": "resolution.corrected-pre-settlement",
+            "active_record_ids": [
+              "opening-cash-record",
+              "trade-record-v2"
+            ],
+            "economic_event_ids": [
+              "opening-cash-economic",
+              "trade-economic-1"
+            ],
+            "source_record_ids": [
+              "opening-cash-source",
+              "trade-source-original",
+              "trade-source-correction"
+            ]
+          },
+          "journal_entry_ids": [
+            "td.opening-cash.immediate",
+            "td.trade-v2.trade"
+          ],
+          "balances": {
+            "currency_totals": [
+              {
+                "balance_id": "corrected-trade-before-settlement.td.balances.usd-total",
+                "currency": "USD",
+                "debits": "104400.000000",
+                "credits": "104400.000000",
+                "journal_entry_ids": [
+                  "td.opening-cash.immediate",
+                  "td.trade-v2.trade"
+                ]
+              }
+            ],
+            "account_balances": [
+              {
+                "balance_id": "corrected-trade-before-settlement.td.balances.asset.cash.USD",
+                "account_id": "asset.cash",
+                "currency": "USD",
+                "side": "debit",
+                "amount": "100000.000000",
+                "journal_line_ids": [
+                  "td.opening-cash.immediate.debit"
+                ]
+              },
+              {
+                "balance_id": "corrected-trade-before-settlement.td.balances.asset.equity-securities.USD",
+                "account_id": "asset.equity-securities",
+                "currency": "USD",
+                "side": "debit",
+                "amount": "4400.000000",
+                "journal_line_ids": [
+                  "td.trade-v2.trade.debit"
+                ]
+              },
+              {
+                "balance_id": "corrected-trade-before-settlement.td.balances.equity.contributed-capital.USD",
+                "account_id": "equity.contributed-capital",
+                "currency": "USD",
+                "side": "credit",
+                "amount": "100000.000000",
+                "journal_line_ids": [
+                  "td.opening-cash.immediate.credit"
+                ]
+              },
+              {
+                "balance_id": "corrected-trade-before-settlement.td.balances.liability.trade-payable.USD",
+                "account_id": "liability.trade-payable",
+                "currency": "USD",
+                "side": "credit",
+                "amount": "4400.000000",
+                "journal_line_ids": [
+                  "td.trade-v2.trade.credit"
+                ]
+              }
+            ]
+          },
+          "cross_check": {
+            "account": "fund-a",
+            "instrument": "MSFT",
+            "currency": "USD",
+            "position_quantity": "80.00000000",
+            "settled_cash_amount": "100000.000000",
+            "open_settlement_direction": "payable",
+            "open_settlement_amount": "4400.000000",
+            "journal_cash_balance": "100000.000000",
+            "journal_control_account": "liability.trade-payable",
+            "journal_control_balance": "4400.000000",
+            "status": "consistent"
+          },
+          "policy_difference": "Recognizes equity and any payable/receivable on trade date, then clears the control on settlement.",
+          "compatibility": {
+            "reuse_key": {
+              "engine_version": "fixture-accounting-engine-1",
+              "projection_version": "fixture-journal-projection-1",
+              "policy_id": "fixture.trade-date.v1",
+              "policy_version": "1",
+              "resolution_id": "resolution.corrected-pre-settlement",
+              "recorded_through": "2026-06-03T23:59:59Z",
+              "economic_as_of": "2026-06-02T23:59:59Z",
+              "settlement_as_of_date": "2026-06-02"
+            },
+            "prior_result_reuse": "rejected_on_any_key_change"
+          }
+        },
+        {
+          "result_id": "corrected-trade-before-settlement.sd",
+          "engine_version": "fixture-accounting-engine-1",
+          "projection_version": "fixture-journal-projection-1",
+          "policy": {
+            "policy_id": "fixture.settlement-date.v1",
+            "version": "1"
+          },
+          "evaluation_context": {
+            "resolution_id": "resolution.corrected-pre-settlement",
+            "recorded_through": "2026-06-03T23:59:59Z",
+            "economic_as_of": "2026-06-02T23:59:59Z",
+            "settlement_as_of_date": "2026-06-02"
+          },
+          "inputs": {
+            "lifecycle_contract_version": "luca.event-lifecycle.v1",
+            "resolution_id": "resolution.corrected-pre-settlement",
+            "active_record_ids": [
+              "opening-cash-record",
+              "trade-record-v2"
+            ],
+            "economic_event_ids": [
+              "opening-cash-economic",
+              "trade-economic-1"
+            ],
+            "source_record_ids": [
+              "opening-cash-source",
+              "trade-source-original",
+              "trade-source-correction"
+            ]
+          },
+          "journal_entry_ids": [
+            "sd.opening-cash.immediate"
+          ],
+          "balances": {
+            "currency_totals": [
+              {
+                "balance_id": "corrected-trade-before-settlement.sd.balances.usd-total",
+                "currency": "USD",
+                "debits": "100000.000000",
+                "credits": "100000.000000",
+                "journal_entry_ids": [
+                  "sd.opening-cash.immediate"
+                ]
+              }
+            ],
+            "account_balances": [
+              {
+                "balance_id": "corrected-trade-before-settlement.sd.balances.asset.cash.USD",
+                "account_id": "asset.cash",
+                "currency": "USD",
+                "side": "debit",
+                "amount": "100000.000000",
+                "journal_line_ids": [
+                  "sd.opening-cash.immediate.debit"
+                ]
+              },
+              {
+                "balance_id": "corrected-trade-before-settlement.sd.balances.equity.contributed-capital.USD",
+                "account_id": "equity.contributed-capital",
+                "currency": "USD",
+                "side": "credit",
+                "amount": "100000.000000",
+                "journal_line_ids": [
+                  "sd.opening-cash.immediate.credit"
+                ]
+              }
+            ]
+          },
+          "cross_check": {
+            "account": "fund-a",
+            "instrument": "MSFT",
+            "currency": "USD",
+            "position_quantity": "80.00000000",
+            "settled_cash_amount": "100000.000000",
+            "open_settlement_direction": "payable",
+            "open_settlement_amount": "4400.000000",
+            "journal_cash_balance": "100000.000000",
+            "journal_control_account": null,
+            "journal_control_balance": "0.000000",
+            "status": "consistent"
+          },
+          "policy_difference": "Defers the equity posting until the supplied settlement date and carries no unsettled control.",
+          "compatibility": {
+            "reuse_key": {
+              "engine_version": "fixture-accounting-engine-1",
+              "projection_version": "fixture-journal-projection-1",
+              "policy_id": "fixture.settlement-date.v1",
+              "policy_version": "1",
+              "resolution_id": "resolution.corrected-pre-settlement",
+              "recorded_through": "2026-06-03T23:59:59Z",
+              "economic_as_of": "2026-06-02T23:59:59Z",
+              "settlement_as_of_date": "2026-06-02"
+            },
+            "prior_result_reuse": "rejected_on_any_key_change"
+          }
+        }
+      ],
+      "hand_calculations": {
+        "position": "80.00000000 MSFT; correction replaces 100.00000000",
+        "trade_value": "80.00000000 * 55.000000 = 4400.000000 USD",
+        "settled_cash": "100000.000000 USD; corrected trade not settled",
+        "journal": "trade-date debits = credits = 104400.000000 USD; settlement-date debits = credits = 100000.000000 USD"
+      }
+    },
+    {
+      "evaluation_id": "corrected-trade-after-settlement",
+      "context": {
+        "resolution_id": "resolution.corrected-settled",
+        "recorded_through": "2026-06-06T23:59:59Z",
+        "economic_as_of": "2026-06-04T23:59:59Z",
+        "settlement_as_of_date": "2026-06-04"
+      },
+      "resolved_inputs": [
+        {
+          "active_record_id": "opening-cash-record",
+          "lineage": {
+            "record_ids": [
+              "opening-cash-record"
+            ],
+            "economic_event_ids": [
+              "opening-cash-economic"
+            ],
+            "source_record_ids": [
+              "opening-cash-source"
+            ],
+            "reverses_record_id": null
+          }
+        },
+        {
+          "active_record_id": "trade-record-v2",
+          "lineage": {
+            "record_ids": [
+              "trade-record-v1",
+              "trade-record-v2"
+            ],
+            "economic_event_ids": [
+              "trade-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-original",
+              "trade-source-correction"
+            ],
+            "reverses_record_id": null
+          }
+        }
+      ],
+      "portfolio_state": {
+        "positions": [
+          {
+            "account": "fund-a",
+            "instrument": "MSFT",
+            "quantity": "80.00000000"
+          }
+        ],
+        "settled_cash": [
+          {
+            "account": "fund-a",
+            "currency": "USD",
+            "amount": "95600.000000"
+          }
+        ],
+        "open_settlement_obligations": []
+      },
+      "results": [
+        {
+          "result_id": "corrected-trade-after-settlement.td",
+          "engine_version": "fixture-accounting-engine-1",
+          "projection_version": "fixture-journal-projection-1",
+          "policy": {
+            "policy_id": "fixture.trade-date.v1",
+            "version": "1"
+          },
+          "evaluation_context": {
+            "resolution_id": "resolution.corrected-settled",
+            "recorded_through": "2026-06-06T23:59:59Z",
+            "economic_as_of": "2026-06-04T23:59:59Z",
+            "settlement_as_of_date": "2026-06-04"
+          },
+          "inputs": {
+            "lifecycle_contract_version": "luca.event-lifecycle.v1",
+            "resolution_id": "resolution.corrected-settled",
+            "active_record_ids": [
+              "opening-cash-record",
+              "trade-record-v2"
+            ],
+            "economic_event_ids": [
+              "opening-cash-economic",
+              "trade-economic-1"
+            ],
+            "source_record_ids": [
+              "opening-cash-source",
+              "trade-source-original",
+              "trade-source-correction"
+            ]
+          },
+          "journal_entry_ids": [
+            "td.opening-cash.immediate",
+            "td.trade-v2.trade",
+            "td.trade-v2.settlement"
+          ],
+          "balances": {
+            "currency_totals": [
+              {
+                "balance_id": "corrected-trade-after-settlement.td.balances.usd-total",
+                "currency": "USD",
+                "debits": "108800.000000",
+                "credits": "108800.000000",
+                "journal_entry_ids": [
+                  "td.opening-cash.immediate",
+                  "td.trade-v2.trade",
+                  "td.trade-v2.settlement"
+                ]
+              }
+            ],
+            "account_balances": [
+              {
+                "balance_id": "corrected-trade-after-settlement.td.balances.asset.cash.USD",
+                "account_id": "asset.cash",
+                "currency": "USD",
+                "side": "debit",
+                "amount": "95600.000000",
+                "journal_line_ids": [
+                  "td.opening-cash.immediate.debit",
+                  "td.trade-v2.settlement.credit"
+                ]
+              },
+              {
+                "balance_id": "corrected-trade-after-settlement.td.balances.asset.equity-securities.USD",
+                "account_id": "asset.equity-securities",
+                "currency": "USD",
+                "side": "debit",
+                "amount": "4400.000000",
+                "journal_line_ids": [
+                  "td.trade-v2.trade.debit"
+                ]
+              },
+              {
+                "balance_id": "corrected-trade-after-settlement.td.balances.equity.contributed-capital.USD",
+                "account_id": "equity.contributed-capital",
+                "currency": "USD",
+                "side": "credit",
+                "amount": "100000.000000",
+                "journal_line_ids": [
+                  "td.opening-cash.immediate.credit"
+                ]
+              }
+            ]
+          },
+          "cross_check": {
+            "account": "fund-a",
+            "instrument": "MSFT",
+            "currency": "USD",
+            "position_quantity": "80.00000000",
+            "settled_cash_amount": "95600.000000",
+            "open_settlement_direction": null,
+            "open_settlement_amount": "0.000000",
+            "journal_cash_balance": "95600.000000",
+            "journal_control_account": null,
+            "journal_control_balance": "0.000000",
+            "status": "consistent"
+          },
+          "policy_difference": "Recognizes equity and any payable/receivable on trade date, then clears the control on settlement.",
+          "compatibility": {
+            "reuse_key": {
+              "engine_version": "fixture-accounting-engine-1",
+              "projection_version": "fixture-journal-projection-1",
+              "policy_id": "fixture.trade-date.v1",
+              "policy_version": "1",
+              "resolution_id": "resolution.corrected-settled",
+              "recorded_through": "2026-06-06T23:59:59Z",
+              "economic_as_of": "2026-06-04T23:59:59Z",
+              "settlement_as_of_date": "2026-06-04"
+            },
+            "prior_result_reuse": "rejected_on_any_key_change"
+          }
+        },
+        {
+          "result_id": "corrected-trade-after-settlement.sd",
+          "engine_version": "fixture-accounting-engine-1",
+          "projection_version": "fixture-journal-projection-1",
+          "policy": {
+            "policy_id": "fixture.settlement-date.v1",
+            "version": "1"
+          },
+          "evaluation_context": {
+            "resolution_id": "resolution.corrected-settled",
+            "recorded_through": "2026-06-06T23:59:59Z",
+            "economic_as_of": "2026-06-04T23:59:59Z",
+            "settlement_as_of_date": "2026-06-04"
+          },
+          "inputs": {
+            "lifecycle_contract_version": "luca.event-lifecycle.v1",
+            "resolution_id": "resolution.corrected-settled",
+            "active_record_ids": [
+              "opening-cash-record",
+              "trade-record-v2"
+            ],
+            "economic_event_ids": [
+              "opening-cash-economic",
+              "trade-economic-1"
+            ],
+            "source_record_ids": [
+              "opening-cash-source",
+              "trade-source-original",
+              "trade-source-correction"
+            ]
+          },
+          "journal_entry_ids": [
+            "sd.opening-cash.immediate",
+            "sd.trade-v2.settlement"
+          ],
+          "balances": {
+            "currency_totals": [
+              {
+                "balance_id": "corrected-trade-after-settlement.sd.balances.usd-total",
+                "currency": "USD",
+                "debits": "104400.000000",
+                "credits": "104400.000000",
+                "journal_entry_ids": [
+                  "sd.opening-cash.immediate",
+                  "sd.trade-v2.settlement"
+                ]
+              }
+            ],
+            "account_balances": [
+              {
+                "balance_id": "corrected-trade-after-settlement.sd.balances.asset.cash.USD",
+                "account_id": "asset.cash",
+                "currency": "USD",
+                "side": "debit",
+                "amount": "95600.000000",
+                "journal_line_ids": [
+                  "sd.opening-cash.immediate.debit",
+                  "sd.trade-v2.settlement.credit"
+                ]
+              },
+              {
+                "balance_id": "corrected-trade-after-settlement.sd.balances.asset.equity-securities.USD",
+                "account_id": "asset.equity-securities",
+                "currency": "USD",
+                "side": "debit",
+                "amount": "4400.000000",
+                "journal_line_ids": [
+                  "sd.trade-v2.settlement.debit"
+                ]
+              },
+              {
+                "balance_id": "corrected-trade-after-settlement.sd.balances.equity.contributed-capital.USD",
+                "account_id": "equity.contributed-capital",
+                "currency": "USD",
+                "side": "credit",
+                "amount": "100000.000000",
+                "journal_line_ids": [
+                  "sd.opening-cash.immediate.credit"
+                ]
+              }
+            ]
+          },
+          "cross_check": {
+            "account": "fund-a",
+            "instrument": "MSFT",
+            "currency": "USD",
+            "position_quantity": "80.00000000",
+            "settled_cash_amount": "95600.000000",
+            "open_settlement_direction": null,
+            "open_settlement_amount": "0.000000",
+            "journal_cash_balance": "95600.000000",
+            "journal_control_account": null,
+            "journal_control_balance": "0.000000",
+            "status": "consistent"
+          },
+          "policy_difference": "Defers the equity posting until the supplied settlement date and carries no unsettled control.",
+          "compatibility": {
+            "reuse_key": {
+              "engine_version": "fixture-accounting-engine-1",
+              "projection_version": "fixture-journal-projection-1",
+              "policy_id": "fixture.settlement-date.v1",
+              "policy_version": "1",
+              "resolution_id": "resolution.corrected-settled",
+              "recorded_through": "2026-06-06T23:59:59Z",
+              "economic_as_of": "2026-06-04T23:59:59Z",
+              "settlement_as_of_date": "2026-06-04"
+            },
+            "prior_result_reuse": "rejected_on_any_key_change"
+          }
+        }
+      ],
+      "hand_calculations": {
+        "position": "80.00000000 MSFT",
+        "trade_value": "80.00000000 * 55.000000 = 4400.000000 USD",
+        "settled_cash": "100000.000000 - 4400.000000 = 95600.000000 USD",
+        "journal": "trade-date debits = credits = 108800.000000 USD; settlement-date debits = credits = 104400.000000 USD"
+      }
+    },
+    {
+      "evaluation_id": "reversal-known-before-reversal-settlement",
+      "context": {
+        "resolution_id": "resolution.reversal-pre-settlement",
+        "recorded_through": "2026-06-07T12:00:00Z",
+        "economic_as_of": "2026-06-05T23:59:59Z",
+        "settlement_as_of_date": "2026-06-05"
+      },
+      "resolved_inputs": [
+        {
+          "active_record_id": "opening-cash-record",
+          "lineage": {
+            "record_ids": [
+              "opening-cash-record"
+            ],
+            "economic_event_ids": [
+              "opening-cash-economic"
+            ],
+            "source_record_ids": [
+              "opening-cash-source"
+            ],
+            "reverses_record_id": null
+          }
+        },
+        {
+          "active_record_id": "trade-record-v2",
+          "lineage": {
+            "record_ids": [
+              "trade-record-v1",
+              "trade-record-v2"
+            ],
+            "economic_event_ids": [
+              "trade-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-original",
+              "trade-source-correction"
+            ],
+            "reverses_record_id": null
+          }
+        },
+        {
+          "active_record_id": "reversal-record-v1",
+          "lineage": {
+            "record_ids": [
+              "reversal-record-v1"
+            ],
+            "economic_event_ids": [
+              "trade-reversal-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-reversal"
+            ],
+            "reverses_record_id": "trade-record-v2"
+          }
+        }
+      ],
+      "portfolio_state": {
+        "positions": [],
+        "settled_cash": [
+          {
+            "account": "fund-a",
+            "currency": "USD",
+            "amount": "95600.000000"
+          }
+        ],
+        "open_settlement_obligations": [
+          {
+            "account": "fund-a",
+            "currency": "USD",
+            "direction": "receivable",
+            "amount": "4400.000000",
+            "settlement_date": "2026-06-06"
+          }
+        ]
+      },
+      "results": [
+        {
+          "result_id": "reversal-known-before-reversal-settlement.td",
+          "engine_version": "fixture-accounting-engine-1",
+          "projection_version": "fixture-journal-projection-1",
+          "policy": {
+            "policy_id": "fixture.trade-date.v1",
+            "version": "1"
+          },
+          "evaluation_context": {
+            "resolution_id": "resolution.reversal-pre-settlement",
+            "recorded_through": "2026-06-07T12:00:00Z",
+            "economic_as_of": "2026-06-05T23:59:59Z",
+            "settlement_as_of_date": "2026-06-05"
+          },
+          "inputs": {
+            "lifecycle_contract_version": "luca.event-lifecycle.v1",
+            "resolution_id": "resolution.reversal-pre-settlement",
+            "active_record_ids": [
+              "opening-cash-record",
+              "trade-record-v2",
+              "reversal-record-v1"
+            ],
+            "economic_event_ids": [
+              "opening-cash-economic",
+              "trade-economic-1",
+              "trade-reversal-economic-1"
+            ],
+            "source_record_ids": [
+              "opening-cash-source",
+              "trade-source-original",
+              "trade-source-correction",
+              "trade-source-reversal"
+            ]
+          },
+          "journal_entry_ids": [
+            "td.opening-cash.immediate",
+            "td.trade-v2.trade",
+            "td.trade-v2.settlement",
+            "td.reversal.trade"
+          ],
+          "balances": {
+            "currency_totals": [
+              {
+                "balance_id": "reversal-known-before-reversal-settlement.td.balances.usd-total",
+                "currency": "USD",
+                "debits": "113200.000000",
+                "credits": "113200.000000",
+                "journal_entry_ids": [
+                  "td.opening-cash.immediate",
+                  "td.trade-v2.trade",
+                  "td.trade-v2.settlement",
+                  "td.reversal.trade"
+                ]
+              }
+            ],
+            "account_balances": [
+              {
+                "balance_id": "reversal-known-before-reversal-settlement.td.balances.asset.cash.USD",
+                "account_id": "asset.cash",
+                "currency": "USD",
+                "side": "debit",
+                "amount": "95600.000000",
+                "journal_line_ids": [
+                  "td.opening-cash.immediate.debit",
+                  "td.trade-v2.settlement.credit"
+                ]
+              },
+              {
+                "balance_id": "reversal-known-before-reversal-settlement.td.balances.asset.trade-receivable.USD",
+                "account_id": "asset.trade-receivable",
+                "currency": "USD",
+                "side": "debit",
+                "amount": "4400.000000",
+                "journal_line_ids": [
+                  "td.reversal.trade.debit"
+                ]
+              },
+              {
+                "balance_id": "reversal-known-before-reversal-settlement.td.balances.equity.contributed-capital.USD",
+                "account_id": "equity.contributed-capital",
+                "currency": "USD",
+                "side": "credit",
+                "amount": "100000.000000",
+                "journal_line_ids": [
+                  "td.opening-cash.immediate.credit"
+                ]
+              }
+            ]
+          },
+          "cross_check": {
+            "account": "fund-a",
+            "instrument": "MSFT",
+            "currency": "USD",
+            "position_quantity": "0.00000000",
+            "settled_cash_amount": "95600.000000",
+            "open_settlement_direction": "receivable",
+            "open_settlement_amount": "4400.000000",
+            "journal_cash_balance": "95600.000000",
+            "journal_control_account": "asset.trade-receivable",
+            "journal_control_balance": "4400.000000",
+            "status": "consistent"
+          },
+          "policy_difference": "Recognizes equity and any payable/receivable on trade date, then clears the control on settlement.",
+          "compatibility": {
+            "reuse_key": {
+              "engine_version": "fixture-accounting-engine-1",
+              "projection_version": "fixture-journal-projection-1",
+              "policy_id": "fixture.trade-date.v1",
+              "policy_version": "1",
+              "resolution_id": "resolution.reversal-pre-settlement",
+              "recorded_through": "2026-06-07T12:00:00Z",
+              "economic_as_of": "2026-06-05T23:59:59Z",
+              "settlement_as_of_date": "2026-06-05"
+            },
+            "prior_result_reuse": "rejected_on_any_key_change"
+          }
+        },
+        {
+          "result_id": "reversal-known-before-reversal-settlement.sd",
+          "engine_version": "fixture-accounting-engine-1",
+          "projection_version": "fixture-journal-projection-1",
+          "policy": {
+            "policy_id": "fixture.settlement-date.v1",
+            "version": "1"
+          },
+          "evaluation_context": {
+            "resolution_id": "resolution.reversal-pre-settlement",
+            "recorded_through": "2026-06-07T12:00:00Z",
+            "economic_as_of": "2026-06-05T23:59:59Z",
+            "settlement_as_of_date": "2026-06-05"
+          },
+          "inputs": {
+            "lifecycle_contract_version": "luca.event-lifecycle.v1",
+            "resolution_id": "resolution.reversal-pre-settlement",
+            "active_record_ids": [
+              "opening-cash-record",
+              "trade-record-v2",
+              "reversal-record-v1"
+            ],
+            "economic_event_ids": [
+              "opening-cash-economic",
+              "trade-economic-1",
+              "trade-reversal-economic-1"
+            ],
+            "source_record_ids": [
+              "opening-cash-source",
+              "trade-source-original",
+              "trade-source-correction",
+              "trade-source-reversal"
+            ]
+          },
+          "journal_entry_ids": [
+            "sd.opening-cash.immediate",
+            "sd.trade-v2.settlement"
+          ],
+          "balances": {
+            "currency_totals": [
+              {
+                "balance_id": "reversal-known-before-reversal-settlement.sd.balances.usd-total",
+                "currency": "USD",
+                "debits": "104400.000000",
+                "credits": "104400.000000",
+                "journal_entry_ids": [
+                  "sd.opening-cash.immediate",
+                  "sd.trade-v2.settlement"
+                ]
+              }
+            ],
+            "account_balances": [
+              {
+                "balance_id": "reversal-known-before-reversal-settlement.sd.balances.asset.cash.USD",
+                "account_id": "asset.cash",
+                "currency": "USD",
+                "side": "debit",
+                "amount": "95600.000000",
+                "journal_line_ids": [
+                  "sd.opening-cash.immediate.debit",
+                  "sd.trade-v2.settlement.credit"
+                ]
+              },
+              {
+                "balance_id": "reversal-known-before-reversal-settlement.sd.balances.asset.equity-securities.USD",
+                "account_id": "asset.equity-securities",
+                "currency": "USD",
+                "side": "debit",
+                "amount": "4400.000000",
+                "journal_line_ids": [
+                  "sd.trade-v2.settlement.debit"
+                ]
+              },
+              {
+                "balance_id": "reversal-known-before-reversal-settlement.sd.balances.equity.contributed-capital.USD",
+                "account_id": "equity.contributed-capital",
+                "currency": "USD",
+                "side": "credit",
+                "amount": "100000.000000",
+                "journal_line_ids": [
+                  "sd.opening-cash.immediate.credit"
+                ]
+              }
+            ]
+          },
+          "cross_check": {
+            "account": "fund-a",
+            "instrument": "MSFT",
+            "currency": "USD",
+            "position_quantity": "0.00000000",
+            "settled_cash_amount": "95600.000000",
+            "open_settlement_direction": "receivable",
+            "open_settlement_amount": "4400.000000",
+            "journal_cash_balance": "95600.000000",
+            "journal_control_account": null,
+            "journal_control_balance": "0.000000",
+            "status": "consistent"
+          },
+          "policy_difference": "Defers the equity posting until the supplied settlement date and carries no unsettled control.",
+          "compatibility": {
+            "reuse_key": {
+              "engine_version": "fixture-accounting-engine-1",
+              "projection_version": "fixture-journal-projection-1",
+              "policy_id": "fixture.settlement-date.v1",
+              "policy_version": "1",
+              "resolution_id": "resolution.reversal-pre-settlement",
+              "recorded_through": "2026-06-07T12:00:00Z",
+              "economic_as_of": "2026-06-05T23:59:59Z",
+              "settlement_as_of_date": "2026-06-05"
+            },
+            "prior_result_reuse": "rejected_on_any_key_change"
+          }
+        }
+      ],
+      "hand_calculations": {
+        "position": "80.00000000 + -80.00000000 = 0.00000000 MSFT",
+        "trade_value": "abs(-80.00000000) * 55.000000 = 4400.000000 USD",
+        "settled_cash": "95600.000000 USD; reversal not settled",
+        "journal": "trade-date debits = credits = 113200.000000 USD; settlement-date debits = credits = 104400.000000 USD"
+      }
+    },
+    {
+      "evaluation_id": "reversal-after-settlement",
+      "context": {
+        "resolution_id": "resolution.reversal-settled",
+        "recorded_through": "2026-06-07T12:00:00Z",
+        "economic_as_of": "2026-06-06T23:59:59Z",
+        "settlement_as_of_date": "2026-06-06"
+      },
+      "resolved_inputs": [
+        {
+          "active_record_id": "opening-cash-record",
+          "lineage": {
+            "record_ids": [
+              "opening-cash-record"
+            ],
+            "economic_event_ids": [
+              "opening-cash-economic"
+            ],
+            "source_record_ids": [
+              "opening-cash-source"
+            ],
+            "reverses_record_id": null
+          }
+        },
+        {
+          "active_record_id": "trade-record-v2",
+          "lineage": {
+            "record_ids": [
+              "trade-record-v1",
+              "trade-record-v2"
+            ],
+            "economic_event_ids": [
+              "trade-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-original",
+              "trade-source-correction"
+            ],
+            "reverses_record_id": null
+          }
+        },
+        {
+          "active_record_id": "reversal-record-v1",
+          "lineage": {
+            "record_ids": [
+              "reversal-record-v1"
+            ],
+            "economic_event_ids": [
+              "trade-reversal-economic-1"
+            ],
+            "source_record_ids": [
+              "trade-source-reversal"
+            ],
+            "reverses_record_id": "trade-record-v2"
+          }
+        }
+      ],
+      "portfolio_state": {
+        "positions": [],
+        "settled_cash": [
+          {
+            "account": "fund-a",
+            "currency": "USD",
+            "amount": "100000.000000"
+          }
+        ],
+        "open_settlement_obligations": []
+      },
+      "results": [
+        {
+          "result_id": "reversal-after-settlement.td",
+          "engine_version": "fixture-accounting-engine-1",
+          "projection_version": "fixture-journal-projection-1",
+          "policy": {
+            "policy_id": "fixture.trade-date.v1",
+            "version": "1"
+          },
+          "evaluation_context": {
+            "resolution_id": "resolution.reversal-settled",
+            "recorded_through": "2026-06-07T12:00:00Z",
+            "economic_as_of": "2026-06-06T23:59:59Z",
+            "settlement_as_of_date": "2026-06-06"
+          },
+          "inputs": {
+            "lifecycle_contract_version": "luca.event-lifecycle.v1",
+            "resolution_id": "resolution.reversal-settled",
+            "active_record_ids": [
+              "opening-cash-record",
+              "trade-record-v2",
+              "reversal-record-v1"
+            ],
+            "economic_event_ids": [
+              "opening-cash-economic",
+              "trade-economic-1",
+              "trade-reversal-economic-1"
+            ],
+            "source_record_ids": [
+              "opening-cash-source",
+              "trade-source-original",
+              "trade-source-correction",
+              "trade-source-reversal"
+            ]
+          },
+          "journal_entry_ids": [
+            "td.opening-cash.immediate",
+            "td.trade-v2.trade",
+            "td.trade-v2.settlement",
+            "td.reversal.trade",
+            "td.reversal.settlement"
+          ],
+          "balances": {
+            "currency_totals": [
+              {
+                "balance_id": "reversal-after-settlement.td.balances.usd-total",
+                "currency": "USD",
+                "debits": "117600.000000",
+                "credits": "117600.000000",
+                "journal_entry_ids": [
+                  "td.opening-cash.immediate",
+                  "td.trade-v2.trade",
+                  "td.trade-v2.settlement",
+                  "td.reversal.trade",
+                  "td.reversal.settlement"
+                ]
+              }
+            ],
+            "account_balances": [
+              {
+                "balance_id": "reversal-after-settlement.td.balances.asset.cash.USD",
+                "account_id": "asset.cash",
+                "currency": "USD",
+                "side": "debit",
+                "amount": "100000.000000",
+                "journal_line_ids": [
+                  "td.opening-cash.immediate.debit",
+                  "td.trade-v2.settlement.credit",
+                  "td.reversal.settlement.debit"
+                ]
+              },
+              {
+                "balance_id": "reversal-after-settlement.td.balances.equity.contributed-capital.USD",
+                "account_id": "equity.contributed-capital",
+                "currency": "USD",
+                "side": "credit",
+                "amount": "100000.000000",
+                "journal_line_ids": [
+                  "td.opening-cash.immediate.credit"
+                ]
+              }
+            ]
+          },
+          "cross_check": {
+            "account": "fund-a",
+            "instrument": "MSFT",
+            "currency": "USD",
+            "position_quantity": "0.00000000",
+            "settled_cash_amount": "100000.000000",
+            "open_settlement_direction": null,
+            "open_settlement_amount": "0.000000",
+            "journal_cash_balance": "100000.000000",
+            "journal_control_account": null,
+            "journal_control_balance": "0.000000",
+            "status": "consistent"
+          },
+          "policy_difference": "Recognizes equity and any payable/receivable on trade date, then clears the control on settlement.",
+          "compatibility": {
+            "reuse_key": {
+              "engine_version": "fixture-accounting-engine-1",
+              "projection_version": "fixture-journal-projection-1",
+              "policy_id": "fixture.trade-date.v1",
+              "policy_version": "1",
+              "resolution_id": "resolution.reversal-settled",
+              "recorded_through": "2026-06-07T12:00:00Z",
+              "economic_as_of": "2026-06-06T23:59:59Z",
+              "settlement_as_of_date": "2026-06-06"
+            },
+            "prior_result_reuse": "rejected_on_any_key_change"
+          }
+        },
+        {
+          "result_id": "reversal-after-settlement.sd",
+          "engine_version": "fixture-accounting-engine-1",
+          "projection_version": "fixture-journal-projection-1",
+          "policy": {
+            "policy_id": "fixture.settlement-date.v1",
+            "version": "1"
+          },
+          "evaluation_context": {
+            "resolution_id": "resolution.reversal-settled",
+            "recorded_through": "2026-06-07T12:00:00Z",
+            "economic_as_of": "2026-06-06T23:59:59Z",
+            "settlement_as_of_date": "2026-06-06"
+          },
+          "inputs": {
+            "lifecycle_contract_version": "luca.event-lifecycle.v1",
+            "resolution_id": "resolution.reversal-settled",
+            "active_record_ids": [
+              "opening-cash-record",
+              "trade-record-v2",
+              "reversal-record-v1"
+            ],
+            "economic_event_ids": [
+              "opening-cash-economic",
+              "trade-economic-1",
+              "trade-reversal-economic-1"
+            ],
+            "source_record_ids": [
+              "opening-cash-source",
+              "trade-source-original",
+              "trade-source-correction",
+              "trade-source-reversal"
+            ]
+          },
+          "journal_entry_ids": [
+            "sd.opening-cash.immediate",
+            "sd.trade-v2.settlement",
+            "sd.reversal.settlement"
+          ],
+          "balances": {
+            "currency_totals": [
+              {
+                "balance_id": "reversal-after-settlement.sd.balances.usd-total",
+                "currency": "USD",
+                "debits": "108800.000000",
+                "credits": "108800.000000",
+                "journal_entry_ids": [
+                  "sd.opening-cash.immediate",
+                  "sd.trade-v2.settlement",
+                  "sd.reversal.settlement"
+                ]
+              }
+            ],
+            "account_balances": [
+              {
+                "balance_id": "reversal-after-settlement.sd.balances.asset.cash.USD",
+                "account_id": "asset.cash",
+                "currency": "USD",
+                "side": "debit",
+                "amount": "100000.000000",
+                "journal_line_ids": [
+                  "sd.opening-cash.immediate.debit",
+                  "sd.trade-v2.settlement.credit",
+                  "sd.reversal.settlement.debit"
+                ]
+              },
+              {
+                "balance_id": "reversal-after-settlement.sd.balances.equity.contributed-capital.USD",
+                "account_id": "equity.contributed-capital",
+                "currency": "USD",
+                "side": "credit",
+                "amount": "100000.000000",
+                "journal_line_ids": [
+                  "sd.opening-cash.immediate.credit"
+                ]
+              }
+            ]
+          },
+          "cross_check": {
+            "account": "fund-a",
+            "instrument": "MSFT",
+            "currency": "USD",
+            "position_quantity": "0.00000000",
+            "settled_cash_amount": "100000.000000",
+            "open_settlement_direction": null,
+            "open_settlement_amount": "0.000000",
+            "journal_cash_balance": "100000.000000",
+            "journal_control_account": null,
+            "journal_control_balance": "0.000000",
+            "status": "consistent"
+          },
+          "policy_difference": "Defers the equity posting until the supplied settlement date and carries no unsettled control.",
+          "compatibility": {
+            "reuse_key": {
+              "engine_version": "fixture-accounting-engine-1",
+              "projection_version": "fixture-journal-projection-1",
+              "policy_id": "fixture.settlement-date.v1",
+              "policy_version": "1",
+              "resolution_id": "resolution.reversal-settled",
+              "recorded_through": "2026-06-07T12:00:00Z",
+              "economic_as_of": "2026-06-06T23:59:59Z",
+              "settlement_as_of_date": "2026-06-06"
+            },
+            "prior_result_reuse": "rejected_on_any_key_change"
+          }
+        }
+      ],
+      "hand_calculations": {
+        "position": "80.00000000 + -80.00000000 = 0.00000000 MSFT",
+        "trade_value": "4400.000000 purchase and 4400.000000 exact reversal",
+        "settled_cash": "95600.000000 + 4400.000000 = 100000.000000 USD",
+        "journal": "trade-date debits = credits = 117600.000000 USD; settlement-date debits = credits = 108800.000000 USD"
+      }
+    }
+  ]
+}
