@@ -346,6 +346,69 @@ as a general LUCA canonical JSON format. The executable links only the public
 `luca::reconciliation` target, so installed-library and parent consumers keep
 their existing interfaces.
 
+### Dependency-free Python client
+
+`tools/exact-cash/python/luca_exact_cash` is an importable standard-library
+adapter for this host envelope. Importing it defines types and constants only:
+it does not launch a process, discover an executable, read configuration or
+secrets, or access a filesystem, database, or network service. The caller
+supplies a JSON-compatible request and an explicit executable path containing a
+directory component. The adapter passes that path as the sole member of an
+argument vector with `shell=False`; it never resolves a bare command through
+`PATH` and never interprets metacharacters.
+
+For example, add `tools/exact-cash/python` to the application's Python module
+search path and call the client with an explicit local installation:
+
+```python
+import json
+from pathlib import Path
+
+from luca_exact_cash import Limits, run_exact_cash
+
+request = json.loads(Path("exact-cash-request.json").read_text(encoding="utf-8"))
+result = run_exact_cash(
+    request,
+    "/opt/luca/bin/luca-exact-cash",
+    limits=Limits(
+        timeout_seconds=5.0,
+        max_request_bytes=1024 * 1024,
+        max_stdout_bytes=16 * 1024 * 1024,
+        max_stderr_bytes=64 * 1024,
+    ),
+)
+print(result["breaks"])
+```
+
+Request serialization is strict UTF-8 JSON, rejects non-JSON constants such as
+`NaN`, and stops at the configured request-byte limit. The adapter concurrently
+drains standard output and standard error into separate bounded buffers,
+terminates the child on either output limit or the configured timeout, and
+waits for the explicitly named process. It returns only after standard output
+decodes as one JSON object (surrounding JSON whitespace is allowed), has exactly
+the supported `luca.exact-cash-cli.v1` identity, and contains list-valued
+`operation_trace`, `projections`, `matches`, and `breaks` collections. A second
+JSON value, log text, unsupported identity, duplicate JSON member, or missing or
+non-list result collection is rejected. The adapter deliberately does not
+validate accounts, currencies, amounts, context compatibility, lineage,
+policies, or financial results; all such validation and all reduction and
+comparison arithmetic remain in the C++ host.
+
+Every client failure derives from `ExactCashClientError` and exposes a stable
+`code`. Separate typed failures cover invalid limits or requests, missing or
+unlaunchable executables, timeout, bounded stdout/stderr overflow, signal
+termination, ordinary nonzero exit, process communication, malformed or extra
+stdout, unsupported result schema, and an invalid result envelope. A nonzero
+host failure exposes only its numeric status and, when stderr begins with the
+host's bounded stable diagnostic form, its short category. Exceptions never
+retain or print request data, observation or lineage payloads, the process
+environment, or captured tool output.
+
+This directory is source-importable reference code, not a published package or
+native extension. An application owns how it supplies the explicit request and
+executable path; the adapter adds no storage, scheduling, permissions, runtime
+plugin loading, or host metadata to the deterministic result.
+
 ## Replay and invalidation
 
 The exact cash fixture and public reducer demonstrate equal values and lineage
@@ -401,8 +464,8 @@ Host-only data such as job IDs, queue names, worker addresses, attempt counts,
 requesting principals, wall-clock start/end times, storage locations, and
 authorization decisions must be recorded outside the deterministic result. A
 hosted adapter can eventually call the same reviewed OSS implementation and
-fixtures as the standalone process. This increment implements only the bounded
-standalone host and does not duplicate financial arithmetic in it.
+fixtures as the standalone process and dependency-free Python client. Neither
+portable host duplicates financial arithmetic from the public C++ operations.
 
 ## Fixture and validator responsibilities
 
@@ -450,9 +513,9 @@ This increment intentionally leaves the following to their roadmap owners:
 - public transformation interfaces beyond the bounded exact-cash reduction and
   exact cash comparison, including general mapping, ordered-fold, tolerant
   comparison, and policy extension contracts;
-- Python bindings, hosted adapters, and pinned platform integration (later
-  portable-execution increments); the bounded standalone exact-cash host is the
-  only host implemented here;
+- native Python bindings, hosted adapters, package publication, and pinned
+  platform integration (later portable-execution increments); this increment's
+  source-importable Python adapter only supervises the bounded standalone host;
 - dynamic loading, a general plugin ABI, expression languages, arbitrary runtime
   code execution, and acceptance of externally calculated state;
 - FX conversion/netting policy, fees, commissions, taxes, settlement calendars,
