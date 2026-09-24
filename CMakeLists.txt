@@ -83,6 +83,11 @@ install(
     ${CMAKE_CURRENT_BINARY_DIR}/LucaConfigVersion.cmake
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Luca)
 
+option(PACIOLI_BUILD_TOOLS "Build standalone Luca tools" ${PROJECT_IS_TOP_LEVEL})
+if(PACIOLI_BUILD_TOOLS)
+  add_subdirectory(tools/exact-cash)
+endif()
+
 option(PACIOLI_BUILD_TESTS "Build tests" ${PROJECT_IS_TOP_LEVEL})
 option(PACIOLI_BUILD_BENCHMARKS "Build reproducible performance benchmarks" OFF)
 if(PACIOLI_BUILD_TESTS)
@@ -192,6 +197,15 @@ if(PACIOLI_BUILD_TESTS)
     PRIVATE luca::reconciliation)
   add_test(NAME pacioli_exact_cash_comparison_test
     COMMAND pacioli_exact_cash_comparison_test)
+
+  if(TARGET luca-exact-cash)
+    add_test(
+      NAME luca_exact_cash_cli_test
+      COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/exact_cash_cli_test.py
+        $<TARGET_FILE:luca-exact-cash>
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/exact-cash-cli)
+  endif()
 
   add_executable(pacioli_settlement_projection_test tests/unit/settlement_projection_test.cpp)
   target_link_libraries(pacioli_settlement_projection_test PRIVATE pacioli)

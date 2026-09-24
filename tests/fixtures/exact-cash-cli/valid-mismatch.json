@@ -1,0 +1,76 @@
+{
+  "schema_version": "luca.exact-cash-cli.v1",
+  "engine": {
+    "id": "luca",
+    "version": "contract-fixture-1"
+  },
+  "operations": {
+    "reduction": {
+      "operation_id": "reduce.cash.exact",
+      "operation_version": "1",
+      "policy": {
+        "id": "exact-cash-sum",
+        "version": "1"
+      },
+      "unit": "money",
+      "partition_keys": ["account", "currency"],
+      "ordering": "arbitrary",
+      "rounding": "none"
+    },
+    "comparison": {
+      "operation_id": "compare.cash.exact",
+      "operation_version": "1",
+      "policy": {
+        "id": "exact-cash-comparison",
+        "version": "1"
+      },
+      "ordering": "account_currency_break_kind",
+      "rounding": "none",
+      "sign_convention": "observed_minus_expected"
+    }
+  },
+  "evaluation_context": {
+    "id": "cash-context-1",
+    "recorded_through": "2026-06-10T00:00:00Z",
+    "economic_as_of": "2026-06-05T23:59:59Z",
+    "settlement_as_of_date": "2026-06-05"
+  },
+  "partials": [
+    {
+      "account": "fund-a",
+      "currency": "USD",
+      "amount": "1000.000000",
+      "source_event_ids": ["cash-event-1"],
+      "source_record_ids": ["source.cash.1"]
+    },
+    {
+      "account": "fund-a",
+      "currency": "USD",
+      "amount": "-250.000000",
+      "source_event_ids": ["cash-event-2"],
+      "source_record_ids": ["source.cash.2"]
+    },
+    {
+      "account": "fund-a",
+      "currency": "USD",
+      "amount": "50.000000",
+      "source_event_ids": ["cash-event-3"],
+      "source_record_ids": ["source.cash.3"]
+    }
+  ],
+  "observations": [
+    {
+      "account": "fund-a",
+      "currency": "USD",
+      "amount": "790.000000",
+      "as_of": "2026-06-05T23:59:59Z",
+      "settlement_as_of_date": "2026-06-05",
+      "provenance": {
+        "source_record_ids": ["observation.bank.1"],
+        "transformation_name": "bank-cash-observation",
+        "transformation_version": "1",
+        "transformation_metadata": null
+      }
+    }
+  ]
+}
