@@ -1,5 +1,7 @@
 #include "luca/ledger.hpp"
+#include "luca/portfolio/lifecycle_projection.hpp"
 
+#include <array>
 #include <cassert>
 #include <chrono>
 #include <cstdint>
@@ -21,14 +23,36 @@ Provenance provenance(const char *source) {
 }
 
 EconomicEvent cash_event(const char *id, Timestamp time, const char *source,
-                         const char *account = "account-a", const char *amount = "10") {
+                         const char *account = "account-a", const char *amount = "10",
+                         const char *currency_code = "USD") {
   auto event_header =
       EventHeader::create(EventId{id}, AccountId{account}, time, provenance(source));
-  const auto currency = Currency::from_code("USD");
-  assert(event_header && currency);
-  const auto money = Money::parse(amount, *currency);
+  const auto denomination = Currency::from_code(currency_code);
+  assert(event_header && denomination);
+  const auto money = Money::parse(amount, *denomination);
   assert(money);
   return CashMovement::create(*event_header, *money);
+}
+
+EconomicEvent trade_event(const char *id, Timestamp time, const char *source, const char *quantity,
+                          const char *price, std::chrono::year_month_day settlement,
+                          const char *account = "fund-a", const char *currency_code = "USD") {
+  auto event_header =
+      EventHeader::create(EventId{id}, AccountId{account}, time, provenance(source));
+  const auto denomination = Currency::from_code(currency_code);
+  const auto parsed_quantity = Quantity::parse(quantity);
+  const auto parsed_price = Price::parse(price);
+  const auto parsed_settlement = SettlementDate::create(settlement);
+  assert(event_header && denomination && parsed_quantity && parsed_price && parsed_settlement);
+  auto trade = EquityTrade::create(*event_header, InstrumentId{"MSFT"}, *parsed_quantity,
+                                   *parsed_price, *denomination, *parsed_settlement);
+  assert(trade);
+  return *trade;
+}
+
+Timestamp timestamp(std::chrono::year_month_day date,
+                    std::chrono::nanoseconds time_of_day = std::chrono::nanoseconds{0}) {
+  return Timestamp{std::chrono::sys_days{date}.time_since_epoch() + time_of_day};
 }
 
 const EventHeader &entry_header(const LedgerEntry &entry) { return header(entry.event()); }
@@ -385,6 +409,292 @@ void test_journal_factory_rejections_and_boundaries() {
                            context, lineage, overflowing_lines),
       JournalDiagnosticCategory::arithmetic_overflow);
 }
+
+void accept(LifecycleLedger &ledger, LifecycleRecordDraft draft) {
+  const auto result = ledger.accept(draft);
+  assert(result);
+}
+
+std::int64_t journal_control(const TradeDateProjectionResult &result, std::string_view account,
+                             JournalSide natural_side) {
+  std::int64_t balance = 0;
+  for (const auto &entry : result.entries()) {
+    assert(entry.debit_total() == entry.credit_total());
+    for (const auto &line : entry.lines()) {
+      if (line.account_id().value() != account)
+        continue;
+      if (line.side() == natural_side)
+        balance += line.amount().scaled_value();
+      else
+        balance -= line.amount().scaled_value();
+    }
+  }
+  return balance;
+}
+
+void expect_portfolio_controls(const TradeDateProjectionResult &journals,
+                               const LifecycleResolution &resolution, Timestamp economic_as_of,
+                               std::chrono::year_month_day settlement_as_of,
+                               std::int64_t expected_quantity, std::int64_t expected_cash,
+                               std::int64_t expected_payable, std::int64_t expected_receivable) {
+  const auto portfolio =
+      project_lifecycle(resolution, LifecycleProjectionContext{economic_as_of, settlement_as_of});
+  assert(portfolio.positions && portfolio.settled_cash && portfolio.open_settlement_obligations);
+  if (expected_quantity == 0) {
+    assert(portfolio.positions->empty());
+  } else {
+    assert(portfolio.positions->size() == 1);
+    assert(portfolio.positions->front().quantity().scaled_value() == expected_quantity);
+  }
+  assert(portfolio.settled_cash->size() == 1);
+  assert(portfolio.settled_cash->front().amount().scaled_value() == expected_cash);
+  assert(journal_control(journals, "asset.cash", JournalSide::debit) == expected_cash);
+  assert(journal_control(journals, "liability.trade-payable", JournalSide::credit) ==
+         expected_payable);
+  assert(journal_control(journals, "asset.trade-receivable", JournalSide::debit) ==
+         expected_receivable);
+
+  const auto expected_obligations =
+      static_cast<std::size_t>((expected_payable != 0) + (expected_receivable != 0));
+  assert(portfolio.open_settlement_obligations->size() == expected_obligations);
+  if (expected_payable != 0) {
+    assert(portfolio.open_settlement_obligations->front().key().direction() ==
+           SettlementDirection::payable);
+    assert(portfolio.open_settlement_obligations->front().amount().scaled_value() ==
+           expected_payable);
+  }
+  if (expected_receivable != 0) {
+    assert(portfolio.open_settlement_obligations->front().key().direction() ==
+           SettlementDirection::receivable);
+    assert(portfolio.open_settlement_obligations->front().amount().scaled_value() ==
+           expected_receivable);
+  }
+}
+
+void expect_projection_error(
+    const std::expected<TradeDateProjectionResult, TradeDateProjectionError> &result,
+    TradeDateProjectionDiagnosticCategory category, std::string_view record_id = {}) {
+  assert(!result);
+  assert(result.error().category() == category);
+  assert(result.error().category_name() == luca::category_name(category));
+  assert(!result.error().message().empty());
+  if (!record_id.empty()) {
+    assert(result.error().record_id());
+    assert(result.error().record_id()->value() == record_id);
+  }
+}
+
+void test_trade_date_projection_walkthrough() {
+  using namespace std::chrono;
+  const auto may_29 = 2026y / May / 29d;
+  const auto june_2 = 2026y / June / 2d;
+  const auto june_3 = 2026y / June / 3d;
+  const auto june_4 = 2026y / June / 4d;
+  const auto june_5 = 2026y / June / 5d;
+  const auto june_6 = 2026y / June / 6d;
+  const auto june_7 = 2026y / June / 7d;
+  const auto end_of_day = 23h + 59min + 59s;
+
+  const auto opening_effective = timestamp(may_29, 9h);
+  const auto opening_recorded = timestamp(may_29, 9h + 1min);
+  const auto trade_effective = timestamp(june_2, 14h);
+  const auto trade_recorded = timestamp(june_2, 14h + 1min);
+  const auto correction_recorded = timestamp(june_3, 9h);
+  const auto reversal_effective = timestamp(june_5, 10h);
+  const auto reversal_recorded = timestamp(june_7, 9h);
+
+  LifecycleLedger ledger;
+  accept(ledger,
+         LifecycleRecordDraft::originate(EconomicEventId{"opening-cash-economic"}, opening_recorded,
+                                         cash_event("opening-cash-record", opening_effective,
+                                                    "opening-cash-source", "fund-a", "100000")));
+  accept(ledger, LifecycleRecordDraft::originate(
+                     EconomicEventId{"trade-economic-1"}, trade_recorded,
+                     trade_event("trade-record-v1", trade_effective, "trade-source-original", "100",
+                                 "50", june_4)));
+  accept(ledger,
+         LifecycleRecordDraft::correct(EconomicEventId{"trade-economic-1"},
+                                       EventId{"trade-record-v1"}, correction_recorded,
+                                       trade_event("trade-record-v2", trade_effective,
+                                                   "trade-source-correction", "80", "55", june_4)));
+  accept(ledger,
+         LifecycleRecordDraft::reverse(EconomicEventId{"trade-reversal-economic-1"},
+                                       EventId{"trade-record-v2"}, reversal_recorded,
+                                       trade_event("reversal-record-v1", reversal_effective,
+                                                   "trade-source-reversal", "-80", "55", june_6)));
+
+  const auto original_economic = timestamp(june_2, end_of_day);
+  const auto original = ledger.resolve(timestamp(june_2, end_of_day), original_economic);
+  const auto original_journals = project_trade_date_journals(
+      original, {timestamp(june_2, end_of_day), original_economic, june_2});
+  assert(original_journals);
+  assert(original_journals->engine_version() == "fixture-accounting-engine-1");
+  assert(original_journals->projection_version() == "fixture-journal-projection-1");
+  assert(original_journals->lifecycle_contract_version() == "luca.event-lifecycle.v1");
+  assert(original_journals->policy().id() == AccountingPolicyId{"fixture.trade-date.v1"});
+  assert(original_journals->policy().version() == "1");
+  assert(original_journals->entries().size() == 2);
+  assert(original_journals->entries()[0].journal_entry_id() ==
+         JournalEntryId{"td.opening-cash-record.immediate"});
+  assert(original_journals->entries()[1].journal_entry_id() ==
+         JournalEntryId{"td.trade-record-v1.trade"});
+  assert(original_journals->entries()[1].debit_total().scaled_value() == 5'000'000'000);
+  assert(original_journals->active_record_ids().size() == 2);
+  assert(original_journals->lifecycle_record_ids().size() == 2);
+  assert(original_journals->economic_event_ids().size() == 2);
+  assert(original_journals->source_record_ids().size() == 2);
+  const auto original_repeat = project_trade_date_journals(
+      original, {timestamp(june_2, end_of_day), original_economic, june_2});
+  assert(original_repeat && *original_repeat == *original_journals);
+  expect_portfolio_controls(*original_journals, original, original_economic, june_2,
+                            100 * 100'000'000LL, 100'000'000'000LL, 5'000'000'000LL, 0);
+
+  const auto corrected_economic = timestamp(june_2, end_of_day);
+  const auto corrected = ledger.resolve(timestamp(june_3, end_of_day), corrected_economic);
+  const auto corrected_journals = project_trade_date_journals(
+      corrected, {timestamp(june_3, end_of_day), corrected_economic, june_2});
+  assert(corrected_journals && corrected_journals->entries().size() == 2);
+  const auto &corrected_trade = corrected_journals->entries()[1];
+  assert(corrected_trade.active_record_id() == EventId{"trade-record-v2"});
+  assert(corrected_trade.debit_total().scaled_value() == 4'400'000'000LL);
+  assert(corrected_trade.lineage().record_ids().size() == 2);
+  assert(corrected_trade.lineage().record_ids()[0] == EventId{"trade-record-v1"});
+  assert(corrected_trade.lineage().record_ids()[1] == EventId{"trade-record-v2"});
+  assert(corrected_trade.lineage().source_record_ids().size() == 2);
+  assert(corrected_journals->active_record_ids().size() == 2);
+  assert(corrected_journals->lifecycle_record_ids().size() == 3);
+  assert(corrected_journals->source_record_ids().size() == 3);
+  expect_portfolio_controls(*corrected_journals, corrected, corrected_economic, june_2,
+                            80 * 100'000'000LL, 100'000'000'000LL, 4'400'000'000LL, 0);
+
+  const auto settled_economic = timestamp(june_4, end_of_day);
+  const auto settled = ledger.resolve(timestamp(june_3, end_of_day), settled_economic);
+  const auto settled_journals = project_trade_date_journals(
+      settled, {timestamp(june_3, end_of_day), settled_economic, june_4});
+  assert(settled_journals && settled_journals->entries().size() == 3);
+  assert(settled_journals->entries()[2].journal_entry_id() ==
+         JournalEntryId{"td.trade-record-v2.settlement"});
+  assert(settled_journals->entries()[2].phase_ordinal() == 1);
+  assert(settled_journals->entries()[2].lines()[0].account_id() ==
+         AccountId{"liability.trade-payable"});
+  assert(settled_journals->entries()[2].lines()[1].account_id() == AccountId{"asset.cash"});
+  expect_portfolio_controls(*settled_journals, settled, settled_economic, june_4,
+                            80 * 100'000'000LL, 95'600'000'000LL, 0, 0);
+
+  const auto reversal_economic = timestamp(june_5, end_of_day);
+  const auto reversed = ledger.resolve(timestamp(june_7, 12h), reversal_economic);
+  const auto reversal_journals =
+      project_trade_date_journals(reversed, {timestamp(june_7, 12h), reversal_economic, june_5});
+  assert(reversal_journals && reversal_journals->entries().size() == 4);
+  assert(reversal_journals->entries()[3].journal_entry_id() ==
+         JournalEntryId{"td.reversal-record-v1.trade"});
+  assert(reversal_journals->entries()[3].lines()[0].account_id() ==
+         AccountId{"asset.trade-receivable"});
+  assert(reversal_journals->entries()[3].lines()[1].account_id() ==
+         AccountId{"asset.equity-securities"});
+  assert(reversal_journals->entries()[3].lineage().reverses_record_id() ==
+         EventId{"trade-record-v2"});
+  assert(reversal_journals->source_record_ids().size() == 4);
+  expect_portfolio_controls(*reversal_journals, reversed, reversal_economic, june_5, 0,
+                            95'600'000'000LL, 0, 4'400'000'000LL);
+
+  const auto reversal_settled_economic = timestamp(june_6, end_of_day);
+  const auto reversal_settled = ledger.resolve(timestamp(june_7, 12h), reversal_settled_economic);
+  const auto reversal_settled_journals = project_trade_date_journals(
+      reversal_settled, {timestamp(june_7, 12h), reversal_settled_economic, june_6});
+  assert(reversal_settled_journals && reversal_settled_journals->entries().size() == 5);
+  assert(reversal_settled_journals->entries()[4].journal_entry_id() ==
+         JournalEntryId{"td.reversal-record-v1.settlement"});
+  assert(reversal_settled_journals->entries()[4].lines()[0].account_id() ==
+         AccountId{"asset.cash"});
+  assert(reversal_settled_journals->entries()[4].lines()[1].account_id() ==
+         AccountId{"asset.trade-receivable"});
+  expect_portfolio_controls(*reversal_settled_journals, reversal_settled, reversal_settled_economic,
+                            june_6, 0, 100'000'000'000LL, 0, 0);
+
+  expect_projection_error(
+      project_trade_date_journals(corrected, {trade_recorded, corrected_economic, june_2}),
+      TradeDateProjectionDiagnosticCategory::invalid_context, "trade-record-v2");
+  expect_projection_error(
+      project_trade_date_journals(
+          original, {timestamp(june_2, end_of_day), original_economic, 2026y / February / 30d}),
+      TradeDateProjectionDiagnosticCategory::invalid_context);
+}
+
+void test_trade_date_projection_rounding_and_rejections() {
+  using namespace std::chrono;
+  const auto trade_date = 2026y / June / 2d;
+  const auto settlement_date = 2026y / June / 4d;
+  const auto effective = timestamp(trade_date, 10h);
+  const auto recorded = timestamp(trade_date, 11h);
+  const auto cutoff = timestamp(trade_date, 23h);
+  const auto context = TradeDateProjectionContext{cutoff, cutoff, trade_date};
+
+  const auto project_one = [&](EconomicEvent event) {
+    LifecycleLedger ledger;
+    accept(ledger, LifecycleRecordDraft::originate(EconomicEventId{"economic"}, recorded,
+                                                   std::move(event)));
+    const auto resolution = ledger.resolve(cutoff, cutoff);
+    return project_trade_date_journals(resolution, context);
+  };
+
+  const auto rounded = project_one(
+      trade_event("rounded", effective, "rounded-source", "0.00000001", "150", settlement_date));
+  assert(rounded && rounded->entries().size() == 1);
+  assert(rounded->entries()[0].debit_total().scaled_value() == 2);
+  const auto rounded_even = project_one(trade_event(
+      "rounded-even", effective, "rounded-even-source", "0.00000001", "250", settlement_date));
+  assert(rounded_even && rounded_even->entries()[0].debit_total().scaled_value() == 2);
+
+  expect_projection_error(
+      project_one(cash_event("withdrawal", effective, "withdrawal-source", "fund-a", "-1")),
+      TradeDateProjectionDiagnosticCategory::unsupported_event, "withdrawal");
+  expect_projection_error(
+      project_one(trade_event("sell", effective, "sell-source", "-1", "50", settlement_date)),
+      TradeDateProjectionDiagnosticCategory::unsupported_event, "sell");
+  expect_projection_error(project_one(trade_event("zero-price", effective, "zero-price-source", "1",
+                                                  "0", settlement_date)),
+                          TradeDateProjectionDiagnosticCategory::unsupported_event, "zero-price");
+  expect_projection_error(
+      project_one(cash_event("eur-cash", effective, "eur-source", "fund-a", "1", "EUR")),
+      TradeDateProjectionDiagnosticCategory::unsupported_currency, "eur-cash");
+
+  LifecycleLedger euro_ledger;
+  accept(euro_ledger,
+         LifecycleRecordDraft::originate(EconomicEventId{"eur-economic"}, recorded,
+                                         trade_event("eur-trade", effective, "eur-source", "1",
+                                                     "50", settlement_date, "fund-a", "EUR")));
+  const auto euro_resolution = euro_ledger.resolve(cutoff, cutoff);
+  expect_projection_error(project_trade_date_journals(euro_resolution, context),
+                          TradeDateProjectionDiagnosticCategory::unsupported_currency, "eur-trade");
+
+  const auto maximum = std::numeric_limits<std::int64_t>::max();
+  auto overflow_header = EventHeader::create(EventId{"overflow"}, AccountId{"fund-a"}, effective,
+                                             provenance("overflow-source"));
+  auto overflow_date = SettlementDate::create(settlement_date);
+  assert(overflow_header && overflow_date);
+  auto overflow_trade =
+      EquityTrade::create(*overflow_header, InstrumentId{"MSFT"}, Quantity::from_scaled(maximum),
+                          Price::from_scaled(maximum), currency("USD"), *overflow_date);
+  assert(overflow_trade);
+  expect_projection_error(project_one(*overflow_trade),
+                          TradeDateProjectionDiagnosticCategory::arithmetic_overflow, "overflow");
+
+  LifecycleLedger partial_reversal_ledger;
+  accept(partial_reversal_ledger,
+         LifecycleRecordDraft::originate(EconomicEventId{"partial-target-economic"}, recorded,
+                                         trade_event("partial-target", effective,
+                                                     "partial-target-source", "10", "50",
+                                                     settlement_date)));
+  const auto partial_reversal = partial_reversal_ledger.accept(LifecycleRecordDraft::reverse(
+      EconomicEventId{"partial-reversal-economic"}, EventId{"partial-target"}, recorded + 1s,
+      trade_event("partial-reversal", effective + 1s, "partial-reversal-source", "-9", "50",
+                  settlement_date)));
+  assert(!partial_reversal);
+  assert(partial_reversal.error().category() ==
+         LifecycleDiagnosticCategory::incompatible_event_relationship);
+  assert(partial_reversal.error().category_name() == "incompatible_event_relationship");
+}
 } // namespace
 
 int main() {
@@ -400,6 +710,8 @@ int main() {
 
   test_valid_journal_entries();
   test_journal_factory_rejections_and_boundaries();
+  test_trade_date_projection_walkthrough();
+  test_trade_date_projection_rounding_and_rejections();
 
   constexpr Timestamp later{10h + 5s};
   constexpr Timestamp earlier{9h + 59min + 58s};
