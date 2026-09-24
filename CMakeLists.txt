@@ -8,18 +8,53 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+add_library(luca_ledger INTERFACE)
+add_library(luca::ledger ALIAS luca_ledger)
+set_target_properties(luca_ledger PROPERTIES EXPORT_NAME ledger)
+target_compile_features(luca_ledger INTERFACE cxx_std_23)
+target_include_directories(luca_ledger INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/libs/ledger/include>
+  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+
+add_library(luca_portfolio INTERFACE)
+add_library(luca::portfolio ALIAS luca_portfolio)
+set_target_properties(luca_portfolio PROPERTIES EXPORT_NAME portfolio)
+target_compile_features(luca_portfolio INTERFACE cxx_std_23)
+target_include_directories(luca_portfolio INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/libs/portfolio/include>
+  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+target_link_libraries(luca_portfolio INTERFACE luca::ledger)
+
+add_library(luca_reconciliation INTERFACE)
+add_library(luca::reconciliation ALIAS luca_reconciliation)
+set_target_properties(luca_reconciliation PROPERTIES EXPORT_NAME reconciliation)
+target_compile_features(luca_reconciliation INTERFACE cxx_std_23)
+target_include_directories(luca_reconciliation INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/libs/reconciliation/include>
+  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+target_link_libraries(luca_reconciliation INTERFACE
+  luca::portfolio
+  luca::ledger)
+
 add_library(pacioli INTERFACE)
 add_library(luca::luca ALIAS pacioli)
 set_target_properties(pacioli PROPERTIES EXPORT_NAME luca)
 target_compile_features(pacioli INTERFACE cxx_std_23)
 target_include_directories(pacioli INTERFACE
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/libs/ledger/include>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/libs/portfolio/include>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/libs/reconciliation/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+target_link_libraries(pacioli INTERFACE
+  luca::ledger
+  luca::portfolio
+  luca::reconciliation)
 
-install(TARGETS pacioli EXPORT LucaTargets)
+install(
+  TARGETS
+    luca_ledger
+    luca_portfolio
+    luca_reconciliation
+    pacioli
+  EXPORT LucaTargets)
 install(
   DIRECTORY
     libs/ledger/include/

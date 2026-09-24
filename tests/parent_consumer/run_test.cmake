@@ -60,10 +60,20 @@ if(NOT inventory_result EQUAL 0)
     "Parent test inventory failed (${inventory_result})\n"
     "${inventory_output}\n${inventory_error}")
 endif()
-if(NOT inventory_output MATCHES "luca_parent_consumer_run" OR
-    NOT inventory_output MATCHES "Total Tests: 1")
+foreach(parent_test IN ITEMS
+    luca_parent_consumer_run
+    luca_parent_ledger_consumer_run
+    luca_parent_portfolio_consumer_run
+    luca_parent_reconciliation_consumer_run)
+  if(NOT inventory_output MATCHES "${parent_test}")
+    message(FATAL_ERROR
+      "Parent default test inventory is missing ${parent_test}\n"
+      "${inventory_output}\n${inventory_error}")
+  endif()
+endforeach()
+if(NOT inventory_output MATCHES "Total Tests: 4")
   message(FATAL_ERROR
-    "Parent default test inventory was not limited to its consumer test\n"
+    "Parent default test inventory was not limited to its four consumer tests\n"
     "${inventory_output}\n${inventory_error}")
 endif()
 if(inventory_output MATCHES "pacioli_|luca_package_consumer|benchmark")

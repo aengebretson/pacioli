@@ -1,148 +1,145 @@
 # LUCA packaging baseline
 
-The initial install/export audit covers task O1-T01 at source commit
-`2af21ce91cdc299d00717d9cca462a17e229ec59`. The O1-T02 parent-consumer
-implementation commit `5414bb017036e06a4c6489379eba172548cf2a36` was originally
-based on `38d9caba2e8106aec27ab0a6178ef81fffdfaa01`. This bounded repair applies
-that implementation to current-main base
-`23fb82fafd64d056aa17be1708851e41c953133c`.
+This audit records the O1-T03 package surface on source base
+`b0e025f6e37722688315a59d193ad5d671a5e265`. It extends the install/export and
+parent-consumer baselines from O1-T01 and O1-T02 without changing public
+headers or financial behavior.
 
 ## Canonical identity inspected
 
 - The checked-out Git remote is `https://github.com/aengebretson/pacioli.git`.
 - The repository README identifies the product as Pacioli LUCA, while the
   canonical C++ headers and types use the `luca` namespace.
-- The root CMake project is still named `pacioli` at version `0.1.0`. This task
+- The root CMake project remains `pacioli` at version `0.1.0`. This increment
   does not rename the repository or project and does not publish a release.
 
-## Consumer behavior
+## Implemented target surface
 
-Before this task, the source tree exposed one header-only CMake target named
-`pacioli`. It provided the ledger, portfolio, reconciliation, and legacy
-forwarding include roots directly from the source checkout. It had no CMake
-namespace alias, install rules, exported targets, package configuration, or
-out-of-tree consumer test.
+The same canonical names are available when the source is nested with
+`add_subdirectory` and when an installation is loaded with
+`find_package(Luca CONFIG REQUIRED)`:
 
-This task adds the following bounded package surface while retaining the
-existing source target:
-
-| Consumption mode | Public target | Status |
+| Public target | Public domain | Direct interface dependencies |
 | --- | --- | --- |
-| `add_subdirectory` | `pacioli` | Existing target retained |
-| `add_subdirectory` | `luca::luca` | Implemented umbrella alias |
-| `find_package(Luca CONFIG REQUIRED)` | `luca::luca` | Implemented installed export |
-| Either mode | `luca::ledger` | Missing |
-| Either mode | `luca::portfolio` | Missing |
-| Either mode | `luca::reconciliation` | Missing |
+| `luca::ledger` | Canonical values, events, lifecycle, ledger, serialization | None |
+| `luca::portfolio` | Position, cash, lifecycle, and settlement projections | `luca::ledger` |
+| `luca::reconciliation` | Position and cash observations and reconciliation | `luca::portfolio`, `luca::ledger` |
+| `luca::luca` | Compatible umbrella, including the legacy forwarding header | All three domain targets |
 
-The installed target requires C++23 and exposes only the install prefix's
-include directory. Installation includes the canonical `luca/...` public
-headers and the existing `pacioli/ledger.hpp` compatibility header. Package
-metadata is installed under `lib/cmake/Luca` (or the platform-specific GNU
-install library directory).
+Each target requires the `cxx_std_23` compile feature. In a source build, each
+domain target exposes only its own `libs/<domain>/include` root and receives
+other domains transitively through its interface dependencies. The umbrella
+exposes only the compatibility `include` root directly. In an installation,
+all four targets expose only the installation's public include directory.
 
-`tests/package_consumer` is an independent CMake project. The main build's
-CTest entry installs LUCA to an isolated prefix, configures that consumer with
-only the prefix through `CMAKE_PREFIX_PATH`, links `luca::luca`, builds it, and
-runs a deterministic public-API cash projection. The expected output is:
+The source target `pacioli` and its `luca::luca` alias remain available to
+existing source and parent-project consumers. The export names produce
+`luca::ledger`, `luca::portfolio`, `luca::reconciliation`, and `luca::luca` as
+installed imported targets. There is deliberately no installed `pacioli`
+target; that target name was source-compatible behavior rather than an earlier
+installed-package contract.
+
+Installation continues to include the canonical `luca/...` headers and the
+existing `pacioli/ledger.hpp` compatibility header. Package metadata is under
+`lib/cmake/Luca` (or the platform-specific GNU install library directory).
+Only install-interface paths are written to the exported targets, so the
+metadata is relocatable and contains no checkout source or build paths.
+
+## Independent installed-package consumer
+
+`tests/package_consumer` is a separate CMake project. Its regression driver
+installs LUCA to a newly cleaned isolated prefix, scans every installed CMake
+metadata file for source- or build-tree paths, and configures the consumer with
+that prefix through `CMAKE_PREFIX_PATH`.
+
+At configure time the consumer proves that all four canonical names are
+installed `IMPORTED` targets, checks their C++23 feature, include directory,
+and exact domain dependency links, then builds and runs:
+
+- a ledger append linked only to `luca::ledger`;
+- the deterministic cash projection linked only to `luca::portfolio`;
+- matching position reconciliation linked only to `luca::reconciliation`;
+- the existing deterministic cash projection linked to `luca::luca`.
+
+The representative output remains:
 
 ```text
+ledger_entries=1
 cash_scaled=125000000 currency=USD
+position_breaks=0
 ```
+
+Because this project calls only `find_package`, asserts that the targets are
+imported, and has no `add_subdirectory` path to LUCA, the domain target names
+are proven to come from the installed package rather than in-tree aliases.
 
 ## Parent-project behavior
 
-`PACIOLI_BUILD_TESTS` now defaults from CMake's `PROJECT_IS_TOP_LEVEL` state.
-It remains `ON` for a direct top-level LUCA configuration and defaults to
-`OFF` when an unrelated project adds LUCA with `add_subdirectory`. Benchmarks
-continue to default to `OFF`. A parent can explicitly opt into the Luca tests
-with `-DPACIOLI_BUILD_TESTS=ON`; this does not change the installed
-`find_package(Luca)` configuration or exported `luca::luca` target.
+`tests/parent_consumer` remains a separate CMake project. It adds LUCA in a
+separate binary directory and verifies that the four canonical names are
+non-imported aliases with the same C++23 features, include boundaries, and
+dependency graph as the installed targets. It builds and runs the same ledger,
+portfolio, reconciliation, and umbrella examples.
 
-`tests/parent_consumer` is an independent CMake project that disables Python3
-package discovery, adds the LUCA source tree in a separate binary directory,
-links `luca::luca`, and runs the same deterministic public cash-projection
-result used by the installed-package smoke test. Its default CTest inventory
-contains only `luca_parent_consumer_run`; it contains no LUCA unit,
-conformance, benchmark, or installed-package consumer tests. The regression
-driver also performs a separate configure with the explicit test opt-in and
-checks that the LUCA smoke, conformance, and installed-package consumer tests
-are then present.
+`PACIOLI_BUILD_TESTS` still defaults from CMake's `PROJECT_IS_TOP_LEVEL` state.
+The parent's default configuration disables Python package discovery and
+registers only its four parent-owned consumer tests; no LUCA unit,
+conformance, benchmark, or nested consumer test is registered. A separate
+configuration with `-DPACIOLI_BUILD_TESTS=ON` and Python enabled confirms the
+existing explicit opt-in behavior still exposes the LUCA suite.
 
 ## Remaining package and platform gaps
 
-- The domain-oriented `luca::ledger`, `luca::portfolio`, and
-  `luca::reconciliation` targets described by the Slice 1 design are not part
-  of this bounded increment.
-- The CMake project and option names still use the historical `pacioli` /
+- The CMake project and option names retain the historical `pacioli` /
   `PACIOLI_*` identity, and the legacy forwarding header remains present.
 - The source project still sets directory-wide C++ standard variables in its
-  own CMake directory rather than expressing every setting only on targets.
+  own CMake directory in addition to the target compile features.
 - No package-manager recipe, binary artifact, ABI guarantee, repository rename,
-  tag, or public release is created here.
-- Local verification covers the compilers actually available in the assigned
-  environment. GCC is available; Clang and MSVC are not installed here, and no
-  existing compiler CI matrix was present at the inspected commit.
+  tag, CI change, or public release is part of this increment.
+- GCC is the only C++ compiler installed in this worker. The Clang C++ compiler
+  is unavailable, and MSVC/Windows cannot be exercised from this Linux
+  environment. No result is inferred for those missing toolchains.
 
-These bounded install/export and parent-consumer checks do not establish the
-remaining target namespaces, cross-compiler coverage, or completion of O1.
+## Verification environment and evidence
 
-## Verification environment
-
+- Linux 6.8.0-139-generic x86_64
 - CMake 3.25.1
 - Ninja 1.11.1
-- GCC/G++ 12.2.0 on Linux
-- Clang: unavailable in the assigned environment
-- MSVC/Windows: unavailable in the assigned environment
+- GCC/G++ 12.2.0
+- Python 3.11.2
+- Clang C++ compiler: unavailable
+- MSVC/Windows: unavailable
 
 Evidence collected in this environment:
 
 ```text
-cmake --preset dev                  passed
-cmake --build --preset dev          passed
-ctest --preset dev                  14/14 passed
-cmake -S . -B build/top_level_default_verification
-      -G Ninja -DCMAKE_BUILD_TYPE=Debug
-                                       passed
-cmake -LA -N build/top_level_default_verification
-                                       PACIOLI_BUILD_TESTS=ON;
-                                       PACIOLI_BUILD_BENCHMARKS=OFF
+cmake --preset dev
+cmake --build --preset dev --parallel 2
+ctest --preset dev --output-on-failure
+                                      passed; 17/17 tests
 
-cmake -S tests/parent_consumer
-      -B build/parent_consumer_verification
-      -G Ninja -DLUCA_SOURCE_DIR=$PWD -DCMAKE_BUILD_TYPE=Debug
-                                       passed; no Python3 discovery
-cmake --build build/parent_consumer_verification
-                                       passed
-cmake -LA -N build/parent_consumer_verification
-                                       PACIOLI_BUILD_TESTS=OFF;
-                                       PACIOLI_BUILD_BENCHMARKS=OFF
-ctest --test-dir build/parent_consumer_verification -N
-                                       one parent test listed
-ctest --test-dir build/parent_consumer_verification --output-on-failure
-                                       1/1 passed
-./build/parent_consumer_verification/luca_parent_consumer
-                                       cash_scaled=125000000 currency=USD
-
-cmake -S tests/parent_consumer
-      -B build/parent_consumer_opt_in_verification
-      -G Ninja -DLUCA_SOURCE_DIR=$PWD -DCMAKE_BUILD_TYPE=Debug
-      -DPACIOLI_BUILD_TESTS=ON
-      -DLUCA_PARENT_CONSUMER_ALLOW_PYTHON=ON
-                                       passed
-ctest --test-dir build/parent_consumer_opt_in_verification
-      --show-only=json-v1             listed the parent test plus all 14 LUCA tests
+cmake --preset release
+cmake --build --preset release --parallel 2
+ctest --preset release --output-on-failure
+                                      passed; 17/17 tests
 
 ctest --preset dev
-      -R 'luca_(package|parent)_consumer_test' --output-on-failure
-                                       2/2 passed
-git diff --check                     passed
-rg -n '[[:blank:]]+$' CMakeLists.txt docs/PACKAGING_BASELINE.md
-      tests/parent_consumer           no matches
+      -R 'luca_(package|parent)_consumer_test'
+      --output-on-failure -V
+                                      passed; 2/2 outer checks
+                                      package consumer 4/4
+                                      parent default 4/4
+                                      explicit Luca test opt-in present
+
+clang-format-14 --dry-run --Werror <new consumer C++ sources>
+git diff --check
+rg -n '[[:blank:]]+$' <allowed changed paths>
+                                      passed; no formatting or whitespace errors
 ```
 
-The top-level CTest pass includes `luca_package_consumer_test`, which performs
-the install and `find_package` sequence described above, and
-`luca_parent_consumer_test`, which performs the default and opt-in nested
-configuration checks. Compiler/platform coverage not present in this
-environment remains explicit rather than inferred.
+The package-consumer check performs the clean isolated install, relocation
+scan, imported-target property inspection, build, and executions. The parent
+check performs the default and explicit-opt-in configurations, source-target
+property inspection, inventory checks, build, and executions. Compiler and
+platform coverage not installed in this environment remains explicit rather
+than inferred.
