@@ -418,4 +418,3 @@ def parse_request(document: Any) -> AnalysisRequest:
         limits=Limits(max_observations, max_origins),
         sha256=request_hash,
     )
-

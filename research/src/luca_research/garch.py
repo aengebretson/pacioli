@@ -150,4 +150,3 @@ def fit_garch11(
         aic=float(result.aic),
         bic=float(result.bic),
     )
-

@@ -22,4 +22,3 @@ luca-volatility = "luca_research.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-

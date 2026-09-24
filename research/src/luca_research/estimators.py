@@ -83,4 +83,3 @@ def qlike(forecast_variance: float, realized_variance: float) -> float:
 def squared_variance_error(forecast_variance: float, realized_variance: float) -> float:
     difference = forecast_variance - realized_variance
     return difference * difference
-
