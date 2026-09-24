@@ -123,6 +123,15 @@ if(PACIOLI_BUILD_TESTS)
   add_test(NAME pacioli_checkpoint_manifest_serialization_test
     COMMAND pacioli_checkpoint_manifest_serialization_test)
 
+  add_executable(pacioli_checkpoint_decode_test
+    tests/unit/checkpoint_decode_test.cpp)
+  target_compile_definitions(pacioli_checkpoint_decode_test PRIVATE
+    "LUCA_CHECKPOINT_DECODE_FIXTURE_PATH=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/conformance/serialization-checkpoints/valid-append.json\""
+    "LUCA_CHECKPOINT_DECODE_LATE_FIXTURE_PATH=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/conformance/serialization-checkpoints/late-correction.json\"")
+  target_link_libraries(pacioli_checkpoint_decode_test PRIVATE luca::portfolio)
+  add_test(NAME pacioli_checkpoint_decode_test
+    COMMAND pacioli_checkpoint_decode_test)
+
   add_executable(pacioli_checkpoint_resume_test
     tests/unit/checkpoint_resume_test.cpp)
   target_link_libraries(pacioli_checkpoint_resume_test PRIVATE luca::portfolio)

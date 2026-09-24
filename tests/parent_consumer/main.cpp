@@ -44,8 +44,11 @@ int main() {
   const luca::PortfolioState state{{}, *balances, {}};
   const auto state_bytes = luca::serialization::canonical_bytes(state);
   const auto state_digest = luca::serialization::canonical_digest(state);
+  const auto decoded_state = luca::serialization::decode_portfolio_state(state_bytes);
   if (state_bytes != luca::serialization::canonical_bytes(state) ||
-      state_digest != luca::serialization::canonical_digest(state) || state_digest.size() != 64) {
+      state_digest != luca::serialization::canonical_digest(state) || state_digest.size() != 64 ||
+      !decoded_state || *decoded_state != state ||
+      luca::serialization::canonical_bytes(*decoded_state) != state_bytes) {
     return 5;
   }
 
@@ -85,9 +88,13 @@ int main() {
   const auto manifest =
       luca::CheckpointManifest::create(*projection, "parent-engine-1", *policy, *partition, *prefix,
                                        *context, *checkpoint_digest, *watermark, *lineage);
-  if (!manifest ||
+  if (!manifest)
+    return 6;
+  const auto manifest_bytes = luca::serialization::canonical_bytes(*manifest);
+  const auto decoded_manifest = luca::serialization::decode_checkpoint_manifest(manifest_bytes);
+  if (!decoded_manifest || *decoded_manifest != *manifest ||
       luca::serialization::canonical_bytes(*manifest) !=
-          luca::serialization::canonical_bytes(*manifest) ||
+          luca::serialization::canonical_bytes(*decoded_manifest) ||
       luca::serialization::canonical_digest(*manifest).size() != 64) {
     return 6;
   }
