@@ -5,5 +5,6 @@
 #include "luca/portfolio/lifecycle_projection.hpp"
 #include "luca/portfolio/position.hpp"
 #include "luca/portfolio/position_projection.hpp"
+#include "luca/portfolio/serialization.hpp"
 #include "luca/portfolio/settlement.hpp"
 #include "luca/portfolio/settlement_projection.hpp"

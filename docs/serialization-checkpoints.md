@@ -93,15 +93,16 @@ rate, sequence, or watermark values.
 
 ### Typed C++ encoding API
 
-`<luca/serialization/canonical.hpp>` provides the production encoding slices.
-`luca::serialization::canonical_bytes` and `canonical_digest` are a closed,
-typed overload set for `Money`, `Quantity`, `Price`, `Provenance`,
+`<luca/serialization/canonical.hpp>` provides the ledger production encoding
+slices, and `<luca/portfolio/serialization.hpp>` adds the portfolio-state
+slice. `luca::serialization::canonical_bytes` and `canonical_digest` are a
+closed, typed overload set for `Money`, `Quantity`, `Price`, `Provenance`,
 `EventHeader`, `CashMovement`, `EquityTrade`, `EconomicEvent`,
-`LifecycleRecord`, and `LifecycleLedger`. Bytes are returned as an owned
-`CanonicalBytes` (`std::vector<std::byte>`), and the digest is returned as 64
-lower-case hexadecimal characters. The API is header-only and is available to
-installed-package and `add_subdirectory` consumers through the existing Luca
-targets; it has no third-party dependency.
+`LifecycleRecord`, `LifecycleLedger`, and `PortfolioState`. Bytes are returned
+as an owned `CanonicalBytes` (`std::vector<std::byte>`), and the digest is
+returned as 64 lower-case hexadecimal characters. The API is header-only and
+is available to installed-package and `add_subdirectory` consumers through the
+existing Luca targets; it has no third-party dependency.
 
 Each overload emits the closed v1 map defined here. Money owns its currency,
 scale `6`, scaled value, and `luca.money.v1` schema identity. Quantity and price
@@ -218,6 +219,14 @@ The state has exactly `positions`, `settled_cash`, and
 
 Sparse projection rules remain authoritative: zero position and cash balances
 are omitted. Receivables and payables remain separate and are not netted.
+
+The C++ `PortfolioState` exchange value owns vectors of the existing
+`Position`, `CashBalance`, and `SettlementObligation` types. Its typed encoder
+validates the sparse invariants and scalar representability, rejects duplicate
+keys, and canonicalizes caller-supplied collection order without mutating the
+value. Ordering compares identifier UTF-8 octets as unsigned bytes, so it is
+independent of platform `char` signedness. The encoder fixes all four v1 schema
+identities; callers cannot select or override a schema name or version.
 
 ### Evaluation context — `luca.evaluation-context.v1`
 
@@ -384,11 +393,11 @@ second financial projection engine in Python.
 ## Deliberately deferred
 
 This increment does not select a storage medium, persistence service, decoding
-API, arbitrary-schema runtime, portfolio-state/checkpoint-manifest C++ API,
-platform adapter, journal policy, production schema, migration process,
-compression, signature scheme, Merkle structure, streaming frame, or release
-behavior. General advancing-context incremental replay, partial-partition
-repair, an empty-event checkpoint, and additional event/projection variants
-require later versioned contracts and fixtures. There is no unresolved encoding
-default inside the covered v1 values: unsupported types or versions are rejected
-rather than guessed.
+API, arbitrary-schema runtime, checkpoint-manifest C++ API, platform adapter,
+journal policy, production schema, migration process, compression, signature
+scheme, Merkle structure, streaming frame, or release behavior. General
+advancing-context incremental replay, partial-partition repair, an empty-event
+checkpoint, and additional event/projection variants require later versioned
+contracts and fixtures. There is no unresolved encoding default inside the
+covered v1 values: unsupported types or versions are rejected rather than
+guessed.
