@@ -1,4 +1,5 @@
 #include "luca/serialization/canonical.hpp"
+#include "luca/serialization/canonical_decode.hpp"
 
 #include <algorithm>
 #include <array>
@@ -6,9 +7,11 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <limits>
 #include <optional>
+#include <source_location>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -41,10 +44,13 @@ using luca::Timestamp;
 using luca::serialization::canonical_bytes;
 using luca::serialization::canonical_digest;
 using luca::serialization::CanonicalBytes;
+using luca::serialization::DecodeDiagnosticCategory;
 
-void check(bool condition) {
-  if (!condition)
+void check(bool condition, std::source_location location = std::source_location::current()) {
+  if (!condition) {
+    std::fprintf(stderr, "check failed at %s:%u\n", location.file_name(), location.line());
     std::abort();
+  }
 }
 
 template <class Operation> void check_invalid_argument(Operation &&operation) {
@@ -269,6 +275,100 @@ bool contains(std::span<const std::byte> bytes, std::string_view text) {
   return std::search(bytes.begin(), bytes.end(), needle.begin(), needle.end()) != bytes.end();
 }
 
+std::size_t find_ascii(std::span<const std::byte> bytes, std::string_view text,
+                       std::size_t start = 0U) {
+  CanonicalBytes needle;
+  needle.reserve(text.size());
+  for (const auto character : text)
+    needle.push_back(static_cast<std::byte>(static_cast<unsigned char>(character)));
+  const auto found = std::search(bytes.begin() + static_cast<std::ptrdiff_t>(start), bytes.end(),
+                                 needle.begin(), needle.end());
+  check(found != bytes.end());
+  return static_cast<std::size_t>(found - bytes.begin());
+}
+
+std::size_t find_ascii_occurrence(std::span<const std::byte> bytes, std::string_view text,
+                                  std::size_t occurrence) {
+  std::size_t offset = 0U;
+  for (std::size_t index = 0U; index <= occurrence; ++index) {
+    offset = find_ascii(bytes, text, offset);
+    if (index != occurrence)
+      ++offset;
+  }
+  return offset;
+}
+
+void replace_ascii_occurrence(CanonicalBytes &bytes, std::string_view old_value,
+                              std::string_view new_value, std::size_t occurrence = 0U) {
+  check(old_value.size() == new_value.size());
+  const auto offset = find_ascii_occurrence(bytes, old_value, occurrence);
+  for (std::size_t index = 0U; index < new_value.size(); ++index)
+    bytes[offset + index] = static_cast<std::byte>(static_cast<unsigned char>(new_value[index]));
+}
+
+std::size_t value_tag_after_key(std::span<const std::byte> bytes, std::string_view key,
+                                std::size_t occurrence = 0U) {
+  CanonicalBytes encoded_key;
+  luca::serialization::detail::append_u32(encoded_key, static_cast<std::uint32_t>(key.size()));
+  luca::serialization::detail::append_ascii(encoded_key, key);
+  auto search_begin = bytes.begin();
+  decltype(search_begin) found;
+  for (std::size_t index = 0U; index <= occurrence; ++index) {
+    found = std::search(search_begin, bytes.end(), encoded_key.begin(), encoded_key.end());
+    check(found != bytes.end());
+    search_begin = found + 1;
+  }
+  const auto tag_offset = static_cast<std::size_t>(found - bytes.begin()) + encoded_key.size();
+  check(tag_offset < bytes.size());
+  return tag_offset;
+}
+
+std::size_t text_payload_after_key(std::span<const std::byte> bytes, std::string_view key,
+                                   std::size_t occurrence = 0U) {
+  const auto tag_offset = value_tag_after_key(bytes, key, occurrence);
+  check(tag_offset + 5U <= bytes.size());
+  check(std::to_integer<std::uint8_t>(bytes[tag_offset]) == 0x04U);
+  return tag_offset + 5U;
+}
+
+void replace_text_after_key(CanonicalBytes &bytes, std::string_view key, std::string_view value,
+                            std::size_t occurrence = 0U) {
+  const auto offset = text_payload_after_key(bytes, key, occurrence);
+  check(offset + value.size() <= bytes.size());
+  for (std::size_t index = 0U; index < value.size(); ++index)
+    bytes[offset + index] = static_cast<std::byte>(static_cast<unsigned char>(value[index]));
+}
+
+template <class Result>
+void expect_decode_error(const Result &result, DecodeDiagnosticCategory category) {
+  check(!result.has_value());
+  if (result.error().category() != category) {
+    std::fprintf(stderr, "expected decode category %.*s, got %.*s: %s\n",
+                 static_cast<int>(luca::serialization::category_name(category).size()),
+                 luca::serialization::category_name(category).data(),
+                 static_cast<int>(result.error().category_name().size()),
+                 result.error().category_name().data(), result.error().message().c_str());
+  }
+  check(result.error().category() == category);
+  check(result.error().category_name() == luca::serialization::category_name(category));
+  check(!result.error().message().empty());
+}
+
+CanonicalBytes sequence_bytes(std::initializer_list<const LifecycleRecord *> records) {
+  using namespace luca::serialization::detail;
+  auto bytes = top_level_bytes();
+  append_map(bytes, 2U);
+  append_key(bytes, "records");
+  append_array(bytes, static_cast<std::uint64_t>(records.size()));
+  for (const auto *record : records)
+    append_lifecycle_record(bytes, *record);
+  append_key(bytes, "schema_version");
+  append_text(bytes, "luca.lifecycle-record-sequence.v1");
+  return bytes;
+}
+
+LifecycleLedger two_cash_records(bool reverse_order, std::int64_t second_amount = 2'000'000);
+
 template <class Value>
 concept CanonicallySerializable = requires(const Value &value) {
   { canonical_bytes(value) } -> std::same_as<CanonicalBytes>;
@@ -282,6 +382,12 @@ static_assert(CanonicallySerializable<EquityTrade>);
 static_assert(CanonicallySerializable<EconomicEvent>);
 static_assert(CanonicallySerializable<LifecycleRecord>);
 static_assert(CanonicallySerializable<LifecycleLedger>);
+
+static_assert(requires(std::span<const std::byte> bytes) {
+  {
+    luca::serialization::decode_lifecycle_ledger(bytes)
+    } -> std::same_as<std::expected<LifecycleLedger, luca::serialization::DecodeError>>;
+});
 
 void test_integrated_header_and_event_vectors(const LifecycleLedger &ledger) {
   const auto &cash_record = ledger.records()[0];
@@ -396,6 +502,9 @@ void test_timestamp_boundaries() {
     const auto ledger_bytes = canonical_bytes(ledger);
     check(contains(ledger_bytes, boundary.text));
     check(canonical_bytes(ledger) == ledger_bytes);
+    const auto decoded = luca::serialization::decode_lifecycle_ledger(ledger_bytes);
+    check(decoded.has_value());
+    check(canonical_bytes(*decoded) == ledger_bytes);
   }
 }
 
@@ -409,6 +518,320 @@ void test_integrated_portable_sequence_vectors() {
   check(canonical_bytes(full).size() == 4'895);
   check(canonical_digest(full) ==
         "f721b1451d65d2d315d70d210c49078d7a16a9df4bf5d6cd05a672d178547ad9");
+}
+
+void test_lifecycle_decode_round_trips_twice(const LifecycleLedger &ledger) {
+  const auto bytes = canonical_bytes(ledger);
+  const auto saved = bytes;
+  const auto digest = canonical_digest(ledger);
+
+  for (unsigned repetition = 0U; repetition < 2U; ++repetition) {
+    const auto decoded = luca::serialization::decode_lifecycle_ledger(bytes);
+    check(decoded.has_value());
+    check(decoded->size() == ledger.size());
+    check(std::equal(decoded->records().begin(), decoded->records().end(), ledger.records().begin(),
+                     ledger.records().end()));
+    check(canonical_bytes(*decoded) == bytes);
+    check(canonical_digest(*decoded) == digest);
+
+    const auto repeated = luca::serialization::decode_lifecycle_ledger(canonical_bytes(*decoded));
+    check(repeated.has_value());
+    check(canonical_bytes(*repeated) == bytes);
+    check(canonical_digest(*repeated) == digest);
+  }
+  check(bytes == saved);
+
+  for (const auto record_count : {std::size_t{1}, std::size_t{2}, std::size_t{4}}) {
+    const auto integrated = integrated_valid_append_fixture(record_count);
+    const auto integrated_bytes = canonical_bytes(integrated);
+    const auto integrated_digest = canonical_digest(integrated);
+    for (unsigned repetition = 0U; repetition < 2U; ++repetition) {
+      const auto decoded = luca::serialization::decode_lifecycle_ledger(integrated_bytes);
+      check(decoded.has_value());
+      check(canonical_bytes(*decoded) == integrated_bytes);
+      check(canonical_digest(*decoded) == integrated_digest);
+    }
+  }
+}
+
+void test_lifecycle_decode_reader_and_shape_failures(const LifecycleLedger &ledger) {
+  const auto valid = canonical_bytes(ledger);
+
+  auto malformed_header = valid;
+  malformed_header[0] = std::byte{'X'};
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(malformed_header),
+                      DecodeDiagnosticCategory::canonical_encoding);
+
+  auto unknown_tag = valid;
+  unknown_tag[4] = std::byte{0xff};
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(unknown_tag),
+                      DecodeDiagnosticCategory::canonical_encoding);
+
+  auto mistyped_records = valid;
+  const auto records_key = find_ascii(mistyped_records, "records");
+  mistyped_records[records_key + std::string_view{"records"}.size()] = std::byte{0x04};
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(mistyped_records),
+                      DecodeDiagnosticCategory::schema_shape);
+
+  for (const auto member_count : {std::uint8_t{1}, std::uint8_t{3}}) {
+    auto wrong_shape = valid;
+    wrong_shape[8] = static_cast<std::byte>(member_count);
+    expect_decode_error(luca::serialization::decode_lifecycle_ledger(wrong_shape),
+                        DecodeDiagnosticCategory::schema_shape);
+  }
+
+  auto unknown_member = valid;
+  replace_ascii_occurrence(unknown_member, "records", "recordz");
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(unknown_member),
+                      DecodeDiagnosticCategory::schema_shape);
+
+  auto reordered_member = valid;
+  replace_ascii_occurrence(reordered_member, "account", "aaaaaaa");
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(reordered_member),
+                      DecodeDiagnosticCategory::deterministic_ordering);
+
+  using namespace luca::serialization::detail;
+  auto duplicate_member = top_level_bytes();
+  append_map(duplicate_member, 2U);
+  append_key(duplicate_member, "records");
+  append_array(duplicate_member, 1U);
+  append_lifecycle_record(duplicate_member, ledger.records().front());
+  append_key(duplicate_member, "records");
+  append_array(duplicate_member, 0U);
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(duplicate_member),
+                      DecodeDiagnosticCategory::duplicate_identity);
+
+  auto empty_sequence = top_level_bytes();
+  append_map(empty_sequence, 2U);
+  append_key(empty_sequence, "records");
+  append_array(empty_sequence, 0U);
+  append_key(empty_sequence, "schema_version");
+  append_text(empty_sequence, "luca.lifecycle-record-sequence.v1");
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(empty_sequence),
+                      DecodeDiagnosticCategory::schema_shape);
+
+  auto mistyped_null = valid;
+  const auto causal_tag = value_tag_after_key(mistyped_null, "causal_record_id");
+  check(mistyped_null[causal_tag] == std::byte{0x00});
+  mistyped_null[causal_tag] = std::byte{0x01};
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(mistyped_null),
+                      DecodeDiagnosticCategory::schema_shape);
+
+  auto invalid_utf8 = valid;
+  invalid_utf8[find_ascii(invalid_utf8, "acct")] = std::byte{0xff};
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(invalid_utf8),
+                      DecodeDiagnosticCategory::canonical_encoding);
+
+  auto non_nfc = valid;
+  replace_ascii_occurrence(non_nfc, "acct", "e\xcc\x81x");
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(non_nfc),
+                      DecodeDiagnosticCategory::canonical_encoding);
+
+  auto excessive_text_length = valid;
+  const auto account_payload = text_payload_after_key(excessive_text_length, "account");
+  for (std::size_t index = account_payload - 4U; index < account_payload; ++index)
+    excessive_text_length[index] = std::byte{0xff};
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(excessive_text_length),
+                      DecodeDiagnosticCategory::canonical_encoding);
+
+  auto excessive_count = valid;
+  const auto records_tag =
+      find_ascii(excessive_count, "records") + std::string_view{"records"}.size();
+  for (std::size_t index = records_tag + 1U; index < records_tag + 9U; ++index)
+    excessive_count[index] = std::byte{0xff};
+  const auto saved_excessive_count = excessive_count;
+  const auto first_excessive = luca::serialization::decode_lifecycle_ledger(excessive_count);
+  const auto second_excessive = luca::serialization::decode_lifecycle_ledger(excessive_count);
+  expect_decode_error(first_excessive, DecodeDiagnosticCategory::canonical_encoding);
+  expect_decode_error(second_excessive, DecodeDiagnosticCategory::canonical_encoding);
+  check(first_excessive.error().offset() == second_excessive.error().offset());
+  check(excessive_count == saved_excessive_count);
+
+  auto trailing = valid;
+  trailing.push_back(std::byte{0});
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(trailing),
+                      DecodeDiagnosticCategory::canonical_encoding);
+
+  const std::array truncations{std::size_t{0}, std::size_t{1},    std::size_t{3},   std::size_t{4},
+                               std::size_t{8}, valid.size() / 2U, valid.size() - 1U};
+  for (const auto size : truncations) {
+    expect_decode_error(
+        luca::serialization::decode_lifecycle_ledger(std::span<const std::byte>{valid}.first(size)),
+        DecodeDiagnosticCategory::canonical_encoding);
+  }
+}
+
+void test_lifecycle_decode_schema_and_scalar_failures(const LifecycleLedger &ledger) {
+  const auto valid = canonical_bytes(ledger);
+
+  for (const auto &versions : {
+           std::pair{std::string_view{"luca.lifecycle-record-sequence.v1"},
+                     std::string_view{"luca.lifecycle-record-sequence.v2"}},
+           std::pair{std::string_view{"luca.lifecycle-record.v1"},
+                     std::string_view{"luca.lifecycle-record.v2"}},
+           std::pair{std::string_view{"luca.economic-event.v1"},
+                     std::string_view{"luca.economic-event.v2"}},
+           std::pair{std::string_view{"luca.event-header.v1"},
+                     std::string_view{"luca.event-header.v2"}},
+           std::pair{std::string_view{"luca.provenance.v1"},
+                     std::string_view{"luca.provenance.v2"}},
+           std::pair{std::string_view{"luca.money.v1"}, std::string_view{"luca.money.v2"}},
+           std::pair{std::string_view{"luca.quantity.v1"}, std::string_view{"luca.quantity.v2"}},
+           std::pair{std::string_view{"luca.price.v1"}, std::string_view{"luca.price.v2"}},
+       }) {
+    auto unsupported = valid;
+    replace_ascii_occurrence(unsupported, versions.first, versions.second);
+    expect_decode_error(luca::serialization::decode_lifecycle_ledger(unsupported),
+                        DecodeDiagnosticCategory::unsupported_version);
+  }
+
+  auto invalid_sequence = valid;
+  replace_text_after_key(invalid_sequence, "acceptance_sequence", "0");
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(invalid_sequence),
+                      DecodeDiagnosticCategory::canonical_encoding);
+
+  auto invalid_decimal = valid;
+  replace_ascii_occurrence(invalid_decimal, "1000000", "0100000");
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(invalid_decimal),
+                      DecodeDiagnosticCategory::canonical_encoding);
+
+  auto invalid_currency = valid;
+  replace_ascii_occurrence(invalid_currency, "USD", "UsD");
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(invalid_currency),
+                      DecodeDiagnosticCategory::canonical_encoding);
+
+  auto invalid_date = valid;
+  replace_ascii_occurrence(invalid_date, "2026-03-20", "2026-02-30");
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(invalid_date),
+                      DecodeDiagnosticCategory::canonical_encoding);
+
+  auto invalid_timestamp = valid;
+  replace_text_after_key(invalid_timestamp, "recorded_at", "2262-04-11T23:47:16.854775808Z");
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(invalid_timestamp),
+                      DecodeDiagnosticCategory::canonical_encoding);
+
+  auto invalid_action = valid;
+  replace_ascii_occurrence(invalid_action, "originate", "originatx");
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(invalid_action),
+                      DecodeDiagnosticCategory::schema_shape);
+
+  auto invalid_variant = valid;
+  replace_ascii_occurrence(invalid_variant, "cash_movement", "cash_movemenx");
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(invalid_variant),
+                      DecodeDiagnosticCategory::schema_shape);
+
+  auto inconsistent_redundancy = valid;
+  replace_ascii_occurrence(inconsistent_redundancy, "acct", "diff");
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(inconsistent_redundancy),
+                      DecodeDiagnosticCategory::schema_shape);
+
+  struct ActionMutation {
+    std::string_view replacement;
+    std::size_t record_index;
+  };
+  constexpr std::array action_mutations{
+      ActionMutation{"originatx", 0U}, ActionMutation{"originatx", 2U},
+      ActionMutation{"correcz", 1U},   ActionMutation{"correcz", 3U},
+      ActionMutation{"cancex", 5U},    ActionMutation{"cancex", 7U},
+      ActionMutation{"reversx", 9U},   ActionMutation{"reversx", 11U},
+  };
+  for (const auto &mutation : action_mutations) {
+    auto invalid = valid;
+    replace_text_after_key(invalid, "action", mutation.replacement, mutation.record_index);
+    expect_decode_error(luca::serialization::decode_lifecycle_ledger(invalid),
+                        DecodeDiagnosticCategory::schema_shape);
+  }
+}
+
+void test_lifecycle_decode_acceptance_failures(const LifecycleLedger &ledger) {
+  auto sequence_gap = canonical_bytes(ledger);
+  replace_text_after_key(sequence_gap, "acceptance_sequence", "2");
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(sequence_gap),
+                      DecodeDiagnosticCategory::deterministic_ordering);
+
+  const auto ordered = two_cash_records(false);
+  auto decreasing_recorded_time = canonical_bytes(ordered);
+  replace_text_after_key(decreasing_recorded_time, "recorded_at", "2026-03-09T20:00:00.000000000Z",
+                         1U);
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(decreasing_recorded_time),
+                      DecodeDiagnosticCategory::deterministic_ordering);
+
+  auto duplicate_identity = sequence_bytes({&ordered.records()[0], &ordered.records()[0]});
+  replace_text_after_key(duplicate_identity, "acceptance_sequence", "2", 1U);
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(duplicate_identity),
+                      DecodeDiagnosticCategory::duplicate_identity);
+
+  auto later_causal_reference = sequence_bytes({&ledger.records()[1], &ledger.records()[0]});
+  replace_text_after_key(later_causal_reference, "acceptance_sequence", "1");
+  replace_text_after_key(later_causal_reference, "acceptance_sequence", "2", 1U);
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(later_causal_reference),
+                      DecodeDiagnosticCategory::lineage_reference_missing);
+
+  auto changed_economic_identity = sequence_bytes({&ledger.records()[0], &ledger.records()[1]});
+  replace_text_after_key(changed_economic_identity, "economic_event_id", "cash-wrongxx", 1U);
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(changed_economic_identity),
+                      DecodeDiagnosticCategory::incompatible_event_relationship);
+
+  auto crossed_account = sequence_bytes({&ledger.records()[0], &ledger.records()[1]});
+  replace_ascii_occurrence(crossed_account, "acct", "diff", 3U);
+  replace_ascii_occurrence(crossed_account, "acct", "diff", 2U);
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(crossed_account),
+                      DecodeDiagnosticCategory::incompatible_account);
+
+  const auto recorded = [](unsigned hour) {
+    return timestamp(std::chrono::year{2026} / std::chrono::March / 12, std::chrono::hours{hour});
+  };
+  const auto effective = timestamp(std::chrono::year{2026} / std::chrono::March / 11, 9h);
+
+  const auto correction_chain = [&](std::string_view correction_id, std::int64_t amount) {
+    LifecycleLedger chain;
+    auto source = provenance("shared-origin");
+    accept(chain, LifecycleRecordDraft::originate(EconomicEventId{"shared-economic"}, recorded(1),
+                                                  cash("shared-origin", 10, effective, source)));
+    source = provenance(correction_id);
+    accept(chain, LifecycleRecordDraft::correct(EconomicEventId{"shared-economic"},
+                                                EventId{"shared-origin"}, recorded(2),
+                                                cash(correction_id, amount, effective, source)));
+    return chain;
+  };
+  const auto first_correction = correction_chain("correction-one", 11);
+  const auto second_correction = correction_chain("correction-two", 12);
+  auto conflicting_successors =
+      sequence_bytes({&first_correction.records()[0], &first_correction.records()[1],
+                      &second_correction.records()[1]});
+  replace_text_after_key(conflicting_successors, "acceptance_sequence", "3", 2U);
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(conflicting_successors),
+                      DecodeDiagnosticCategory::conflicting_lifecycle_successor);
+
+  LifecycleLedger cash_reversal;
+  auto source = provenance("cash-offset-origin");
+  accept(cash_reversal,
+         LifecycleRecordDraft::originate(EconomicEventId{"cash-offset"}, recorded(1),
+                                         cash("cash-offset-origin", 10, effective, source)));
+  source = provenance("cash-offset-reversal");
+  accept(cash_reversal,
+         LifecycleRecordDraft::reverse(EconomicEventId{"cash-offset-reversed"},
+                                       EventId{"cash-offset-origin"}, recorded(2),
+                                       cash("cash-offset-reversal", -10, effective + 1ns, source)));
+  auto invalid_cash_reversal = canonical_bytes(cash_reversal);
+  replace_text_after_key(invalid_cash_reversal, "scaled_value", "-11", 1U);
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(invalid_cash_reversal),
+                      DecodeDiagnosticCategory::incompatible_event_relationship);
+
+  LifecycleLedger equity_reversal;
+  source = provenance("equity-offset-origin");
+  accept(equity_reversal, LifecycleRecordDraft::originate(
+                              EconomicEventId{"equity-offset"}, recorded(1),
+                              trade("equity-offset-origin", 100, 25, effective, source)));
+  source = provenance("equity-offset-reversal");
+  accept(equity_reversal,
+         LifecycleRecordDraft::reverse(
+             EconomicEventId{"equity-offset-reversed"}, EventId{"equity-offset-origin"},
+             recorded(2), trade("equity-offset-reversal", -100, 25, effective + 1ns, source)));
+  auto invalid_equity_reversal = canonical_bytes(equity_reversal);
+  replace_text_after_key(invalid_equity_reversal, "scaled_value", "-101", 3U);
+  expect_decode_error(luca::serialization::decode_lifecycle_ledger(invalid_equity_reversal),
+                      DecodeDiagnosticCategory::incompatible_event_relationship);
 }
 
 void test_schema_invalid_text_and_empty_sequence_are_rejected() {
@@ -445,7 +868,7 @@ void test_schema_invalid_text_and_empty_sequence_are_rejected() {
   check_invalid_argument([&] { (void)canonical_digest(empty); });
 }
 
-LifecycleLedger two_cash_records(bool reverse_order, std::int64_t second_amount = 2'000'000) {
+LifecycleLedger two_cash_records(bool reverse_order, std::int64_t second_amount) {
   using std::chrono::March;
   using std::chrono::year;
   const auto effective = timestamp(year{2026} / March / 5, 9h);
@@ -559,6 +982,10 @@ int main() {
   test_unsigned_64_bit_sequence_primitives();
   test_timestamp_boundaries();
   test_integrated_portable_sequence_vectors();
+  test_lifecycle_decode_round_trips_twice(ledger);
+  test_lifecycle_decode_reader_and_shape_failures(ledger);
+  test_lifecycle_decode_schema_and_scalar_failures(ledger);
+  test_lifecycle_decode_acceptance_failures(ledger);
   test_schema_invalid_text_and_empty_sequence_are_rejected();
   test_owned_field_order_lineage_action_and_payload_mutations(ledger);
 }

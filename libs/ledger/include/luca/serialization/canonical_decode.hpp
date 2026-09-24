@@ -9,11 +9,15 @@
 #include <cstdint>
 #include <expected>
 #include <limits>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <unordered_set>
 #include <utility>
+#include <variant>
+#include <vector>
 
 namespace luca::serialization {
 
@@ -24,6 +28,9 @@ enum class DecodeDiagnosticCategory {
   duplicate_identity,
   deterministic_ordering,
   lineage_reference_missing,
+  incompatible_account,
+  incompatible_event_relationship,
+  conflicting_lifecycle_successor,
 };
 
 [[nodiscard]] constexpr std::string_view category_name(DecodeDiagnosticCategory category) noexcept {
@@ -40,6 +47,12 @@ enum class DecodeDiagnosticCategory {
     return "deterministic_ordering";
   case DecodeDiagnosticCategory::lineage_reference_missing:
     return "lineage_reference_missing";
+  case DecodeDiagnosticCategory::incompatible_account:
+    return "incompatible_account";
+  case DecodeDiagnosticCategory::incompatible_event_relationship:
+    return "incompatible_event_relationship";
+  case DecodeDiagnosticCategory::conflicting_lifecycle_successor:
+    return "conflicting_lifecycle_successor";
   }
   return "canonical_encoding";
 }
@@ -108,8 +121,7 @@ public:
     return {};
   }
 
-  [[nodiscard]] std::expected<void, DecodeError> read_map(std::uint32_t expected_members,
-                                                          std::string_view schema_name) {
+  [[nodiscard]] std::expected<std::uint32_t, DecodeError> read_map_count() {
     auto tag = expect_tag(0x06U, "map");
     if (!tag)
       return std::unexpected(tag.error());
@@ -120,6 +132,14 @@ public:
       return std::unexpected(error(DecodeDiagnosticCategory::canonical_encoding,
                                    "LCB1 map count exceeds the bounded input"));
     }
+    return *count;
+  }
+
+  [[nodiscard]] std::expected<void, DecodeError> read_map(std::uint32_t expected_members,
+                                                          std::string_view schema_name) {
+    auto count = read_map_count();
+    if (!count)
+      return std::unexpected(count.error());
     if (*count != expected_members) {
       return std::unexpected(
           error(DecodeDiagnosticCategory::schema_shape,
@@ -127,6 +147,12 @@ public:
     }
     return {};
   }
+
+  [[nodiscard]] bool next_is_null() const noexcept {
+    return remaining() != 0U && std::to_integer<std::uint8_t>(input_[offset_]) == 0x00U;
+  }
+
+  [[nodiscard]] std::expected<void, DecodeError> read_null() { return expect_tag(0x00U, "null"); }
 
   [[nodiscard]] std::expected<std::size_t, DecodeError>
   read_array_count(std::string_view field_name) {
@@ -422,4 +448,649 @@ parse_timestamp(Reader &reader, std::string_view value, std::string_view field) 
 }
 
 } // namespace decode_detail
+
+namespace lifecycle_decode_detail {
+
+[[nodiscard]] inline std::expected<std::string, DecodeError>
+read_identifier(decode_detail::Reader &reader, std::string_view field) {
+  auto value = decode_detail::read_required_text(reader, field);
+  if (!value)
+    return std::unexpected(value.error());
+  return std::string{*value};
+}
+
+[[nodiscard]] inline std::expected<std::optional<std::string>, DecodeError>
+read_optional_identifier(decode_detail::Reader &reader, std::string_view field) {
+  if (reader.next_is_null()) {
+    if (auto value = reader.read_null(); !value)
+      return std::unexpected(value.error());
+    return std::nullopt;
+  }
+  auto value = read_identifier(reader, field);
+  if (!value)
+    return std::unexpected(value.error());
+  return std::optional<std::string>{std::move(*value)};
+}
+
+[[nodiscard]] inline std::expected<Currency, DecodeError>
+read_currency(decode_detail::Reader &reader, std::string_view field) {
+  auto text = reader.read_text();
+  if (!text)
+    return std::unexpected(text.error());
+  const auto currency = Currency::from_code(*text);
+  if (!currency) {
+    return std::unexpected(
+        reader.error(DecodeDiagnosticCategory::canonical_encoding,
+                     std::string{field} + " must be three upper-case ASCII letters"));
+  }
+  return *currency;
+}
+
+[[nodiscard]] inline std::expected<void, DecodeError> require_version(decode_detail::Reader &reader,
+                                                                      std::string_view expected,
+                                                                      std::string_view value_name) {
+  auto schema = reader.read_text();
+  if (!schema)
+    return std::unexpected(schema.error());
+  if (*schema != expected) {
+    return std::unexpected(
+        reader.error(DecodeDiagnosticCategory::unsupported_version,
+                     std::string{value_name} + " schema version is not supported"));
+  }
+  return {};
+}
+
+[[nodiscard]] inline std::expected<Money, DecodeError> read_money(decode_detail::Reader &reader) {
+  auto shape = reader.read_map(4U, "luca.money.v1");
+  if (!shape)
+    return std::unexpected(shape.error());
+  std::string_view previous;
+
+  auto key = reader.read_key("currency", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto currency = read_currency(reader, "money currency");
+  if (!currency)
+    return std::unexpected(currency.error());
+
+  key = reader.read_key("scale", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto scale = reader.read_text();
+  if (!scale)
+    return std::unexpected(scale.error());
+  if (*scale != "6") {
+    return std::unexpected(reader.error(DecodeDiagnosticCategory::unsupported_version,
+                                        "money scale is not supported"));
+  }
+
+  key = reader.read_key("scaled_value", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto scaled_text = reader.read_text();
+  if (!scaled_text)
+    return std::unexpected(scaled_text.error());
+  auto scaled = decode_detail::parse_signed_decimal(reader, *scaled_text, "money scaled value");
+  if (!scaled)
+    return std::unexpected(scaled.error());
+
+  key = reader.read_key("schema_version", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  if (auto version = require_version(reader, "luca.money.v1", "money"); !version)
+    return std::unexpected(version.error());
+  return Money::from_scaled(*scaled, *currency);
+}
+
+template <class Value>
+[[nodiscard]] inline std::expected<Value, DecodeError>
+read_fixed_point(decode_detail::Reader &reader, std::string_view schema,
+                 std::string_view value_name) {
+  auto shape = reader.read_map(3U, schema);
+  if (!shape)
+    return std::unexpected(shape.error());
+  std::string_view previous;
+
+  auto key = reader.read_key("scale", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto scale = reader.read_text();
+  if (!scale)
+    return std::unexpected(scale.error());
+  if (*scale != "8") {
+    return std::unexpected(reader.error(DecodeDiagnosticCategory::unsupported_version,
+                                        std::string{value_name} + " scale is not supported"));
+  }
+
+  key = reader.read_key("scaled_value", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto scaled_text = reader.read_text();
+  if (!scaled_text)
+    return std::unexpected(scaled_text.error());
+  auto scaled = decode_detail::parse_signed_decimal(reader, *scaled_text,
+                                                    std::string{value_name} + " scaled value");
+  if (!scaled)
+    return std::unexpected(scaled.error());
+
+  key = reader.read_key("schema_version", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  if (auto version = require_version(reader, schema, value_name); !version)
+    return std::unexpected(version.error());
+  return Value::from_scaled(*scaled);
+}
+
+[[nodiscard]] inline std::expected<Provenance, DecodeError>
+read_provenance(decode_detail::Reader &reader) {
+  auto shape = reader.read_map(5U, "luca.provenance.v1");
+  if (!shape)
+    return std::unexpected(shape.error());
+  std::string_view previous;
+
+  auto key = reader.read_key("schema_version", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  if (auto version = require_version(reader, "luca.provenance.v1", "provenance"); !version)
+    return std::unexpected(version.error());
+
+  key = reader.read_key("source_record_ids", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto source_count = reader.read_array_count("provenance source-record array");
+  if (!source_count)
+    return std::unexpected(source_count.error());
+  if (*source_count == 0U) {
+    return std::unexpected(reader.error(DecodeDiagnosticCategory::schema_shape,
+                                        "provenance source-record array must not be empty"));
+  }
+  std::vector<SourceRecordId> sources;
+  std::unordered_set<std::string> source_identities;
+  sources.reserve(*source_count);
+  source_identities.reserve(*source_count);
+  for (std::size_t index = 0; index < *source_count; ++index) {
+    auto source = read_identifier(reader, "provenance source-record identity");
+    if (!source)
+      return std::unexpected(source.error());
+    if (!source_identities.emplace(*source).second) {
+      return std::unexpected(reader.error(DecodeDiagnosticCategory::duplicate_identity,
+                                          "provenance source-record identity is duplicated"));
+    }
+    sources.emplace_back(std::move(*source));
+  }
+
+  key = reader.read_key("transformation_metadata", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  std::optional<std::string> metadata;
+  if (reader.next_is_null()) {
+    if (auto value = reader.read_null(); !value)
+      return std::unexpected(value.error());
+  } else {
+    auto value = reader.read_text();
+    if (!value)
+      return std::unexpected(value.error());
+    if (value->find('\0') != std::string_view::npos) {
+      return std::unexpected(reader.error(DecodeDiagnosticCategory::canonical_encoding,
+                                          "provenance metadata must not contain NUL"));
+    }
+    metadata = std::string{*value};
+  }
+
+  key = reader.read_key("transformation_name", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto name = read_identifier(reader, "provenance transformation name");
+  if (!name)
+    return std::unexpected(name.error());
+
+  key = reader.read_key("transformation_version", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto transformation_version = read_identifier(reader, "provenance transformation version");
+  if (!transformation_version)
+    return std::unexpected(transformation_version.error());
+
+  auto provenance = Provenance::create(std::move(sources), std::move(*name),
+                                       std::move(*transformation_version), std::move(metadata));
+  if (!provenance) {
+    return std::unexpected(reader.error(DecodeDiagnosticCategory::schema_shape,
+                                        "provenance violates the v1 domain invariants"));
+  }
+  return std::move(*provenance);
+}
+
+[[nodiscard]] inline std::expected<EventHeader, DecodeError>
+read_event_header(decode_detail::Reader &reader) {
+  auto shape = reader.read_map(5U, "luca.event-header.v1");
+  if (!shape)
+    return std::unexpected(shape.error());
+  std::string_view previous;
+
+  auto key = reader.read_key("account", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto account = read_identifier(reader, "event-header account");
+  if (!account)
+    return std::unexpected(account.error());
+
+  key = reader.read_key("effective_at", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto timestamp_text = reader.read_text();
+  if (!timestamp_text)
+    return std::unexpected(timestamp_text.error());
+  auto effective_at = decode_detail::parse_timestamp(reader, *timestamp_text, "effective time");
+  if (!effective_at)
+    return std::unexpected(effective_at.error());
+
+  key = reader.read_key("provenance", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto provenance = read_provenance(reader);
+  if (!provenance)
+    return std::unexpected(provenance.error());
+
+  key = reader.read_key("record_id", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto record_id = read_identifier(reader, "event-header record identity");
+  if (!record_id)
+    return std::unexpected(record_id.error());
+
+  key = reader.read_key("schema_version", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  if (auto version = require_version(reader, "luca.event-header.v1", "event-header"); !version)
+    return std::unexpected(version.error());
+
+  auto header = EventHeader::create(EventId{std::move(*record_id)}, AccountId{std::move(*account)},
+                                    *effective_at, std::move(*provenance));
+  if (!header) {
+    return std::unexpected(reader.error(DecodeDiagnosticCategory::schema_shape,
+                                        "event header violates the v1 domain invariants"));
+  }
+  return std::move(*header);
+}
+
+[[nodiscard]] inline std::expected<EconomicEvent, DecodeError>
+read_cash_movement(decode_detail::Reader &reader) {
+  std::string_view previous;
+  auto key = reader.read_key("amount", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto amount = read_money(reader);
+  if (!amount)
+    return std::unexpected(amount.error());
+
+  key = reader.read_key("header", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto header = read_event_header(reader);
+  if (!header)
+    return std::unexpected(header.error());
+
+  key = reader.read_key("schema_version", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  if (auto version = require_version(reader, "luca.economic-event.v1", "economic-event"); !version)
+    return std::unexpected(version.error());
+
+  key = reader.read_key("variant", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto variant = reader.read_text();
+  if (!variant)
+    return std::unexpected(variant.error());
+  if (*variant != "cash_movement") {
+    return std::unexpected(reader.error(DecodeDiagnosticCategory::schema_shape,
+                                        "cash-movement shape has an invalid variant tag"));
+  }
+  return EconomicEvent{CashMovement::create(std::move(*header), *amount)};
+}
+
+[[nodiscard]] inline std::expected<EconomicEvent, DecodeError>
+read_equity_trade(decode_detail::Reader &reader) {
+  std::string_view previous;
+  auto key = reader.read_key("header", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto header = read_event_header(reader);
+  if (!header)
+    return std::unexpected(header.error());
+
+  key = reader.read_key("instrument", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto instrument = read_identifier(reader, "equity-trade instrument");
+  if (!instrument)
+    return std::unexpected(instrument.error());
+
+  key = reader.read_key("price", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto price = read_fixed_point<Price>(reader, "luca.price.v1", "price");
+  if (!price)
+    return std::unexpected(price.error());
+
+  key = reader.read_key("quantity", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto quantity = read_fixed_point<Quantity>(reader, "luca.quantity.v1", "quantity");
+  if (!quantity)
+    return std::unexpected(quantity.error());
+
+  key = reader.read_key("quote_currency", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto quote_currency = read_currency(reader, "equity-trade quote currency");
+  if (!quote_currency)
+    return std::unexpected(quote_currency.error());
+
+  key = reader.read_key("schema_version", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  if (auto version = require_version(reader, "luca.economic-event.v1", "economic-event"); !version)
+    return std::unexpected(version.error());
+
+  key = reader.read_key("settlement_date", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto date_text = reader.read_text();
+  if (!date_text)
+    return std::unexpected(date_text.error());
+  auto settlement_date = decode_detail::parse_date(reader, *date_text, "settlement date");
+  if (!settlement_date)
+    return std::unexpected(settlement_date.error());
+
+  key = reader.read_key("variant", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto variant = reader.read_text();
+  if (!variant)
+    return std::unexpected(variant.error());
+  if (*variant != "equity_trade") {
+    return std::unexpected(reader.error(DecodeDiagnosticCategory::schema_shape,
+                                        "equity-trade shape has an invalid variant tag"));
+  }
+
+  auto trade = EquityTrade::create(std::move(*header), InstrumentId{std::move(*instrument)},
+                                   *quantity, *price, *quote_currency, *settlement_date);
+  if (!trade) {
+    return std::unexpected(reader.error(DecodeDiagnosticCategory::schema_shape,
+                                        "equity trade violates the v1 domain invariants"));
+  }
+  return EconomicEvent{std::move(*trade)};
+}
+
+[[nodiscard]] inline std::expected<EconomicEvent, DecodeError>
+read_economic_event(decode_detail::Reader &reader) {
+  auto count = reader.read_map_count();
+  if (!count)
+    return std::unexpected(count.error());
+  if (*count == 4U)
+    return read_cash_movement(reader);
+  if (*count == 8U)
+    return read_equity_trade(reader);
+  return std::unexpected(reader.error(DecodeDiagnosticCategory::schema_shape,
+                                      "economic-event has a missing or extra map member"));
+}
+
+[[nodiscard]] inline std::expected<LifecycleAction, DecodeError>
+read_lifecycle_action(decode_detail::Reader &reader) {
+  auto action = reader.read_text();
+  if (!action)
+    return std::unexpected(action.error());
+  if (*action == "originate")
+    return LifecycleAction::originate;
+  if (*action == "correct")
+    return LifecycleAction::correct;
+  if (*action == "cancel")
+    return LifecycleAction::cancel;
+  if (*action == "reverse")
+    return LifecycleAction::reverse;
+  return std::unexpected(
+      reader.error(DecodeDiagnosticCategory::schema_shape, "lifecycle action is not supported"));
+}
+
+struct DecodedLifecycleRecord {
+  std::uint64_t acceptance_sequence;
+  LifecycleRecordDraft draft;
+};
+
+[[nodiscard]] inline std::expected<DecodedLifecycleRecord, DecodeError>
+read_lifecycle_record(decode_detail::Reader &reader) {
+  auto shape = reader.read_map(10U, "luca.lifecycle-record.v1");
+  if (!shape)
+    return std::unexpected(shape.error());
+  std::string_view previous;
+
+  auto key = reader.read_key("acceptance_sequence", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto sequence_text = reader.read_text();
+  if (!sequence_text)
+    return std::unexpected(sequence_text.error());
+  auto sequence =
+      decode_detail::parse_positive_decimal(reader, *sequence_text, "acceptance sequence");
+  if (!sequence)
+    return std::unexpected(sequence.error());
+
+  key = reader.read_key("account", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto account = read_identifier(reader, "lifecycle-record account");
+  if (!account)
+    return std::unexpected(account.error());
+
+  key = reader.read_key("action", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto action = read_lifecycle_action(reader);
+  if (!action)
+    return std::unexpected(action.error());
+
+  key = reader.read_key("causal_record_id", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto causal_record_id = read_optional_identifier(reader, "causal record identity");
+  if (!causal_record_id)
+    return std::unexpected(causal_record_id.error());
+
+  key = reader.read_key("economic_event_id", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto economic_event_id = read_identifier(reader, "economic-event identity");
+  if (!economic_event_id)
+    return std::unexpected(economic_event_id.error());
+
+  key = reader.read_key("event", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  std::optional<EconomicEvent> event;
+  if (reader.next_is_null()) {
+    if (auto value = reader.read_null(); !value)
+      return std::unexpected(value.error());
+  } else {
+    auto value = read_economic_event(reader);
+    if (!value)
+      return std::unexpected(value.error());
+    event = std::move(*value);
+  }
+
+  key = reader.read_key("provenance", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto provenance = read_provenance(reader);
+  if (!provenance)
+    return std::unexpected(provenance.error());
+
+  key = reader.read_key("record_id", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto record_id = read_identifier(reader, "lifecycle record identity");
+  if (!record_id)
+    return std::unexpected(record_id.error());
+
+  key = reader.read_key("recorded_at", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto recorded_text = reader.read_text();
+  if (!recorded_text)
+    return std::unexpected(recorded_text.error());
+  auto recorded_at = decode_detail::parse_timestamp(reader, *recorded_text, "recorded time");
+  if (!recorded_at)
+    return std::unexpected(recorded_at.error());
+
+  key = reader.read_key("schema_version", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  if (auto version = require_version(reader, "luca.lifecycle-record.v1", "lifecycle-record");
+      !version)
+    return std::unexpected(version.error());
+
+  if (event) {
+    const auto &event_header = header(*event);
+    if (event_header.id().value() != *record_id || event_header.account().value() != *account ||
+        event_header.provenance() != *provenance) {
+      return std::unexpected(
+          reader.error(DecodeDiagnosticCategory::schema_shape,
+                       "lifecycle record and event header contain inconsistent redundant fields"));
+    }
+  }
+
+  const EventId typed_record_id{std::move(*record_id)};
+  const EconomicEventId typed_economic_event_id{std::move(*economic_event_id)};
+  const AccountId typed_account{std::move(*account)};
+  std::optional<LifecycleRecordDraft> draft;
+  switch (*action) {
+  case LifecycleAction::originate:
+    if (*causal_record_id || !event) {
+      return std::unexpected(reader.error(
+          DecodeDiagnosticCategory::schema_shape,
+          "originating lifecycle record requires an event and a null causal identity"));
+    }
+    draft =
+        LifecycleRecordDraft::originate(typed_economic_event_id, *recorded_at, std::move(*event));
+    break;
+  case LifecycleAction::correct:
+    if (!*causal_record_id || !event) {
+      return std::unexpected(
+          reader.error(DecodeDiagnosticCategory::schema_shape,
+                       "correcting lifecycle record requires an event and a causal identity"));
+    }
+    draft = LifecycleRecordDraft::correct(typed_economic_event_id,
+                                          EventId{std::move(**causal_record_id)}, *recorded_at,
+                                          std::move(*event));
+    break;
+  case LifecycleAction::cancel:
+    if (!*causal_record_id || event) {
+      return std::unexpected(
+          reader.error(DecodeDiagnosticCategory::schema_shape,
+                       "cancelling lifecycle record requires a causal identity and a null event"));
+    }
+    draft = LifecycleRecordDraft::cancel(typed_record_id, typed_economic_event_id,
+                                         EventId{std::move(**causal_record_id)}, typed_account,
+                                         *recorded_at, std::move(*provenance));
+    break;
+  case LifecycleAction::reverse:
+    if (!*causal_record_id || !event) {
+      return std::unexpected(
+          reader.error(DecodeDiagnosticCategory::schema_shape,
+                       "reversing lifecycle record requires an event and a causal identity"));
+    }
+    draft = LifecycleRecordDraft::reverse(typed_economic_event_id,
+                                          EventId{std::move(**causal_record_id)}, *recorded_at,
+                                          std::move(*event));
+    break;
+  }
+  return DecodedLifecycleRecord{*sequence, std::move(*draft)};
+}
+
+[[nodiscard]] inline DecodeDiagnosticCategory
+lifecycle_category(LifecycleDiagnosticCategory category) noexcept {
+  switch (category) {
+  case LifecycleDiagnosticCategory::invalid_record:
+    return DecodeDiagnosticCategory::schema_shape;
+  case LifecycleDiagnosticCategory::duplicate_identity:
+    return DecodeDiagnosticCategory::duplicate_identity;
+  case LifecycleDiagnosticCategory::deterministic_ordering:
+  case LifecycleDiagnosticCategory::sequence_overflow:
+    return DecodeDiagnosticCategory::deterministic_ordering;
+  case LifecycleDiagnosticCategory::causal_reference_missing:
+  case LifecycleDiagnosticCategory::causal_self_reference:
+  case LifecycleDiagnosticCategory::causal_cycle:
+  case LifecycleDiagnosticCategory::causal_reference_unavailable:
+    return DecodeDiagnosticCategory::lineage_reference_missing;
+  case LifecycleDiagnosticCategory::incompatible_account:
+    return DecodeDiagnosticCategory::incompatible_account;
+  case LifecycleDiagnosticCategory::incompatible_event_relationship:
+    return DecodeDiagnosticCategory::incompatible_event_relationship;
+  case LifecycleDiagnosticCategory::conflicting_lifecycle_successor:
+    return DecodeDiagnosticCategory::conflicting_lifecycle_successor;
+  }
+  return DecodeDiagnosticCategory::schema_shape;
+}
+
+[[nodiscard]] inline std::expected<LifecycleLedger, DecodeError>
+read_lifecycle_ledger(decode_detail::Reader &reader) {
+  auto shape = reader.read_map(2U, "luca.lifecycle-record-sequence.v1");
+  if (!shape)
+    return std::unexpected(shape.error());
+  std::string_view previous;
+
+  auto key = reader.read_key("records", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  auto record_count = reader.read_array_count("lifecycle-record array");
+  if (!record_count)
+    return std::unexpected(record_count.error());
+  if (*record_count == 0U) {
+    return std::unexpected(reader.error(DecodeDiagnosticCategory::schema_shape,
+                                        "lifecycle-record sequence must not be empty"));
+  }
+
+  LifecycleLedger ledger;
+  for (std::size_t index = 0; index < *record_count; ++index) {
+    auto decoded = read_lifecycle_record(reader);
+    if (!decoded)
+      return std::unexpected(decoded.error());
+    const auto expected_sequence = static_cast<std::uint64_t>(index) + 1U;
+    if (decoded->acceptance_sequence != expected_sequence) {
+      return std::unexpected(
+          reader.error(DecodeDiagnosticCategory::deterministic_ordering,
+                       "lifecycle acceptance sequence must be contiguous and begin at one"));
+    }
+    auto accepted = ledger.accept(decoded->draft);
+    if (!accepted) {
+      return std::unexpected(reader.error(lifecycle_category(accepted.error().category()),
+                                          accepted.error().message()));
+    }
+  }
+
+  key = reader.read_key("schema_version", previous);
+  if (!key)
+    return std::unexpected(key.error());
+  if (auto version =
+          require_version(reader, "luca.lifecycle-record-sequence.v1", "lifecycle-record-sequence");
+      !version)
+    return std::unexpected(version.error());
+  return ledger;
+}
+
+} // namespace lifecycle_decode_detail
+
+[[nodiscard]] inline std::expected<LifecycleLedger, DecodeError>
+decode_lifecycle_ledger(std::span<const std::byte> input) {
+  decode_detail::Reader reader{input};
+  if (auto header = reader.read_header(); !header)
+    return std::unexpected(header.error());
+  auto ledger = lifecycle_decode_detail::read_lifecycle_ledger(reader);
+  if (!ledger)
+    return std::unexpected(ledger.error());
+  if (auto complete = reader.finish(); !complete)
+    return std::unexpected(complete.error());
+  return ledger;
+}
+
 } // namespace luca::serialization
