@@ -8,9 +8,11 @@ import shutil
 import signal
 import subprocess
 import sys
+import tabnanny
 import tempfile
 import textwrap
 import time
+import tokenize
 import unittest
 from unittest import mock
 
@@ -67,6 +69,25 @@ class ExactCashPythonTest(unittest.TestCase):
         self.assertEqual(caught.exception.returncode, 1)
         self.assertEqual(caught.exception.host_category, category)
         return caught.exception
+
+    def test_python_sources_have_unambiguous_indentation(self):
+        sources = (
+            pathlib.Path(__file__),
+            self.python_root / "luca_exact_cash" / "__init__.py",
+        )
+        for source_path in sources:
+            with self.subTest(source=source_path.name):
+                with tokenize.open(source_path) as source:
+                    try:
+                        tabnanny.process_tokens(
+                            tokenize.generate_tokens(source.readline)
+                        )
+                    except (
+                        IndentationError,
+                        tabnanny.NannyNag,
+                        tokenize.TokenError,
+                    ) as error:
+                        self.fail(f"ambiguous Python formatting: {error}")
 
     def test_mismatch_matches_direct_host_and_repeated_calls(self):
         direct = subprocess.run(
