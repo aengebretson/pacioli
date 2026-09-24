@@ -1,10 +1,11 @@
 # Narrow accounting-foundations contract
 
-Status: executable design contract with public C++ journal value types. This
-document and the portable fixtures define the first bounded O4 journal
-semantics. They do not claim that LUCA implements O4, or that either fixture
-policy is suitable for production, GAAP, IFRS, tax, NAV, regulatory, or client
-reporting.
+Status: executable design contract with public C++ journal value types and the
+first bounded trade-date journal projection. This document and the portable
+fixtures define the initial O4 journal semantics. The implementation covers
+only `fixture.trade-date.v1`; it does not claim that LUCA implements all of O4,
+or that either fixture policy is suitable for production, GAAP, IFRS, tax, NAV,
+regulatory, or client reporting.
 
 ## Boundary and inputs
 
@@ -108,10 +109,11 @@ economic events, and source evidence.
 ### Public C++ value boundary
 
 `<luca/accounting/journal.hpp>` supplies the closed `JournalLine` and
-`JournalEntry` value types and is also included by `<luca/ledger.hpp>`. The
-`luca::ledger` CMake target installs both headers through the existing public
-header-directory rule. This is a value boundary, not a journal projection or
-policy interface.
+`JournalEntry` value types. `<luca/accounting/trade_date_projection.hpp>`
+supplies the concrete fixture trade-date projection. Both are also included by
+`<luca/ledger.hpp>`, and the `luca::ledger` CMake target installs the headers
+through the existing public header-directory rule. This is a concrete policy
+implementation, not a generic policy interface.
 
 Factories construct the supporting policy identity, date, settlement context,
 and ordered lineage values before constructing a line or entry. The entry
@@ -140,6 +142,39 @@ The value types own their lines and lineage and expose them only as immutable
 views. They do not select lifecycle heads, interpret source evidence, infer a
 policy, reorder caller data, mutate economic events, or access files, databases,
 clocks, websites, or services.
+
+### Public trade-date projection
+
+`project_trade_date_journals` consumes a `LifecycleResolution` and an explicit
+`TradeDateProjectionContext` containing the inclusive knowledge and economic
+cutoffs plus the independent settlement cutoff. It does not resolve lifecycle
+records again. It rejects a selected record or lineage member outside the
+declared cutoffs and validates the active event ordering before mapping any
+entry.
+
+The immutable `TradeDateProjectionResult` identifies the fixture accounting
+engine, journal projection, lifecycle contract and policy versions. It retains
+the evaluation context, ordered active-record and economic-event identities,
+the complete selected lifecycle-record identities, deduplicated source-record
+identities in first-seen order, and the journal entries. Each entry repeats its
+full event lineage. Results own their values and do not retain pointers into the
+lifecycle ledger.
+
+Entry IDs use `td.<active-record-id>.<phase>` and line IDs append `.debit` or
+`.credit`. Active record identity plus the fixed phase makes the IDs stable and
+unique for a valid lifecycle resolution. Entries are presented by recognized
+date, selected record acceptance sequence, phase ordinal and entry ID. A trade
+phase uses ordinal zero and a settlement phase uses ordinal one.
+
+The projection returns one complete result or a
+`TradeDateProjectionError`; it never returns partially projected entries. Its
+stable diagnostic categories are `invalid_context`, `unsupported_event`,
+`unsupported_currency`, `invalid_reversal_treatment`, `arithmetic_overflow`,
+and `journal_invariant`. The last category preserves the underlying journal
+factory category in its explanatory message. Ordinary negative trades and
+cash withdrawals are unsupported events. A negative equity record is accepted
+only when lifecycle resolution identifies an exact reversal target; lifecycle
+validation rejects partial reversals before a resolution can be produced.
 
 ### Result and portfolio cross-check
 
@@ -285,7 +320,7 @@ accruals, NAV, tax, financial-statement presentation, or accounting-standard
 compliance.
 
 It also adds no CMake target, canonical serialization extension, database,
-platform adapter, CLI, Python binding, deployment, or backtesting behavior.
-Standalone and hosted consumers must eventually call the same reviewed OSS
-implementation with identical explicit values; matching fixture results do not
-yet prove those execution adapters exist.
+platform adapter, CLI, Python binding, deployment, or backtesting behavior. The
+installed-package consumer exercises the same header-only implementation
+through `luca::ledger`; hosted, CLI and Python execution adapters remain
+deferred.
