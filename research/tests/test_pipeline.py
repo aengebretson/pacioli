@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from luca_research import run_analysis
+from luca_research.cli import MAX_REQUEST_JSON_BYTES, _load_json
 from luca_research.contracts import parse_close_input
 from luca_research.garch import GarchFitFailure
 
@@ -123,6 +124,21 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr)
             actual = json.loads(output.read_text(encoding="utf-8"))
         self.assertEqual(actual, expected)
+
+    def test_cli_serialized_input_read_is_bounded_before_json_decode(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            request_path = Path(temporary_directory) / "oversized-request.json"
+            request_path.write_bytes(b" " * (MAX_REQUEST_JSON_BYTES + 1))
+
+            with self.assertRaisesRegex(
+                ValueError,
+                rf"exceeds the {MAX_REQUEST_JSON_BYTES}-byte serialized input limit",
+            ):
+                _load_json(
+                    request_path,
+                    "request",
+                    max_bytes=MAX_REQUEST_JSON_BYTES,
+                )
 
     def test_input_hash_mismatch_is_a_structured_error(self):
         changed = copy.deepcopy(self.input_document)

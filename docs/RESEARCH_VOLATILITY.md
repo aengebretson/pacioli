@@ -57,8 +57,13 @@ overlap and makes no naive significance claim.
 
 Runtime is bounded by validated hard caps (10,000 observations, 100 origins,
 2,000 optimizer iterations for each origin), with tighter values carried in
-each request. This bounds the numerical work without adding network/process
-control to the callable financial-analysis function.
+each request. Oversized arrays are rejected by length before member validation
+or conversion. The offline CLI additionally caps serialized reads before JSON
+decoding; a callable host must apply an equivalent read/transport bound before
+constructing its input mappings because validation cannot undo earlier parsing
+or allocation work. Together these bounds constrain validation and numerical
+work without adding network/process control to the callable financial-analysis
+function.
 
 See [`research/README.md`](../research/README.md) for schemas, formulas, exact
 dependency/license pins, the callable API, the synthetic offline example, and

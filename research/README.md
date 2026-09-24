@@ -44,7 +44,11 @@ artifact = run_analysis(request_document, normalized_close_document)
 ```
 
 Both arguments are ordinary mappings already loaded by the host. The function
-does no I/O and returns the same JSON-compatible artifact as the CLI.
+does no I/O and returns the same JSON-compatible artifact as the CLI. Before
+decoding JSON, the CLI limits the serialized request to 256 KiB and the
+serialized close input to 2 MiB. Callable hosts are responsible for applying an
+equivalent transport/read bound before constructing their mappings; validation
+cannot recover allocation or parsing work already performed by a caller.
 
 ## Stable generic contract
 
@@ -66,6 +70,10 @@ finite binary64 value are also rejected with a structured diagnostic.
   recorded seed; and
 - caller-selected observation/origin limits below hard package caps of 10,000
   observations, 100 origins, and 2,000 GARCH optimizer iterations per origin.
+
+Arrays exceeding the selected observation or origin limit are rejected from
+their length before any member is read or converted. Arrays exactly at the
+limit still receive complete member validation.
 
 Selection labels must lie entirely inside the selection range. Held-out labels
 must lie entirely inside the held-out range, and the ranges cannot touch or

@@ -12,10 +12,23 @@ from .contracts import Diagnostic
 from .pipeline import failure_artifact, run_analysis
 
 
-def _load_json(path: Path, field: str) -> Any:
+MAX_REQUEST_JSON_BYTES = 256 * 1024
+MAX_INPUT_JSON_BYTES = 2 * 1024 * 1024
+
+
+def _load_json(path: Path, field: str, *, max_bytes: int) -> Any:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        with path.open("rb") as source:
+            serialized = source.read(max_bytes + 1)
+    except OSError as exc:
+        raise ValueError(f"unable to read {field} JSON from {path}: {exc}") from exc
+    if len(serialized) > max_bytes:
+        raise ValueError(
+            f"{field} JSON at {path} exceeds the {max_bytes}-byte serialized input limit"
+        )
+    try:
+        return json.loads(serialized.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError) as exc:
         raise ValueError(f"unable to read {field} JSON from {path}: {exc}") from exc
 
 
@@ -41,8 +54,16 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        request = _load_json(args.request, "request")
-        input_document = _load_json(args.input, "input")
+        request = _load_json(
+            args.request,
+            "request",
+            max_bytes=MAX_REQUEST_JSON_BYTES,
+        )
+        input_document = _load_json(
+            args.input,
+            "input",
+            max_bytes=MAX_INPUT_JSON_BYTES,
+        )
         artifact = run_analysis(request, input_document)
     except ValueError as exc:
         artifact = failure_artifact([Diagnostic("cli_input_error", str(exc), "cli")])

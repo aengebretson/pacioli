@@ -237,6 +237,7 @@ def parse_close_input(document: Any, *, max_observations: int) -> NormalizedClos
                 "input.observations",
             )
         )
+        raise ContractError(errors)
     if len(raw_observations) < 3:
         errors.append(Diagnostic("insufficient_observations", "at least 3 close observations are required", "input.observations"))
 
@@ -369,6 +370,7 @@ def parse_request(document: Any) -> AnalysisRequest:
         errors.append(Diagnostic("missing_windows", "at least one evaluation window is required", "request.windows"))
     if len(raw_windows) > max_origins:
         errors.append(Diagnostic("origin_limit_exceeded", f"request has {len(raw_windows)} origins; limit is {max_origins}", "request.windows"))
+        raise ContractError(errors)
     seen_origins: set[date] = set()
     for index, raw in enumerate(raw_windows):
         field = f"request.windows[{index}]"

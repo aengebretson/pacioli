@@ -14,6 +14,16 @@ def fixture(name):
     return json.loads((ROOT / "fixtures" / name).read_text(encoding="utf-8"))
 
 
+class UnreadableMembers(list):
+    """A sized array whose members must not be inspected."""
+
+    def __iter__(self):
+        raise AssertionError("array members were iterated")
+
+    def __getitem__(self, key):
+        raise AssertionError(f"array member {key!r} was accessed")
+
+
 class ContractTests(unittest.TestCase):
     def test_synthetic_contracts_validate_and_hash(self):
         request_document = fixture("synthetic_request.json")
@@ -68,6 +78,57 @@ class ContractTests(unittest.TestCase):
         with self.assertRaises(ContractError) as caught:
             parse_request(request)
         self.assertIn("invalid_integer", {item.code for item in caught.exception.diagnostics})
+
+    def test_observation_limit_is_rejected_before_member_processing(self):
+        document = fixture("synthetic_spx_like.json")
+        document["observations"] = UnreadableMembers([None, None, None, None])
+
+        with self.assertRaises(ContractError) as caught:
+            parse_close_input(document, max_observations=3)
+
+        self.assertEqual(
+            [item.code for item in caught.exception.diagnostics],
+            ["observation_limit_exceeded"],
+        )
+
+    def test_observations_at_limit_receive_normal_member_validation(self):
+        document = fixture("synthetic_spx_like.json")
+        document["observations"] = document["observations"][:3]
+        document["observations"][2]["close"] = "not-a-number"
+
+        with self.assertRaises(ContractError) as caught:
+            parse_close_input(document, max_observations=3)
+
+        self.assertIn(
+            "invalid_number",
+            {item.code for item in caught.exception.diagnostics},
+        )
+
+    def test_origin_limit_is_rejected_before_member_processing(self):
+        request = fixture("synthetic_request.json")
+        request["limits"]["max_origins"] = 1
+        request["windows"] = UnreadableMembers([None, None])
+
+        with self.assertRaises(ContractError) as caught:
+            parse_request(request)
+
+        self.assertEqual(
+            [item.code for item in caught.exception.diagnostics],
+            ["origin_limit_exceeded"],
+        )
+
+    def test_origins_at_limit_receive_normal_member_validation(self):
+        request = fixture("synthetic_request.json")
+        request["limits"]["max_origins"] = len(request["windows"])
+        request["windows"][1]["origin"] = "not-a-date"
+
+        with self.assertRaises(ContractError) as caught:
+            parse_request(request)
+
+        self.assertIn(
+            "invalid_date",
+            {item.code for item in caught.exception.diagnostics},
+        )
 
     def test_rejects_number_not_representable_as_binary64(self):
         document = fixture("synthetic_spx_like.json")
