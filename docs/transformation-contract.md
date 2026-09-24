@@ -1,10 +1,11 @@
 # Executable transformation and composition contract
 
 Status: executable design contract for O5-T01 plus the bounded exact-cash C++
-reduction implemented by O5-T02. The JSON fixtures and their dependency-free
-validator define the wider portable semantic vocabulary for design review. The
-exact-cash API is not a generic composition runtime, canonical wire format,
-checkpoint format, plugin ABI, or second implementation of LUCA projections.
+reduction and lineage-bearing exact comparison implemented by O5-T02 and
+O5-T03. The JSON fixtures and their dependency-free validator define the wider
+portable semantic vocabulary for design review. The exact-cash APIs are not a
+generic composition runtime, canonical wire format, checkpoint format, plugin
+ABI, or second implementation of LUCA projections.
 
 ## Purpose and boundary
 
@@ -54,6 +55,7 @@ existing function; it does not claim a new callable API exists.
 | Exact addition | `Quantity::add`, `Money::add`, and `reduce_exact_cash`/`merge_exact_cash` in `luca/portfolio/exact_cash_reduction.hpp` | compatible reduction primitives | The public cash reducer is deliberately limited to one explicit `(account, currency)` key, `money` unit, and `(account, currency)` partition declaration. It delegates every sum to `Money::add`; there is no public generic reducer. |
 | Position comparison | `reconcile_positions(expected, observed, PositionReconciliationContext)` | comparison | Exact shared `as_of`; detects duplicate observations, time mismatch, overflow, and missing/unexpected/mismatched values. `Position` and `PositionBreak` do not retain projection provenance; a break retains observation provenance only when an observation exists. |
 | Settled-cash comparison | `reconcile_cash(expected, observed, CashReconciliationContext)` | comparison | Exact shared economic and settlement cutoffs; detects duplicate observations, both context mismatches, overflow, and missing/unexpected/mismatched values. `CashBalance` and `CashBreak` do not retain projection provenance; a break retains observation provenance only when an observation exists. |
+| Lineage-bearing exact cash comparison | `compare_exact_cash(ExactCashComparisonContract, projected, observed)` in `luca/reconciliation/exact_cash_comparison.hpp` | comparison | Compares `ExactCashReductionResult` values with separate `CashObservation` evidence by complete `(account, currency)` key. The result records its operation/policy/context trace; each break retains the applicable projection and observation in distinct roles. It adds no FX, tolerance, or authority-changing behavior. |
 | Lifecycle acceptance and resolution | `LifecycleRecordDraft::{originate,correct,cancel,reverse}` and `LifecycleLedger::{accept,accept_batch,resolve}` in `luca/lifecycle.hpp` | ordered fold before all affected projections | This is a public in-memory C++ API. Acceptance validates immutable causal records and assigns lifecycle sequences; `resolve(recorded_through, economic_as_of)` returns knowledge-selected chains and active payloads ordered by `(effective_at, acceptance_sequence)`. Existing position, cash, and settlement projection functions do not yet consume `LifecycleResolution`. |
 | Journals/accounting | none in the current checkout | future map and reduction boundaries | Journal types and accounting-policy interfaces belong to O4. This contract does not invent their signatures or decide accounting policy. |
 
@@ -220,7 +222,7 @@ The negative fixture uses otherwise equal payable and receivable keys and shows
 that merging on `(account, settlement_date, currency)` is invalid. LUCA's
 current projection intentionally keeps their positive magnitudes separate.
 
-### Comparison is not a reduction
+### Lineage-bearing exact comparison is not a reduction
 
 `compare.cash.exact` receives projected cash and external observations through
 different typed ports. With projected cash `800.000000 USD` and an observed
@@ -232,13 +234,38 @@ difference = observed - expected = 790.000000 - 800.000000
            = -10.000000 USD
 ```
 
-The fixture-level composed result carries the projection's complete source-event
-and source-record lineage separately from the matched observation's evidence.
-This is a requirement for a later composition interface, not a claim about the
-current `CashBreak`: today `CashBalance` has no projection-provenance member and
-`CashBreak` retains only observation provenance. Comparison neither mutates the
-ledger nor makes the observation authoritative. Swapping projected and observed
-ports changes meaning, so comparison claims no commutativity or inverse.
+The public `ExactCashComparisonPolicy` and `ExactCashComparisonContract` require
+complete token identities and reuse the reducer's `ExactCashEvaluationContext`.
+Consequently every `ExactCashComparisonResult` identifies the comparison
+operation/version, policy identity/version, context identity, engine version,
+inclusive recorded and economic cutoffs, and settlement date. The result's
+breaks are ordered by the complete account/currency key and then break kind.
+
+An `ExactCashBreak` retains the applicable `ExactCashReductionResult` and
+`CashObservation` as separate optional values. A mismatch therefore exposes the
+projection's intermediate reduction identity, policy, full context,
+source-event IDs and source-record IDs alongside—but never merged with—the
+observation's provenance. A missing observation retains only its projection;
+an unexpected observation retains only external evidence; an exact match emits
+no break. Neither input is mutated or promoted to another authority role.
+
+The comparison validates every input before returning a result. It rejects
+duplicate projected keys, duplicate observations, an invalid account identity,
+an inconsistent key/amount currency, any difference in a projection's complete
+evaluation context, an observation at another economic or settlement cutoff,
+incomplete comparison operation/policy identities, and checked subtraction
+overflow. Public `ExactCashReductionResult` and `CashObservation` construction
+derive their key currency from their `Money`, so an inconsistent currency is
+normally unrepresentable before comparison; the boundary still checks that
+invariant. Distinct valid keys are not compared across account or currency:
+they become missing or unexpected breaks, with no implicit FX or aggregation.
+All failures have stable `ExactCashComparisonError` categories and return no
+partial result.
+
+Comparison neither mutates the ledger nor makes the observation authoritative.
+Swapping projected and observed ports changes meaning, so it claims no
+commutativity, associativity, identity, distributivity, or inverse. Its only
+arithmetic is exact scale-6 `observed - projected` through `Money::subtract`.
 
 ## Replay and invalidation
 
@@ -281,6 +308,11 @@ the downstream map/fold operations, policies, and context. A composed operation
 must propagate this information from its explicit inputs. It may not recover
 lineage through a hidden database or network lookup.
 
+For `compare.cash.exact`, the returned comparison contract is the operation
+trace and each retained projection is its immediately preceding reduction
+trace. Observation provenance stays on the observation side of a break; it is
+never added to the projection's event or source-record lineage.
+
 Canonical bytes, input hashes, output hashes, and state/checkpoint hashes are
 intentionally absent. O3 must define their canonical serialization before a
 hash can be portable. Until then, equal fixture JSON or equal arithmetic is not
@@ -305,7 +337,9 @@ The fixture set contains four independently parseable documents:
   it includes the ordering counterexample and lifecycle/policy/context
   invalidation expectations;
 - `valid-cash-reconciliation.json` fixes exact comparison arithmetic and keeps
-  projection lineage distinct from observation evidence; and
+  projection lineage distinct from observation evidence; its `800.000000 USD`
+  versus `790.000000 USD` result is also executed by the focused C++ and both
+  public-package consumer tests; and
 - `invalid-compositions.json` fixes the incompatibility categories and the
   settlement-direction partition counterexample.
 
@@ -334,9 +368,9 @@ This increment intentionally leaves the following to their roadmap owners:
 - journal types, charts of accounts, journal mapping signatures, accounting
   policy versions, trade-date versus settlement-date posting, lots, cost basis,
   P&L, and accounting rounding (O4);
-- public transformation interfaces beyond the bounded exact-cash reduction,
-  including general mapping, ordered-fold, comparison, and policy extension
-  contracts;
+- public transformation interfaces beyond the bounded exact-cash reduction and
+  exact cash comparison, including general mapping, ordered-fold, tolerant
+  comparison, and policy extension contracts;
 - CLI/Python bindings, standalone and hosted adapters, and pinned platform
   integration (the portable-execution increment);
 - dynamic loading, a general plugin ABI, expression languages, arbitrary runtime
