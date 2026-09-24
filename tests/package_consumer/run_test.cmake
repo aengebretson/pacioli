@@ -24,12 +24,33 @@ if(NOT install_result EQUAL 0)
     "LUCA install failed (${install_result})\n${install_output}\n${install_error}")
 endif()
 
+get_filename_component(
+  luca_source_dir "${LUCA_CONSUMER_SOURCE_DIR}/../.." ABSOLUTE)
+file(GLOB_RECURSE package_metadata
+  LIST_DIRECTORIES FALSE
+  "${LUCA_INSTALL_PREFIX}/*.cmake")
+if(NOT package_metadata)
+  message(FATAL_ERROR "LUCA install produced no CMake package metadata")
+endif()
+foreach(metadata_file IN LISTS package_metadata)
+  file(READ "${metadata_file}" metadata_contents)
+  foreach(forbidden_path IN ITEMS "${luca_source_dir}" "${LUCA_SOURCE_BINARY_DIR}")
+    string(FIND "${metadata_contents}" "${forbidden_path}" path_position)
+    if(NOT path_position EQUAL -1)
+      message(FATAL_ERROR
+        "Installed metadata ${metadata_file} contains checkout path "
+        "${forbidden_path}")
+    endif()
+  endforeach()
+endforeach()
+
 set(configure_command
   "${CMAKE_COMMAND}"
   -S "${LUCA_CONSUMER_SOURCE_DIR}"
   -B "${LUCA_CONSUMER_BINARY_DIR}"
   -G "${LUCA_GENERATOR}"
   "-DCMAKE_PREFIX_PATH=${LUCA_INSTALL_PREFIX}"
+  "-DLUCA_EXPECTED_INSTALL_PREFIX=${LUCA_INSTALL_PREFIX}"
   "-DCMAKE_CXX_COMPILER=${LUCA_CXX_COMPILER}")
 if(DEFINED LUCA_GENERATOR_PLATFORM AND NOT "${LUCA_GENERATOR_PLATFORM}" STREQUAL "")
   list(APPEND configure_command -A "${LUCA_GENERATOR_PLATFORM}")
