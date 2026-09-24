@@ -90,6 +90,9 @@ add_executable(luca_parent_reconciliation_consumer reconciliation.cpp)
 target_link_libraries(
   luca_parent_reconciliation_consumer PRIVATE luca::reconciliation)
 
+add_executable(luca_parent_exact_cash_consumer exact_cash_reduction.cpp)
+target_link_libraries(luca_parent_exact_cash_consumer PRIVATE luca::portfolio)
+
 add_test(NAME luca_parent_consumer_run COMMAND luca_parent_consumer)
 set_tests_properties(luca_parent_consumer_run PROPERTIES
   PASS_REGULAR_EXPRESSION "cash_scaled=125000000 currency=USD")
@@ -108,3 +111,9 @@ add_test(
   COMMAND luca_parent_reconciliation_consumer)
 set_tests_properties(luca_parent_reconciliation_consumer_run PROPERTIES
   PASS_REGULAR_EXPRESSION "position_breaks=0")
+add_test(
+  NAME luca_parent_exact_cash_consumer_run
+  COMMAND luca_parent_exact_cash_consumer)
+set_tests_properties(luca_parent_exact_cash_consumer_run PROPERTIES
+  PASS_REGULAR_EXPRESSION
+    "exact_cash_scaled=800000000 currency=USD policy=parent-consumer.cash-policy")

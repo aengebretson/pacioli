@@ -1,8 +1,9 @@
 # Executable transformation and composition contract
 
-Status: executable design contract for O5-T01. The JSON fixtures and their
-dependency-free validator define a portable semantic vocabulary for design
-review. They are not a public C++ composition API, canonical wire format,
+Status: executable design contract for O5-T01 plus the bounded exact-cash C++
+reduction implemented by O5-T02. The JSON fixtures and their dependency-free
+validator define the wider portable semantic vocabulary for design review. The
+exact-cash API is not a generic composition runtime, canonical wire format,
 checkpoint format, plugin ABI, or second implementation of LUCA projections.
 
 ## Purpose and boundary
@@ -50,7 +51,7 @@ existing function; it does not claim a new callable API exists.
 | Position state | `project_positions(span<LedgerEntry>, Timestamp)` | ordered fold with an embedded event-to-delta map and checked aggregation | Equity trades add scale-8 quantity by `(account, instrument)`; zeros are omitted. It returns `quantity_overflow`. It is not lifecycle-aware yet. |
 | Settled cash | `project_cash(span<LedgerEntry>, CashProjectionContext)` | ordered fold with embedded mapping/aggregation | Cash is keyed by `(account, currency)`. Trade cash is `-(quantity × price)` only when settlement-eligible; valuation is half-even to scale 6. It returns `valuation_overflow` or `amount_overflow`. |
 | Open settlement | `project_settlement_obligations(span<LedgerEntry>, SettlementProjectionContext)` | ordered fold with embedded mapping/aggregation | Positive magnitudes are keyed by `(account, settlement_date, currency, direction)`. Payables and receivables are not netted. It returns `valuation_overflow` or `amount_overflow`. |
-| Exact addition | `Quantity::add` and `Money::add` | compatible reduction primitives | Both are checked fixed-point additions. `Money::add` also rejects currency mismatch. There is no public generic reducer. |
+| Exact addition | `Quantity::add`, `Money::add`, and `reduce_exact_cash`/`merge_exact_cash` in `luca/portfolio/exact_cash_reduction.hpp` | compatible reduction primitives | The public cash reducer is deliberately limited to one explicit `(account, currency)` key, `money` unit, and `(account, currency)` partition declaration. It delegates every sum to `Money::add`; there is no public generic reducer. |
 | Position comparison | `reconcile_positions(expected, observed, PositionReconciliationContext)` | comparison | Exact shared `as_of`; detects duplicate observations, time mismatch, overflow, and missing/unexpected/mismatched values. `Position` and `PositionBreak` do not retain projection provenance; a break retains observation provenance only when an observation exists. |
 | Settled-cash comparison | `reconcile_cash(expected, observed, CashReconciliationContext)` | comparison | Exact shared economic and settlement cutoffs; detects duplicate observations, both context mismatches, overflow, and missing/unexpected/mismatched values. `CashBalance` and `CashBreak` do not retain projection provenance; a break retains observation provenance only when an observation exists. |
 | Lifecycle acceptance and resolution | `LifecycleRecordDraft::{originate,correct,cancel,reverse}` and `LifecycleLedger::{accept,accept_batch,resolve}` in `luca/lifecycle.hpp` | ordered fold before all affected projections | This is a public in-memory C++ API. Acceptance validates immutable causal records and assigns lifecycle sequences; `resolve(recorded_through, economic_as_of)` returns knowledge-selected chains and active payloads ordered by `(effective_at, acceptance_sequence)`. Existing position, cash, and settlement projection functions do not yet consume `LifecycleResolution`. |
@@ -143,6 +144,34 @@ declares and demonstrates the compatible merge. A host partition identifier is
 operational metadata and is not part of the result. Financial merge keys and
 lineage are part of the result.
 
+The public C++ implementation exposes validated
+`ExactCashReductionPolicy`, `ExactCashEvaluationContext`,
+`ExactCashPartitioning`, `ExactCashReductionContract`, and `ExactCashPartial`
+values. `reduce_exact_cash` combines already-produced partials;
+`merge_exact_cash` combines compatible reduction results; and
+`exact_cash_zero` constructs the identity only from an explicit compatible
+contract. The result retains the key, unit, partition declaration, operation
+identity/version, policy identity/version, all three evaluation cutoffs plus
+context and engine identities, exact amount, and event/source lineage.
+
+All identifiers are non-empty tokens without ASCII whitespace or control
+characters. A context is incomplete when its context or engine identity is
+absent; its recorded, economic, and settlement cutoffs are mandatory typed
+arguments. A non-identity partial requires at least one event ID and one source
+record ID. Event and source identifiers are sorted lexically in results so
+input and partition order do not affect lineage. Duplicate event IDs within or
+across partials return `duplicate_event_lineage` before arithmetic because the
+same event appearing twice would make contribution multiplicity ambiguous.
+Repeated source-record IDs are valid when one evidence record supports more
+than one event; they are retained once in the sorted source-evidence set.
+
+Compatibility failures have stable categories for account, currency,
+operation version, policy identity, policy version, complete context, unit, and
+partition-key mismatches. Unsupported zero contracts fail with `unit_mismatch`
+or `partition_key_mismatch`. Checked overflow returns `amount_overflow` and no
+result. The reduction does not round and calls the existing `Money::add` for
+each checked addition.
+
 Although scalar signed addition has an additive opposite on a representable
 domain, this operation deliberately makes no `invertibility` claim. A negative
 cash amount does not prove that a source event is a valid lifecycle reversal,
@@ -213,11 +242,11 @@ ports changes meaning, so comparison claims no commutativity or inverse.
 
 ## Replay and invalidation
 
-The exact cash fixture demonstrates equal canonical values and lineage for
-three supported reduction paths: full input, a verified prefix plus suffix, and
-compatible partial reduction plus merge. This does **not** claim that the
-current projection APIs expose general incremental replay or checkpoints.
-Portable serialized checkpoints, watermarks, and hashes are O3 work.
+The exact cash fixture and public reducer demonstrate equal values and lineage
+for three supported reduction paths: full input, a verified prefix plus suffix,
+and compatible partial reduction plus merge. This does **not** claim that the
+other projection APIs inherit the reducer's laws or expose general incremental
+replay. Checkpoint and serialization contracts remain separate from this API.
 
 Incremental or partitioned execution is supported only when its operation
 declaration says so and all compatibility conditions hold. Otherwise full
@@ -305,8 +334,9 @@ This increment intentionally leaves the following to their roadmap owners:
 - journal types, charts of accounts, journal mapping signatures, accounting
   policy versions, trade-date versus settlement-date posting, lots, cost basis,
   P&L, and accounting rounding (O4);
-- a minimal public composition/policy interface and independent-consumer
-  extension example (the next O5 implementation increment);
+- public transformation interfaces beyond the bounded exact-cash reduction,
+  including general mapping, ordered-fold, comparison, and policy extension
+  contracts;
 - CLI/Python bindings, standalone and hosted adapters, and pinned platform
   integration (the portable-execution increment);
 - dynamic loading, a general plugin ABI, expression languages, arbitrary runtime
