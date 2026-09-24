@@ -116,6 +116,8 @@ if(PACIOLI_BUILD_TESTS)
 
   add_executable(pacioli_checkpoint_manifest_serialization_test
     tests/unit/checkpoint_manifest_serialization_test.cpp)
+  target_compile_definitions(pacioli_checkpoint_manifest_serialization_test PRIVATE
+    "LUCA_CHECKPOINT_MANIFEST_FIXTURE_PATH=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/conformance/serialization-checkpoints/valid-append.json\"")
   target_link_libraries(pacioli_checkpoint_manifest_serialization_test
     PRIVATE luca::portfolio)
   add_test(NAME pacioli_checkpoint_manifest_serialization_test

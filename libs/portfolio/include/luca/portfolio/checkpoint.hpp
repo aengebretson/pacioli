@@ -15,6 +15,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -153,18 +154,13 @@ validate_timestamp(Timestamp value, std::string_view field) {
 
 template <class Values, class ValueOf>
 [[nodiscard]] inline bool has_duplicates(const Values &values, ValueOf value_of) {
-  for (std::size_t left = 0; left < values.size(); ++left) {
-    for (std::size_t right = left + 1; right < values.size(); ++right) {
-      if (value_of(values[left]) == value_of(values[right]))
-        return true;
-    }
+  std::unordered_set<std::string_view> seen;
+  seen.reserve(values.size());
+  for (const auto &value : values) {
+    if (!seen.emplace(value_of(value)).second)
+      return true;
   }
   return false;
-}
-
-template <class Values, class IdentifierType>
-[[nodiscard]] inline bool contains(const Values &values, const IdentifierType &sought) noexcept {
-  return std::ranges::find(values, sought) != values.end();
 }
 
 } // namespace checkpoint_detail
@@ -474,8 +470,13 @@ public:
       return std::unexpected(valid.error());
     if (auto valid = validate_ids(source_record_ids, "source record lineage", true); !valid)
       return std::unexpected(valid.error());
+
+    std::unordered_set<std::string_view> lifecycle_ids;
+    lifecycle_ids.reserve(lifecycle_record_ids.size());
+    for (const auto &record_id : lifecycle_record_ids)
+      lifecycle_ids.emplace(record_id.value());
     for (const auto &record_id : active_record_ids) {
-      if (!checkpoint_detail::contains(lifecycle_record_ids, record_id)) {
+      if (!lifecycle_ids.contains(record_id.value())) {
         return std::unexpected(checkpoint_detail::CheckpointValidation::error(
             CheckpointDiagnosticCategory::inconsistent_lineage,
             "every active record must occur in lifecycle lineage"));
@@ -509,7 +510,7 @@ private:
         return std::unexpected(valid.error());
     }
     if (checkpoint_detail::has_duplicates(
-            values, [](const IdentifierType &value) { return value.value(); })) {
+            values, [](const IdentifierType &value) { return std::string_view{value.value()}; })) {
       return std::unexpected(checkpoint_detail::CheckpointValidation::error(
           CheckpointDiagnosticCategory::duplicate_identity,
           std::string{field} + " must not contain duplicate identities"));
@@ -555,6 +556,11 @@ public:
       return std::unexpected(checkpoint_detail::CheckpointValidation::error(
           CheckpointDiagnosticCategory::invalid_watermark,
           "resolved-event watermark must lie within the declared event prefix"));
+    }
+    if (resolved_event_watermark.effective_at() > evaluation_context.economic_as_of()) {
+      return std::unexpected(checkpoint_detail::CheckpointValidation::error(
+          CheckpointDiagnosticCategory::invalid_watermark,
+          "resolved-event watermark effective time must not exceed the economic as-of time"));
     }
 
     const auto lifecycle = lineage.lifecycle_record_ids();

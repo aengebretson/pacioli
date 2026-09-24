@@ -7,8 +7,10 @@
 #include <cstdint>
 #include <cstdlib>
 #include <expected>
+#include <fstream>
 #include <initializer_list>
 #include <iostream>
+#include <iterator>
 #include <source_location>
 #include <span>
 #include <string>
@@ -87,6 +89,42 @@ CheckpointInput input(std::string_view id, std::string_view version,
   return require(CheckpointInput::create(id, version, digest(digest_value)));
 }
 
+unsigned char hex_value(char digit) {
+  if (digit >= '0' && digit <= '9')
+    return static_cast<unsigned char>(digit - '0');
+  if (digit >= 'a' && digit <= 'f')
+    return static_cast<unsigned char>(digit - 'a' + 10);
+  check(false);
+  return 0;
+}
+
+CanonicalBytes pinned_manifest_bytes() {
+  std::ifstream input{LUCA_CHECKPOINT_MANIFEST_FIXTURE_PATH};
+  check(input.is_open());
+  const std::string fixture{std::istreambuf_iterator<char>{input},
+                            std::istreambuf_iterator<char>{}};
+  constexpr std::string_view manifest_id = R"("id": "checkpoint-manifest")";
+  constexpr std::string_view hex_key = R"("canonical_hex": ")";
+  const auto manifest_position = fixture.find(manifest_id);
+  check(manifest_position != std::string::npos);
+  const auto hex_position = fixture.find(hex_key, manifest_position);
+  check(hex_position != std::string::npos);
+  const auto hex_begin = hex_position + hex_key.size();
+  const auto hex_end = fixture.find('"', hex_begin);
+  check(hex_end != std::string::npos);
+  const std::string_view hex{fixture.data() + hex_begin, hex_end - hex_begin};
+  check(hex.size() % 2 == 0);
+
+  CanonicalBytes bytes;
+  bytes.reserve(hex.size() / 2);
+  for (std::size_t offset = 0; offset < hex.size(); offset += 2) {
+    const auto value =
+        static_cast<unsigned char>((hex_value(hex[offset]) << 4U) | hex_value(hex[offset + 1]));
+    bytes.push_back(static_cast<std::byte>(value));
+  }
+  return bytes;
+}
+
 std::vector<EventId> event_ids(std::initializer_list<std::string_view> values) {
   std::vector<EventId> result;
   result.reserve(values.size());
@@ -155,10 +193,13 @@ void test_integrated_manifest_vector_twice() {
   constexpr std::string_view expected_digest =
       "0caf30cfaa3169c60af55fc68173d3979e6f34f6cebc87fe73117ee4e8fc2964";
   const auto manifest = fixture_manifest();
+  const auto expected_bytes = pinned_manifest_bytes();
   const auto first_bytes = canonical_bytes(manifest);
   const auto second_bytes = canonical_bytes(manifest);
 
   check(first_bytes == second_bytes);
+  check(first_bytes == expected_bytes);
+  check(second_bytes == expected_bytes);
   check(canonical_digest(manifest) == expected_digest);
   check(canonical_digest(manifest) == expected_digest);
   check(first_bytes.size() == 1'703);
@@ -316,6 +357,16 @@ void test_invalid_prefix_context_watermark_and_lineage_are_rejected() {
                   fixture.projection(), fixture.engine_version(), fixture.policy(),
                   fixture.partition(), fixture.event_prefix(), fixture.evaluation_context(),
                   fixture.canonical_state_digest(), wrong_sequence, fixture.lineage()),
+              CheckpointDiagnosticCategory::invalid_watermark);
+
+  const auto after_economic_as_of = require(
+      ResolvedEventWatermark::create(fixture.evaluation_context().economic_as_of() + 1ns,
+                                     fixture.resolved_event_watermark().acceptance_sequence(),
+                                     fixture.resolved_event_watermark().record_id()));
+  check_error(CheckpointManifest::create(
+                  fixture.projection(), fixture.engine_version(), fixture.policy(),
+                  fixture.partition(), fixture.event_prefix(), fixture.evaluation_context(),
+                  fixture.canonical_state_digest(), after_economic_as_of, fixture.lineage()),
               CheckpointDiagnosticCategory::invalid_watermark);
 }
 
