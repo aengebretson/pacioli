@@ -215,6 +215,14 @@ std::size_t text_payload_after_key(std::span<const std::byte> bytes, std::string
   return 0;
 }
 
+void replace_text_after_key(CanonicalBytes &bytes, std::string_view key, std::string_view value) {
+  const auto offset = text_payload_after_key(bytes, key);
+  check(value.size() == 30U);
+  check(offset + value.size() <= bytes.size());
+  for (std::size_t index = 0; index < value.size(); ++index)
+    bytes[offset + index] = static_cast<std::byte>(static_cast<unsigned char>(value[index]));
+}
+
 CanonicalBytes empty_state_with_second_key(std::string_view second_key) {
   using namespace luca::serialization::detail;
   auto bytes = top_level_bytes();
@@ -504,6 +512,38 @@ void test_manifest_mutations() {
                DecodeDiagnosticCategory::canonical_encoding);
 }
 
+void test_timestamp_representability() {
+  const auto valid = canonical_bytes(fixture_manifest());
+
+  auto minimum = valid;
+  replace_text_after_key(minimum, "recorded_through", "1677-09-21T00:12:43.145224192Z");
+  const auto minimum_saved = minimum;
+  const auto decoded_minimum = luca::serialization::decode_checkpoint_manifest(minimum);
+  check(decoded_minimum.has_value());
+  check(decoded_minimum->evaluation_context().recorded_through() == Timestamp::min());
+  check(minimum == minimum_saved);
+
+  auto maximum = valid;
+  replace_text_after_key(maximum, "economic_as_of", "2262-04-11T23:47:16.854775807Z");
+  const auto maximum_saved = maximum;
+  const auto decoded_maximum = luca::serialization::decode_checkpoint_manifest(maximum);
+  check(decoded_maximum.has_value());
+  check(decoded_maximum->evaluation_context().economic_as_of() == Timestamp::max());
+  check(canonical_bytes(*decoded_maximum) == maximum);
+  check(maximum == maximum_saved);
+
+  for (const auto invalid : {std::string_view{"1677-09-21T00:12:43.145224191Z"},
+                             std::string_view{"2262-04-11T23:47:16.854775808Z"},
+                             std::string_view{"9999-12-31T23:59:59.999999999Z"}}) {
+    auto out_of_range = valid;
+    replace_text_after_key(out_of_range, "recorded_through", invalid);
+    const auto saved = out_of_range;
+    expect_error(luca::serialization::decode_checkpoint_manifest(out_of_range),
+                 DecodeDiagnosticCategory::canonical_encoding);
+    check(out_of_range == saved);
+  }
+}
+
 } // namespace
 
 int main() {
@@ -512,5 +552,6 @@ int main() {
   test_reader_failures_and_closed_shape();
   test_portfolio_schema_scalars_and_ordering();
   test_manifest_mutations();
+  test_timestamp_representability();
   return 0;
 }

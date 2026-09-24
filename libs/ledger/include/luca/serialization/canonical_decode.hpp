@@ -379,8 +379,46 @@ parse_timestamp(Reader &reader, std::string_view value, std::string_view field) 
     return std::unexpected(reader.error(DecodeDiagnosticCategory::canonical_encoding,
                                         std::string{field} + " is not a valid v1 timestamp"));
   }
-  return Timestamp{sys_days{date} + hours{hour} + minutes{minute} + seconds{second} +
-                   nanoseconds{nanosecond}};
+
+  constexpr auto nanoseconds_per_day = duration_cast<nanoseconds>(days{1}).count();
+  constexpr auto minimum_count = Timestamp::duration::min().count();
+  constexpr auto maximum_count = Timestamp::duration::max().count();
+  constexpr auto floor_days = [nanoseconds_per_day](std::int64_t count) {
+    auto result = count / nanoseconds_per_day;
+    if (count % nanoseconds_per_day < 0)
+      --result;
+    return result;
+  };
+  constexpr auto day_remainder = [nanoseconds_per_day](std::int64_t count) {
+    auto result = count % nanoseconds_per_day;
+    if (result < 0)
+      result += nanoseconds_per_day;
+    return result;
+  };
+
+  constexpr auto minimum_day = floor_days(minimum_count);
+  constexpr auto maximum_day = floor_days(maximum_count);
+  constexpr auto minimum_time = day_remainder(minimum_count);
+  constexpr auto maximum_time = day_remainder(maximum_count);
+  const auto parsed_day = sys_days{date}.time_since_epoch().count();
+  const auto time_of_day = static_cast<std::int64_t>(hour) * 3'600'000'000'000LL +
+                           static_cast<std::int64_t>(minute) * 60'000'000'000LL +
+                           static_cast<std::int64_t>(second) * 1'000'000'000LL +
+                           static_cast<std::int64_t>(nanosecond);
+  if (parsed_day < minimum_day || parsed_day > maximum_day ||
+      (parsed_day == minimum_day && time_of_day < minimum_time) ||
+      (parsed_day == maximum_day && time_of_day > maximum_time)) {
+    return std::unexpected(
+        reader.error(DecodeDiagnosticCategory::canonical_encoding,
+                     std::string{field} + " is outside the representable v1 timestamp range"));
+  }
+
+  // On the minimum representable day, converting sys_days to nanoseconds first would
+  // overflow even though adding the time of day produces a representable Timestamp.
+  const auto timestamp_count = parsed_day >= 0 ? parsed_day * nanoseconds_per_day + time_of_day
+                                               : (parsed_day + 1) * nanoseconds_per_day +
+                                                     (time_of_day - nanoseconds_per_day);
+  return Timestamp{nanoseconds{timestamp_count}};
 }
 
 } // namespace decode_detail
