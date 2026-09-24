@@ -1,0 +1,68 @@
+{
+  "fixture_schema": "luca.serialization-checkpoint-fixture.v1",
+  "case_kind": "canonical_vectors",
+  "case_id": "canonical-values",
+  "array_count_vectors": [
+    {
+      "id": "maximum-lifecycle-prefix-array-count",
+      "item_count": "18446744073709551615",
+      "encoded_hex": "ffffffffffffffff",
+      "sha256": "12a3ae445661ce5dee78d0650d33362dec29c4f82af05e7e57fb595bbbacf0ca"
+    }
+  ],
+  "values": {
+    "primitive_envelope": {
+      "schema_version": "luca.canonical-test-value.v1",
+      "enabled": true,
+      "optional": null,
+      "signed_integer": -42,
+      "ordered_values": [
+        "first",
+        "second"
+      ]
+    },
+    "money": {
+      "schema_version": "luca.money.v1",
+      "currency": "USD",
+      "scale": "6",
+      "scaled_value": "4400000000"
+    },
+    "provenance": {
+      "schema_version": "luca.provenance.v1",
+      "source_record_ids": [
+        "source-trade-001",
+        "source-allocation-001"
+      ],
+      "transformation_name": "normalize-equity-trade",
+      "transformation_version": "1",
+      "transformation_metadata": null
+    },
+    "maximum_lifecycle_sequence": "18446744073709551615"
+  },
+  "vectors": [
+    {
+      "id": "primitive-envelope",
+      "target": "primitive_envelope",
+      "canonical_hex": "4c434231060000000500000007656e61626c656402000000086f7074696f6e616c000000000e6f7264657265645f76616c7565730500000000000000020400000005666972737404000000067365636f6e640000000e736368656d615f76657273696f6e040000001c6c7563612e63616e6f6e6963616c2d746573742d76616c75652e76310000000e7369676e65645f696e746567657203ffffffffffffffd6",
+      "sha256": "a79dd8d7e97a57621fb9eb483453f1991b4da9de8c7c2cafa277f094caddf015"
+    },
+    {
+      "id": "money-usd-4400",
+      "target": "money",
+      "canonical_hex": "4c43423106000000040000000863757272656e63790400000003555344000000057363616c650400000001360000000c7363616c65645f76616c7565040000000a343430303030303030300000000e736368656d615f76657273696f6e040000000d6c7563612e6d6f6e65792e7631",
+      "sha256": "a92590d43f88689fb3d67d2f34c0b71e98d00f5b46f86270610b54f185bcf1f8"
+    },
+    {
+      "id": "two-source-provenance",
+      "target": "provenance",
+      "canonical_hex": "4c43423106000000050000000e736368656d615f76657273696f6e04000000126c7563612e70726f76656e616e63652e763100000011736f757263655f7265636f72645f6964730500000000000000020400000010736f757263652d74726164652d3030310400000015736f757263652d616c6c6f636174696f6e2d303031000000177472616e73666f726d6174696f6e5f6d6574616461746100000000137472616e73666f726d6174696f6e5f6e616d6504000000166e6f726d616c697a652d6571756974792d7472616465000000167472616e73666f726d6174696f6e5f76657273696f6e040000000131",
+      "sha256": "c90b7d5830bc43055b3aca1c14184ec94aa0c6a0ec35cd58b54d517e1a78869d"
+    },
+    {
+      "id": "maximum-lifecycle-sequence",
+      "target": "maximum_lifecycle_sequence",
+      "canonical_hex": "4c43423104000000143138343436373434303733373039353531363135",
+      "sha256": "9f8a1526ba0f12aaed4d8133c4fc167fb9e4615f7f766c1a19347d0502d983d0"
+    }
+  ]
+}
