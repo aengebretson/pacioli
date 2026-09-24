@@ -1,11 +1,12 @@
 # Executable transformation and composition contract
 
 Status: executable design contract for O5-T01 plus the bounded exact-cash C++
-reduction and lineage-bearing exact comparison implemented by O5-T02 and
-O5-T03. The JSON fixtures and their dependency-free validator define the wider
-portable semantic vocabulary for design review. The exact-cash APIs are not a
-generic composition runtime, canonical wire format, checkpoint format, plugin
-ABI, or second implementation of LUCA projections.
+reduction, lineage-bearing exact comparison, and standalone execution host
+implemented by O5-T02 through O5-T04. The JSON fixtures and their
+dependency-free validators define the wider portable semantic vocabulary for
+design review. The exact-cash APIs and host are not a generic composition
+runtime, canonical wire format, checkpoint format, plugin ABI, or second
+implementation of LUCA projections.
 
 ## Purpose and boundary
 
@@ -267,6 +268,84 @@ Swapping projected and observed ports changes meaning, so it claims no
 commutativity, associativity, identity, distributivity, or inverse. Its only
 arithmetic is exact scale-6 `observed - projected` through `Money::subtract`.
 
+## Standalone exact-cash execution host
+
+`luca-exact-cash` is the first bounded portable host for these two public
+operations. It reads one request from standard input by default, or from the
+single file named by `--input FILE`, and writes one result to standard output.
+It performs no file discovery and has no database, network, environment-secret,
+plugin, or runtime-code input. The host parses and validates the envelope, but
+delegates exact addition and comparison subtraction to `reduce_exact_cash` and
+`compare_exact_cash`; it does not implement a second financial calculator.
+
+The request and result both use the closed
+`luca.exact-cash-cli.v1` schema. The complete example is
+`tests/fixtures/exact-cash-cli/valid-mismatch.json`. Every request contains
+exactly these top-level members:
+
+| Member | Contract |
+| --- | --- |
+| `schema_version` | Exactly `luca.exact-cash-cli.v1`. |
+| `engine` | Explicit `id` and `version`. V1 supports engine ID `luca`; its version is copied into `ExactCashEvaluationContext` and every operation trace. |
+| `operations` | One reduction and one comparison declaration. V1 accepts `reduce.cash.exact`/`1` with `exact-cash-sum`/`1`, and `compare.cash.exact`/`1` with `exact-cash-comparison`/`1`. |
+| `evaluation_context` | Context ID, inclusive `recorded_through`, inclusive `economic_as_of`, and `settlement_as_of_date`. UTC timestamps use exactly `YYYY-MM-DDTHH:MM:SSZ`; dates use `YYYY-MM-DD`. |
+| `partials` | Explicit account, currency, exact amount, source-event IDs, and source-record IDs for each reduction input. |
+| `observations` | Explicit account, currency, exact amount, both observation cutoffs, and complete observation provenance. |
+
+The reduction declaration also fixes `unit: money`, complete ordered
+`partition_keys: [account, currency]`, `ordering: arbitrary`, and
+`rounding: none`. The comparison declaration fixes output ordering by account,
+currency, and break kind, `rounding: none`, and the existing
+`observed_minus_expected` sign convention. These declarations are mandatory;
+the host neither guesses them nor accepts alternative spellings. Every amount
+is a JSON string in canonical scale-6 form. It has exactly six fractional
+digits, no plus sign or leading integer zero, and no exponent; `0.000000` is the
+only zero spelling. The bytes are passed directly to `Money::parse`, never
+through binary floating point.
+
+All partials share the declared operation, policy, engine, and evaluation
+context. The host creates an `ExactCashReductionContract` and
+`ExactCashPartial` through their public factories for every input, groups them
+by the complete `(account, currency)` key, then calls `reduce_exact_cash` once
+per group. Event identity is unique across a request; repeated event lineage is
+rejected rather than counted twice. Source-record lineage is canonicalized by
+the public reducer. The host separately creates each observation with
+`Provenance::create` and `CashObservation::create`; observation provenance
+source IDs are unique and sorted. The requested observation cutoffs are not
+replaced by the shared context, so `compare_exact_cash` reports a mismatch
+instead of silently normalizing incompatible context.
+
+The result contains the explicit engine and evaluation context, the reduction
+and comparison operation trace, counts for exact/missing/unexpected/mismatch
+outcomes, ordered reductions, ordered exact `matches`, and ordered `breaks`.
+Exact matches retain projection and observation evidence in separate members.
+Each break similarly has separate nullable `projection_evidence` and
+`observation_evidence`; projection event/source lineage is never combined with
+external provenance. Missing observations retain only projection evidence,
+unexpected observations retain only observation evidence, and mismatches use
+`difference = observed - expected`. No job ID, path, clock time, process ID,
+attempt, hostname, or other runtime-specific host field appears in the result.
+Identical request bytes therefore produce identical result bytes.
+
+V1 is deliberately bounded: input is at most 1 MiB, JSON nesting is at most 16
+levels, a JSON container has at most 8192 entries, partial and observation
+counts are each at most 4096, lineage arrays are at most 4096 entries, and a
+decoded string is at most 65536 bytes. The parser rejects malformed UTF-8,
+malformed JSON, trailing input, duplicate members at any level, unknown schema
+members, noncanonical decimals, excessive sizes/counts/nesting, unsupported
+schema/operation/policy versions, invalid identifiers/currencies/dates/
+provenance, duplicate observation keys or event lineage, incompatible
+contexts, and checked arithmetic overflow. A failure writes one stable category
+to standard error, exits nonzero, and writes no partial result to standard
+output.
+
+This JSON is a host envelope, not the portable canonical serialization deferred
+to O3. In particular, it defines no input or output hash. Its deterministic
+member order is useful for repeatable execution and tests but is not advertised
+as a general LUCA canonical JSON format. The executable links only the public
+`luca::reconciliation` target, so installed-library and parent consumers keep
+their existing interfaces.
+
 ## Replay and invalidation
 
 The exact cash fixture and public reducer demonstrate equal values and lineage
@@ -321,9 +400,9 @@ called a canonical LUCA hash.
 Host-only data such as job IDs, queue names, worker addresses, attempt counts,
 requesting principals, wall-clock start/end times, storage locations, and
 authorization decisions must be recorded outside the deterministic result. A
-standalone process and a hosted adapter can eventually call the same reviewed
-OSS implementation with the same explicit inputs; this increment implements
-neither host and does not duplicate financial arithmetic for one.
+hosted adapter can eventually call the same reviewed OSS implementation and
+fixtures as the standalone process. This increment implements only the bounded
+standalone host and does not duplicate financial arithmetic in it.
 
 ## Fixture and validator responsibilities
 
@@ -371,8 +450,9 @@ This increment intentionally leaves the following to their roadmap owners:
 - public transformation interfaces beyond the bounded exact-cash reduction and
   exact cash comparison, including general mapping, ordered-fold, tolerant
   comparison, and policy extension contracts;
-- CLI/Python bindings, standalone and hosted adapters, and pinned platform
-  integration (the portable-execution increment);
+- Python bindings, hosted adapters, and pinned platform integration (later
+  portable-execution increments); the bounded standalone exact-cash host is the
+  only host implemented here;
 - dynamic loading, a general plugin ABI, expression languages, arbitrary runtime
   code execution, and acceptance of externally calculated state;
 - FX conversion/netting policy, fees, commissions, taxes, settlement calendars,
