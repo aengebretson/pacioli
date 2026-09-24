@@ -1,8 +1,8 @@
 # Canonical serialization and replay-checkpoint contract
 
-Status: executable O3 design contract with production typed encoding and
-portfolio-checkpoint decoding, manifest, and conservative checkpoint-resume
-compatibility and application slices.
+Status: executable O3 design contract with production typed lifecycle encoding
+and decoding, portfolio-checkpoint decoding, manifest, and conservative
+checkpoint-resume compatibility and application slices.
 The fixtures and dependency-free validator under
 `tests/conformance/serialization-checkpoints/` fix the first portable byte,
 digest, manifest, and checkpoint-resume semantics. This contract is grounded in
@@ -92,7 +92,7 @@ point and sequence values use canonical strings in the schema before LCB
 encoding. Binary floating point is never accepted for money, quantity, price,
 rate, sequence, or watermark values.
 
-### Typed C++ encoding and checkpoint-decoding API
+### Typed C++ encoding and decoding API
 
 `<luca/serialization/canonical.hpp>` provides the ledger production encoding
 slices, and `<luca/portfolio/serialization.hpp>` adds the portfolio-state
@@ -105,6 +105,16 @@ returned as 64 lower-case hexadecimal characters. The API is header-only and
 is available to installed-package and `add_subdirectory` consumers through the
 existing Luca targets; it has no third-party dependency.
 
+`<luca/serialization/canonical_decode.hpp>` provides the bounded inverse for a
+complete `luca.lifecycle-record-sequence.v1` through
+`decode_lifecycle_ledger`. It accepts a read-only byte span, decodes only the
+closed provenance, event-header, cash-movement, equity-trade, lifecycle-record,
+and lifecycle-record-sequence shapes, and returns either a fully accepted
+`LifecycleLedger` or `DecodeError`. It rebuilds every value through the existing
+domain factories and submits each record, in declared sequence order, through
+`LifecycleLedger::accept`. A failed decode exposes no partially accepted ledger
+and never changes the caller's bytes.
+
 `<luca/portfolio/serialization_decode.hpp>` and
 `<luca/portfolio/checkpoint_decode.hpp>` provide the bounded inverse for the two
 checkpoint artifacts through `decode_portfolio_state` and
@@ -112,8 +122,7 @@ checkpoint artifacts through `decode_portfolio_state` and
 `std::expected` with either the fully validated typed value or a `DecodeError`;
 no partial value is exposed and the caller's bytes are never changed. They are
 also included by `<luca/portfolio.hpp>` for installed and `add_subdirectory`
-consumers. Lifecycle records and generic LCB values are deliberately not part of
-this decoding surface.
+consumers. None of these APIs exposes a generic LCB value tree.
 
 The internal streaming reader validates the `LCB1` header, every encountered
 tag and declared length/count, canonical raw-key order and uniqueness, NFC
@@ -140,6 +149,15 @@ rather than concatenating record encodings or hashes. Timestamps are rendered
 in UTC with nanosecond precision, including both signed-nanosecond endpoints,
 without widening the timestamp domain; settlement dates retain date
 granularity.
+
+Lifecycle decoding requires the same contiguous sequence beginning at one,
+nondecreasing recorded time, unique record and origin identities, earlier causal
+targets, unbranched lineage, same-account relationships, compatible correction
+and cancellation identities, and exact-offset reversal rules as ordinary
+lifecycle acceptance. Payload-bearing record identity, account, and provenance
+must equal the nested event header. Unknown actions or variants, invalid null
+placement, and inconsistent redundant fields are rejected as `schema_shape`;
+acceptance failures retain the portable lifecycle category described below.
 
 ## Covered public values
 
@@ -376,10 +394,9 @@ caller collections. It performs the following bounded work:
    resolved-event watermark, as `late_lifecycle_knowledge`.
 
 The compatibility API deliberately accepts already typed lifecycle records; it
-does not decode or trust transport bytes. A caller can split an accepted
-`LifecycleLedger::records()` span at the checkpoint boundary. Cross-process
-callers first construct the same typed values through an authorized decoder
-outside this slice.
+does not itself decode or trust transport bytes. A caller can use
+`decode_lifecycle_ledger` at the authorized transport boundary, then split the
+accepted `LifecycleLedger::records()` span at the checkpoint boundary.
 
 ### Applying a compatible suffix
 
@@ -497,8 +514,11 @@ extra, unknown, or mistyped closed member is `schema_shape`; unknown schema,
 serialization, algorithm, scale, partition, prefix, or record identities are
 `unsupported_version`; duplicate identities and non-canonical collection or
 map order retain `duplicate_identity` and `deterministic_ordering`; and a
-manifest lineage inconsistency is `lineage_reference_missing`. The diagnostic
-also records the byte offset at which rejection occurred.
+manifest lineage inconsistency and an unavailable lifecycle causal target are
+`lineage_reference_missing`. Lifecycle acceptance additionally retains
+`incompatible_account`, `incompatible_event_relationship`, and
+`conflicting_lifecycle_successor`. The diagnostic also records the byte offset
+at which rejection occurred.
 
 ## Fixture and validator responsibilities
 
@@ -535,9 +555,9 @@ immutability.
 ## Deliberately deferred
 
 This increment does not select a storage medium, persistence service,
-lifecycle-record decoder, arbitrary-schema runtime, platform adapter, journal
-policy, production schema, migration process, compression, signature scheme,
-Merkle structure, streaming frame, or release behavior. It does not advance
+arbitrary-schema runtime, platform adapter, journal policy, production schema,
+migration process, compression, signature scheme, Merkle structure, streaming
+frame, or release behavior. It does not advance
 evaluation context, create a new checkpoint manifest or lineage, or repair a
 partition.
 General advancing-context incremental replay, partial-partition repair, an

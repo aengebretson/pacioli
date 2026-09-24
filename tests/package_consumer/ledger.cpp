@@ -1,6 +1,7 @@
 #include <luca/ledger.hpp>
 #include <luca/lifecycle.hpp>
 #include <luca/serialization/canonical.hpp>
+#include <luca/serialization/canonical_decode.hpp>
 
 #include <chrono>
 #include <iostream>
@@ -38,6 +39,11 @@ int main() {
     return 5;
   if (luca::serialization::canonical_digest(lifecycle).size() != 64)
     return 6;
+  const auto lifecycle_bytes = luca::serialization::canonical_bytes(lifecycle);
+  const auto decoded = luca::serialization::decode_lifecycle_ledger(lifecycle_bytes);
+  if (!decoded || decoded->size() != 1 ||
+      luca::serialization::canonical_bytes(*decoded) != lifecycle_bytes)
+    return 7;
 
   std::cout << "ledger_entries=" << ledger.entries().size() << '\n';
   return 0;
