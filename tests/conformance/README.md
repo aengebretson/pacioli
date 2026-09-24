@@ -82,6 +82,40 @@ not canonical serialization or a promise that future public C++ types use the
 same field names. See the design document for supported as-of behavior and
 explicitly deferred queries and checkpoint behavior.
 
+## Accounting-foundations contract
+
+`accounting-foundations/` is the contract-first fixture set for the first
+bounded O4 journal semantics. It consumes fixture-declared outputs of O2
+lifecycle resolution; it does not resolve correction, cancellation, or reversal
+chains again. One immutable contribution/trade/correction/reversal history is
+evaluated at five explicit economic, recorded, and settlement cutoffs under two
+fixture-only policies. The policies make trade-date versus settlement-date
+recognition observable without claiming GAAP, IFRS, tax, NAV, a production
+chart of accounts, or accounting approval.
+
+The valid document contains closed policy, evidence, lifecycle-record,
+journal-entry, journal-line, result, balance, and portfolio-cross-check shapes.
+Every selected entry, line, and balance is traceable to lifecycle records,
+economic events, source records, policy/version, engine/projection versions,
+and evaluation inputs. Amounts are exact six-decimal strings; entries balance
+independently by currency. The hand-recorded walkthrough covers the original
+purchase, late correction, purchase settlement, late-known reversal before its
+settlement, and reversal settlement.
+
+`invalid-mutations.json` derives portable negative cases from that valid
+baseline. It covers every stable accounting diagnostic, including unbalanced
+and mixed-currency entries, zero and inexact lines, missing and mismatched
+lineage, duplicate identities, unsupported events, policy/context mismatch,
+invalid reversal treatment, and inconsistent position/cash/settlement
+cross-checks. `test_accounting_foundations_contract.py` applies and validates
+each vector twice with only the Python standard library. It uses `Decimal` for
+journal arithmetic and checks only the bounded portfolio values recorded by the
+fixture, so it is not a second general lifecycle or portfolio engine.
+
+See [`docs/accounting-foundations.md`](../../docs/accounting-foundations.md) for
+the policy rules, shapes, stable diagnostics, walkthrough, and deferred
+production-policy decisions.
+
 Run the validator through CTest (`ctest --preset dev`) or directly with:
 
 ```bash

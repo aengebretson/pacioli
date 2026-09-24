@@ -1,0 +1,277 @@
+{
+  "contract_version": "luca.accounting-foundations.v1",
+  "fixture_id": "invalid.accounting-mutations",
+  "fixture_kind": "invalid_mutations",
+  "base_fixture_id": "valid.cash-equity-lifecycle",
+  "cases": [
+    {
+      "case_id": "missing-top-level-field",
+      "expected_category": "schema_shape",
+      "mutation": {
+        "operation": "remove",
+        "path": [
+          "engine_version"
+        ],
+        "value": null
+      }
+    },
+    {
+      "case_id": "duplicate-line-identity",
+      "expected_category": "duplicate_identity",
+      "mutation": {
+        "operation": "replace",
+        "path": [
+          "journal_entries",
+          0,
+          "lines",
+          1,
+          "journal_line_id"
+        ],
+        "value": "td.opening-cash.immediate.debit"
+      }
+    },
+    {
+      "case_id": "changed-policy-declaration",
+      "expected_category": "invalid_policy",
+      "mutation": {
+        "operation": "replace",
+        "path": [
+          "policies",
+          0,
+          "fixture_only"
+        ],
+        "value": false
+      }
+    },
+    {
+      "case_id": "unsupported-event",
+      "expected_category": "unsupported_event",
+      "mutation": {
+        "operation": "replace",
+        "path": [
+          "lifecycle_records",
+          0,
+          "event",
+          "type"
+        ],
+        "value": "fee"
+      }
+    },
+    {
+      "case_id": "changed-result-cutoff",
+      "expected_category": "invalid_cutoff",
+      "mutation": {
+        "operation": "replace",
+        "path": [
+          "evaluations",
+          0,
+          "results",
+          0,
+          "evaluation_context",
+          "recorded_through"
+        ],
+        "value": "2026-06-03T23:59:59Z"
+      }
+    },
+    {
+      "case_id": "policy-version-mismatch",
+      "expected_category": "policy_context_mismatch",
+      "mutation": {
+        "operation": "replace",
+        "path": [
+          "evaluations",
+          0,
+          "results",
+          0,
+          "policy",
+          "version"
+        ],
+        "value": "2"
+      }
+    },
+    {
+      "case_id": "unbalanced-entry",
+      "expected_category": "unbalanced_entry",
+      "mutation": {
+        "operation": "replace",
+        "path": [
+          "journal_entries",
+          0,
+          "lines",
+          1,
+          "amount"
+        ],
+        "value": "99999.000000"
+      }
+    },
+    {
+      "case_id": "mixed-currency-entry",
+      "expected_category": "mixed_currency_entry",
+      "mutation": {
+        "operation": "replace",
+        "path": [
+          "journal_entries",
+          0,
+          "lines",
+          1,
+          "currency"
+        ],
+        "value": "EUR"
+      }
+    },
+    {
+      "case_id": "zero-line",
+      "expected_category": "invalid_line_amount",
+      "mutation": {
+        "operation": "replace",
+        "path": [
+          "journal_entries",
+          0,
+          "lines",
+          0,
+          "amount"
+        ],
+        "value": "0.000000"
+      }
+    },
+    {
+      "case_id": "inexact-line",
+      "expected_category": "invalid_line_amount",
+      "mutation": {
+        "operation": "replace",
+        "path": [
+          "journal_entries",
+          0,
+          "lines",
+          0,
+          "amount"
+        ],
+        "value": "100000.0000001"
+      }
+    },
+    {
+      "case_id": "rounded-value-mismatch",
+      "expected_category": "rounding_mismatch",
+      "mutation": {
+        "operation": "replace_all_line_amounts",
+        "path": [
+          "journal_entries",
+          1,
+          "lines"
+        ],
+        "value": "5000.000001"
+      }
+    },
+    {
+      "case_id": "missing-lineage",
+      "expected_category": "lineage_missing",
+      "mutation": {
+        "operation": "remove",
+        "path": [
+          "journal_entries",
+          0,
+          "lines",
+          0,
+          "lineage",
+          "source_record_ids"
+        ],
+        "value": null
+      }
+    },
+    {
+      "case_id": "mismatched-lineage",
+      "expected_category": "lineage_mismatch",
+      "mutation": {
+        "operation": "replace",
+        "path": [
+          "journal_entries",
+          0,
+          "lines",
+          0,
+          "lineage",
+          "source_record_ids"
+        ],
+        "value": [
+          "trade-source-original"
+        ]
+      }
+    },
+    {
+      "case_id": "invalid-reversal-posting",
+      "expected_category": "invalid_reversal_treatment",
+      "mutation": {
+        "operation": "replace",
+        "path": [
+          "journal_entries",
+          5,
+          "lines",
+          0,
+          "account_id"
+        ],
+        "value": "asset.equity-securities"
+      }
+    },
+    {
+      "case_id": "reversal-not-exact-offset",
+      "expected_category": "invalid_reversal_treatment",
+      "mutation": {
+        "operation": "replace",
+        "path": [
+          "lifecycle_records",
+          3,
+          "event",
+          "quantity"
+        ],
+        "value": "-79.00000000"
+      }
+    },
+    {
+      "case_id": "portfolio-cash-mismatch",
+      "expected_category": "portfolio_cross_check",
+      "mutation": {
+        "operation": "replace",
+        "path": [
+          "evaluations",
+          0,
+          "portfolio_state",
+          "settled_cash",
+          0,
+          "amount"
+        ],
+        "value": "99999.000000"
+      }
+    },
+    {
+      "case_id": "portfolio-position-mismatch",
+      "expected_category": "portfolio_cross_check",
+      "mutation": {
+        "operation": "replace",
+        "path": [
+          "evaluations",
+          0,
+          "portfolio_state",
+          "positions",
+          0,
+          "quantity"
+        ],
+        "value": "99.00000000"
+      }
+    },
+    {
+      "case_id": "portfolio-settlement-mismatch",
+      "expected_category": "portfolio_cross_check",
+      "mutation": {
+        "operation": "replace",
+        "path": [
+          "evaluations",
+          0,
+          "portfolio_state",
+          "open_settlement_obligations",
+          0,
+          "amount"
+        ],
+        "value": "4999.000000"
+      }
+    }
+  ]
+}
