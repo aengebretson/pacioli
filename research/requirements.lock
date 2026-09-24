@@ -1,0 +1,18 @@
+# Exact environment tested for luca-research 0.1.0 on CPython 3.11.
+# Regenerate deliberately; do not loosen these pins for a reproducibility run.
+arch==8.0.0
+formulaic==1.2.2
+interface_meta==2.0.1
+narwhals==2.26.0
+numpy==2.4.6
+packaging==26.3
+pandas==3.0.6
+patsy==1.0.3
+python-dateutil==2.9.0.post0
+scipy==1.17.1
+setuptools==80.9.0
+six==1.17.0
+statsmodels==0.15.0
+typing_extensions==4.16.0
+wheel==0.46.3
+wrapt==2.4.1
