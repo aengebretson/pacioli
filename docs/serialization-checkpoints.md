@@ -1,7 +1,7 @@
 # Canonical serialization and replay-checkpoint contract
 
 Status: executable O3 design contract with production typed encoding, manifest,
-and conservative checkpoint-resume compatibility slices.
+and conservative checkpoint-resume compatibility and application slices.
 The fixtures and dependency-free validator under
 `tests/conformance/serialization-checkpoints/` fix the first portable byte,
 digest, manifest, and checkpoint-resume semantics. This contract is grounded in
@@ -13,10 +13,10 @@ format.
 
 The contract permits an authorized process to receive canonical lifecycle input,
 a verified portfolio-state checkpoint, and an ordinary append-only suffix and to
-decide deterministically whether reuse is safe. A standalone process receiving
-the same values can reproduce the canonical bytes, verify every digest, and
-compare full replay with checkpoint-plus-suffix results without knowing C++
-object layout.
+decide deterministically whether reuse is safe, then apply an accepted suffix.
+A standalone process receiving the same values can reproduce the canonical
+bytes, verify every digest, and compare full replay with checkpoint-plus-suffix
+results without knowing C++ object layout.
 
 This v1 checkpoint contains all three current portfolio views as one result:
 
@@ -350,6 +350,37 @@ does not decode or trust transport bytes. A caller can split an accepted
 callers first construct the same typed values through an authorized decoder
 outside this slice.
 
+### Applying a compatible suffix
+
+`<luca/portfolio/checkpoint_apply.hpp>` exposes
+`apply_checkpoint_suffix(request, manifest, checkpoint_state, accepted_prefix,
+proposed_suffix)`. It invokes the compatibility operation above before deriving
+or merging any suffix state. A compatibility failure is returned as the
+original `CheckpointResumeError` alternative of `CheckpointApplyError`, so its
+stable category and explanatory message are unchanged.
+
+After compatibility succeeds, the operation reconstitutes the suffix in an
+in-memory `LifecycleLedger`, resolves it with the manifest's unchanged
+`recorded_through` and `economic_as_of`, and applies the resolved active payloads
+in economic order with the unchanged economic and settlement context. Each
+payload is evaluated by the authoritative position, cash, and settlement
+engines and checked-merged into the evolving copy of the checkpoint state.
+This preserves an intermediate checked-arithmetic failure even when a later
+suffix payload would offset it. Corrections, cancellations, and reversals whose
+complete causal chain is inside the suffix therefore have ordinary lifecycle
+semantics. A record that targets prefix knowledge has already been rejected as
+`late_lifecycle_knowledge` and is never treated as an arithmetic delta.
+
+Each sparse event projection is checked-merged by the complete existing keys:
+account and instrument for positions; account and currency for settled cash;
+and account, settlement date, currency, and direction for obligations.
+Position and cash zeros are removed. Currency, receivable, and payable keys
+remain distinct. Projection and merge overflow use the existing
+`PositionProjectionError`, `CashProjectionError`, or
+`SettlementProjectionError` alternatives; an unexpected suffix-lifecycle
+rejection uses `LifecycleError`. No result is returned unless every ordered
+projection and merge completes, and no input is mutated.
+
 ## Verification and compatibility algorithm
 
 A consumer performs these checks in order and stops on the first stable category:
@@ -377,10 +408,12 @@ A consumer performs these checks in order and stops on the first stable category
    record in the checkpoint prefix. Also reject a suffix payload whose
    `(effective_at, acceptance_sequence)` is not strictly after the resolved-event
    watermark. These are late lifecycle knowledge, not an ordinary suffix.
-7. Only after those checks may an engine apply the ordinary suffix to the
-   checkpoint. The authoritative engine, not this validator, computes the
-   resulting financial state. Its declared canonical state and lineage must
-   equal the full replay result.
+7. Only after those checks does `apply_checkpoint_suffix` resolve the ordinary
+   suffix and apply each active payload in economic order to a copy of the
+   checkpoint state. The resulting canonical state, including the point at
+   which checked arithmetic fails, must equal full replay under the same
+   manifest context. Advancing lineage or creating a replacement manifest
+   remains a separate operation.
 
 This rule is intentionally conservative. A late correction replaces its target;
 a cancellation removes it; a reversal retains the target and introduces a new
@@ -451,13 +484,21 @@ the watermark. It does not calculate a position, cash balance, settlement
 obligation, correction delta, cancellation, or reversal. That avoids creating a
 second financial projection engine in Python.
 
+`checkpoint_apply_test.cpp` supplies the executable financial side of that
+boundary. It compares full lifecycle replay with checkpoint-plus-suffix replay
+for cash and equity activity, suffix-local corrections, cancellation and
+reversal, settled and open trades, currencies and settlement directions. It
+also checks deterministic bytes and digests, sparse zero removal, compatibility
+error forwarding, partition denial, late knowledge, checked overflow, and input
+immutability.
+
 ## Deliberately deferred
 
 This increment does not select a storage medium, persistence service, decoding
 API, arbitrary-schema runtime, platform adapter, journal policy, production
 schema, migration process, compression, signature scheme, Merkle structure,
-streaming frame, or release behavior. It does not apply a compatible suffix,
-calculate resumed state, advance evaluation context, or repair a partition.
+streaming frame, or release behavior. It does not advance evaluation context,
+create a new checkpoint manifest or lineage, or repair a partition.
 General advancing-context incremental replay, partial-partition repair, an
 empty-event checkpoint, and additional event/projection variants require later
 versioned contracts and fixtures. There is no unresolved encoding default
