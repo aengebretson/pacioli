@@ -79,7 +79,7 @@ parser, and memory representation:
 | --- | --- |
 | Identifier | Non-empty NFC text without NUL. Identifiers remain opaque and case-sensitive; no trimming or case folding occurs. A public value that is not NFC is rejected by the v1 serializer rather than silently changing identity. |
 | Variant | A closed lower-case `variant` or `action` text tag plus exactly the fields of that alternative. Unknown tags and fields are rejected. |
-| Timestamp | UTC ISO 8601 text `YYYY-MM-DDThh:mm:ss.nnnnnnnnnZ`, always nine fractional digits. A `Timestamp` time point is rendered in UTC; equivalent offsets cannot produce different bytes. Fixture years are `0001` through `9999`. |
+| Timestamp | UTC ISO 8601 text `YYYY-MM-DDThh:mm:ss.nnnnnnnnnZ`, always nine fractional digits. A `Timestamp` time point is rendered in UTC; equivalent offsets cannot produce different bytes. Every representable nanosecond value is encodable, from `1677-09-21T00:12:43.145224192Z` through `2262-04-11T23:47:16.854775807Z`; text outside this exact typed range is rejected even when its year is in the grammar's `0001` through `9999` range. |
 | Settlement date | Valid proleptic-Gregorian `YYYY-MM-DD` text, with no time or timezone. |
 | Fixed point | An object containing its version, a canonical signed base-10 `scaled_value` string, and canonical non-negative `scale` string. `0` is the only zero spelling; leading plus, leading zero, decimal point, exponent, whitespace, and `-0` are forbidden. The parsed scaled value must fit signed 64-bit. |
 | Currency | Exactly three uppercase ASCII letters. Money contains its currency; price remains currency-neutral and an equity trade carries `quote_currency`. |
@@ -137,7 +137,9 @@ below. `LifecycleLedger` is the complete-sequence boundary: lifecycle
 acceptance has already established a contiguous unsigned 64-bit order beginning
 at one, and its overload hashes one `luca.lifecycle-record-sequence.v1` value
 rather than concatenating record encodings or hashes. Timestamps are rendered
-in UTC with nanosecond precision and settlement dates retain date granularity.
+in UTC with nanosecond precision, including both signed-nanosecond endpoints,
+without widening the timestamp domain; settlement dates retain date
+granularity.
 
 ## Covered public values
 

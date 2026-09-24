@@ -370,6 +370,35 @@ void test_unsigned_64_bit_sequence_primitives() {
         "18446744073709551615");
 }
 
+void test_timestamp_boundaries() {
+  struct Boundary {
+    Timestamp value;
+    std::string_view text;
+    std::string_view id;
+  };
+  constexpr std::array boundaries{
+      Boundary{Timestamp::min(), "1677-09-21T00:12:43.145224192Z", "timestamp-minimum"},
+      Boundary{Timestamp::max(), "2262-04-11T23:47:16.854775807Z", "timestamp-maximum"},
+  };
+
+  for (const auto &boundary : boundaries) {
+    check(luca::serialization::detail::canonical_timestamp(boundary.value) == boundary.text);
+
+    const auto source = provenance(boundary.id);
+    const auto event = cash(boundary.id, 1, boundary.value, source);
+    const auto event_bytes = canonical_bytes(event);
+    check(contains(event_bytes, boundary.text));
+    check(canonical_bytes(event) == event_bytes);
+
+    LifecycleLedger ledger;
+    accept(ledger, LifecycleRecordDraft::originate(EconomicEventId{std::string{boundary.id}},
+                                                   boundary.value, event));
+    const auto ledger_bytes = canonical_bytes(ledger);
+    check(contains(ledger_bytes, boundary.text));
+    check(canonical_bytes(ledger) == ledger_bytes);
+  }
+}
+
 void test_integrated_portable_sequence_vectors() {
   const auto prefix = integrated_valid_append_fixture(2);
   check(canonical_bytes(prefix).size() == 2'511);
@@ -528,6 +557,7 @@ int main() {
   test_action_vectors_and_null_event(ledger);
   test_complete_sequence_vector(ledger);
   test_unsigned_64_bit_sequence_primitives();
+  test_timestamp_boundaries();
   test_integrated_portable_sequence_vectors();
   test_schema_invalid_text_and_empty_sequence_are_rejected();
   test_owned_field_order_lineage_action_and_payload_mutations(ledger);

@@ -521,6 +521,7 @@ void test_timestamp_representability() {
   const auto decoded_minimum = luca::serialization::decode_checkpoint_manifest(minimum);
   check(decoded_minimum.has_value());
   check(decoded_minimum->evaluation_context().recorded_through() == Timestamp::min());
+  check(canonical_bytes(*decoded_minimum) == minimum);
   check(minimum == minimum_saved);
 
   auto maximum = valid;
@@ -531,6 +532,16 @@ void test_timestamp_representability() {
   check(decoded_maximum->evaluation_context().economic_as_of() == Timestamp::max());
   check(canonical_bytes(*decoded_maximum) == maximum);
   check(maximum == maximum_saved);
+
+  for (int repetition = 0; repetition < 2; ++repetition) {
+    const auto repeated_minimum = luca::serialization::decode_checkpoint_manifest(minimum);
+    check(repeated_minimum.has_value());
+    check(canonical_bytes(*repeated_minimum) == minimum);
+
+    const auto repeated_maximum = luca::serialization::decode_checkpoint_manifest(maximum);
+    check(repeated_maximum.has_value());
+    check(canonical_bytes(*repeated_maximum) == maximum);
+  }
 
   for (const auto invalid : {std::string_view{"1677-09-21T00:12:43.145224191Z"},
                              std::string_view{"2262-04-11T23:47:16.854775808Z"},
