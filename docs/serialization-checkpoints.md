@@ -289,6 +289,30 @@ are forbidden as unknown manifest fields. A storage or execution layer may keep
 them in a sidecar that is neither part of the canonical financial result nor its
 digest.
 
+The C++ portfolio package exposes this contract as closed values rather than a
+generic map or serialization runtime. `CheckpointIdentity`, `CheckpointInput`,
+`AccountSetPartition`, `CheckpointEventPrefix`, `CheckpointEvaluationContext`,
+`ResolvedEventWatermark`, `CheckpointLineage`, and `CheckpointManifest` are
+created through validating factories. `Sha256Digest` owns the lowercase digest
+form. Schema, serialization, digest-algorithm, account-set, prefix-kind, and
+record-schema identities are fixed by the types and cannot be supplied by a
+caller.
+
+Factories copy caller declarations only after validation, so a failed operation
+does not consume or reorder caller-owned vectors. Account keys and each explicit
+context-input collection are copied into unsigned UTF-8 byte order; duplicate
+keys or duplicate `(id, version)` inputs are rejected. Lifecycle, active-event,
+and source-record lineage are retained exactly in their declared contract order.
+Manifest construction additionally requires lineage to span the declared prefix
+and requires the watermark sequence and record to identify the final
+replay-ordered active lineage entry.
+
+`luca::serialization::canonical_bytes(const CheckpointManifest&)` emits the
+fixed LCB1 representation, and `canonical_digest` hashes those complete bytes
+with SHA-256. These APIs only exchange and identify a manifest. They do not make
+a checkpoint-resume decision, load state, apply an event suffix, decode bytes,
+or introduce persistence, authorization, compression, or signatures.
+
 ## Verification and compatibility algorithm
 
 A consumer performs these checks in order and stops on the first stable category:
