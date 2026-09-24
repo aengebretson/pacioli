@@ -83,6 +83,19 @@ int main() {
       luca::serialization::canonical_digest(*manifest).size() != 64) {
     return 6;
   }
+  const auto manifest_digest =
+      luca::Sha256Digest::create(luca::serialization::canonical_digest(*manifest));
+  if (!manifest_digest)
+    return 7;
+  const auto resume = luca::CheckpointResumeRequest::create(
+      luca::CheckpointResumeRequest::schema_version,
+      luca::CheckpointResumeRequest::serialization_version, *manifest_digest, *projection,
+      "parent-engine-1", *policy, *partition, *context, *prefix, *checkpoint_digest);
+  if (!resume || luca::serialization::canonical_digest(*resume).size() != 64 ||
+      luca::serialization::canonical_bytes(*resume) !=
+          luca::serialization::canonical_bytes(*resume)) {
+    return 7;
+  }
 
   std::cout << "cash_scaled=" << balance.amount().scaled_value()
             << " currency=" << balance.amount().currency().code()
