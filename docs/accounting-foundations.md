@@ -1,8 +1,8 @@
 # Narrow accounting-foundations contract
 
-Status: executable design contract. This document and the portable fixtures
-define the first bounded O4 journal semantics before a public C++ accounting
-API exists. They do not claim that LUCA implements O4, or that either fixture
+Status: executable design contract with public C++ journal value types. This
+document and the portable fixtures define the first bounded O4 journal
+semantics. They do not claim that LUCA implements O4, or that either fixture
 policy is suitable for production, GAAP, IFRS, tax, NAV, regulatory, or client
 reporting.
 
@@ -104,6 +104,42 @@ debits and credits do not offset. Currency totals retain all contributing entry
 identities; account balances retain all contributing line identities. A
 balance is therefore traceable through entries and lines to lifecycle records,
 economic events, and source evidence.
+
+### Public C++ value boundary
+
+`<luca/accounting/journal.hpp>` supplies the closed `JournalLine` and
+`JournalEntry` value types and is also included by `<luca/ledger.hpp>`. The
+`luca::ledger` CMake target installs both headers through the existing public
+header-directory rule. This is a value boundary, not a journal projection or
+policy interface.
+
+Factories construct the supporting policy identity, date, settlement context,
+and ordered lineage values before constructing a line or entry. The entry
+factory returns either one completely valid value or a `JournalError`; it does
+not expose a partially constructed entry. Construction checks:
+
+- non-empty stable entry, line, parent, account, active-record, policy, version,
+  recognition-rule, and lineage identities;
+- non-empty record, economic-event, and source-record lineage, retaining caller
+  order and optional reversal identity;
+- positive `Money` line values, at least two lines, unique line identities,
+  matching parent and repeated lineage, and one entry currency;
+- structurally consistent cash/equity date and phase context; and
+- exact, overflow-checked equality of debit and credit `Money` totals.
+
+No constructor accepts a binary floating-point monetary amount. The factory
+sums declared lines with the existing six-decimal `Money::add` operation and
+retains the resulting exact debit and credit totals on the entry. The stable
+C++ diagnostic categories are `schema_shape`, `duplicate_identity`,
+`policy_context_mismatch`, `unbalanced_entry`, `mixed_currency_entry`,
+`invalid_line_amount`, `lineage_missing`, `lineage_mismatch`, and
+`arithmetic_overflow`. Diagnostic messages provide detail but are not stable
+matching keys.
+
+The value types own their lines and lineage and expose them only as immutable
+views. They do not select lifecycle heads, interpret source evidence, infer a
+policy, reorder caller data, mutate economic events, or access files, databases,
+clocks, websites, or services.
 
 ### Result and portfolio cross-check
 
@@ -241,12 +277,12 @@ The test also applies every vector twice so rejection is deterministic.
 
 ## Deferred production decisions
 
-This task intentionally does not choose public C++ journal types, a policy ABI,
-runtime policy loading, persistent account masters, multi-book ledgers,
-functional currency, FX translation, rounding residual accounts, close and
-reopen behavior, posting authorization, settlement-event ingestion, lots,
-cost-basis methods, P&L, accruals, NAV, tax, financial-statement presentation,
-or accounting-standard compliance.
+This task intentionally does not choose a policy ABI, runtime policy loading,
+persistent account masters, multi-book ledgers, functional currency, FX
+translation, rounding residual accounts, close and reopen behavior, posting
+authorization, settlement-event ingestion, lots, cost-basis methods, P&L,
+accruals, NAV, tax, financial-statement presentation, or accounting-standard
+compliance.
 
 It also adds no CMake target, canonical serialization extension, database,
 platform adapter, CLI, Python binding, deployment, or backtesting behavior.

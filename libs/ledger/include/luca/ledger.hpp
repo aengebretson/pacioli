@@ -1,5 +1,6 @@
 #pragma once
 
+#include "luca/accounting/journal.hpp"
 #include "luca/event.hpp"
 
 #include <algorithm>
