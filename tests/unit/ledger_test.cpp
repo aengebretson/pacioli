@@ -14,16 +14,16 @@ using namespace luca;
 using namespace std::chrono_literals;
 
 namespace {
-Provenance provenance(const char* source) {
+Provenance provenance(const char *source) {
   auto result = Provenance::create({SourceRecordId{source}}, "ledger.fixture", "1");
   assert(result);
   return *result;
 }
 
-EconomicEvent cash_event(const char* id, Timestamp time, const char* source,
-                         const char* account = "account-a", const char* amount = "10") {
-  auto event_header = EventHeader::create(EventId{id}, AccountId{account}, time,
-                                          provenance(source));
+EconomicEvent cash_event(const char *id, Timestamp time, const char *source,
+                         const char *account = "account-a", const char *amount = "10") {
+  auto event_header =
+      EventHeader::create(EventId{id}, AccountId{account}, time, provenance(source));
   const auto currency = Currency::from_code("USD");
   assert(event_header && currency);
   const auto money = Money::parse(amount, *currency);
@@ -31,9 +31,7 @@ EconomicEvent cash_event(const char* id, Timestamp time, const char* source,
   return CashMovement::create(*event_header, *money);
 }
 
-const EventHeader& entry_header(const LedgerEntry& entry) {
-  return header(entry.event());
-}
+const EventHeader &entry_header(const LedgerEntry &entry) { return header(entry.event()); }
 
 Currency currency(std::string_view code) {
   const auto result = Currency::from_code(code);
@@ -387,13 +385,13 @@ void test_journal_factory_rejections_and_boundaries() {
                            context, lineage, overflowing_lines),
       JournalDiagnosticCategory::arithmetic_overflow);
 }
-}  // namespace
+} // namespace
 
 int main() {
   static_assert(LedgerSequence::first_value == 1);
-  static_assert(std::is_same_v<decltype(std::declval<const LedgerEntry&>().event()),
-                               const EconomicEvent&>);
-  static_assert(std::is_same_v<decltype(std::declval<const Ledger&>().entries()),
+  static_assert(
+      std::is_same_v<decltype(std::declval<const LedgerEntry &>().event()), const EconomicEvent &>);
+  static_assert(std::is_same_v<decltype(std::declval<const Ledger &>().entries()),
                                std::span<const LedgerEntry>>);
   static_assert(std::is_same_v<decltype(std::declval<const JournalEntry &>().lines()),
                                std::span<const JournalLine>>);
@@ -421,11 +419,11 @@ int main() {
   assert(entry_header(ledger.entries()[0]).id() == EventId{"a"});
   assert(entry_header(ledger.entries()[1]).id() == EventId{"b"});
 
-  const auto duplicate = ledger.append(
-      cash_event("a", earlier, "different-source", "different-account", "999"));
+  const auto duplicate =
+      ledger.append(cash_event("a", earlier, "different-source", "different-account", "999"));
   assert(!duplicate && duplicate.error() == LedgerError::duplicate_event);
   assert(ledger.size() == 2);
-  const auto* original = ledger.find(EventId{"a"});
+  const auto *original = ledger.find(EventId{"a"});
   assert(original && original->event() == event_a);
   assert(entry_header(*original).account() == AccountId{"account-a"});
   assert(entry_header(*original).effective_at() == later);
@@ -491,7 +489,8 @@ int main() {
   assert(entry_header(range_replay[6]).id() == EventId{"after"});
 
   Ledger same_history;
-  for (const auto& entry : ledger.entries()) assert(same_history.append(entry.event()));
+  for (const auto &entry : ledger.entries())
+    assert(same_history.append(entry.event()));
   for (std::size_t index = 0; index < ledger.size(); ++index)
     assert(same_history.entries()[index] == ledger.entries()[index]);
   const auto same_replay = same_history.economic_order();
