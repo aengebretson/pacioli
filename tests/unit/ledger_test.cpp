@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <expected>
 #include <limits>
+#include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -484,6 +485,13 @@ void expect_projection_error(
   }
 }
 
+void expect_projected_entry_identity(const JournalEntry &entry, std::string_view entry_id) {
+  assert(entry.journal_entry_id().value() == entry_id);
+  assert(entry.lines().size() == 2);
+  assert(entry.lines()[0].journal_line_id().value() == std::string{entry_id} + ".debit");
+  assert(entry.lines()[1].journal_line_id().value() == std::string{entry_id} + ".credit");
+}
+
 void test_trade_date_projection_walkthrough() {
   using namespace std::chrono;
   const auto may_29 = 2026y / May / 29d;
@@ -534,10 +542,8 @@ void test_trade_date_projection_walkthrough() {
   assert(original_journals->policy().id() == AccountingPolicyId{"fixture.trade-date.v1"});
   assert(original_journals->policy().version() == "1");
   assert(original_journals->entries().size() == 2);
-  assert(original_journals->entries()[0].journal_entry_id() ==
-         JournalEntryId{"td.opening-cash-record.immediate"});
-  assert(original_journals->entries()[1].journal_entry_id() ==
-         JournalEntryId{"td.trade-record-v1.trade"});
+  expect_projected_entry_identity(original_journals->entries()[0], "td.opening-cash.immediate");
+  expect_projected_entry_identity(original_journals->entries()[1], "td.trade-v1.trade");
   assert(original_journals->entries()[1].debit_total().scaled_value() == 5'000'000'000);
   assert(original_journals->active_record_ids().size() == 2);
   assert(original_journals->lifecycle_record_ids().size() == 2);
@@ -555,6 +561,7 @@ void test_trade_date_projection_walkthrough() {
       corrected, {timestamp(june_3, end_of_day), corrected_economic, june_2});
   assert(corrected_journals && corrected_journals->entries().size() == 2);
   const auto &corrected_trade = corrected_journals->entries()[1];
+  expect_projected_entry_identity(corrected_trade, "td.trade-v2.trade");
   assert(corrected_trade.active_record_id() == EventId{"trade-record-v2"});
   assert(corrected_trade.debit_total().scaled_value() == 4'400'000'000LL);
   assert(corrected_trade.lineage().record_ids().size() == 2);
@@ -572,8 +579,7 @@ void test_trade_date_projection_walkthrough() {
   const auto settled_journals = project_trade_date_journals(
       settled, {timestamp(june_3, end_of_day), settled_economic, june_4});
   assert(settled_journals && settled_journals->entries().size() == 3);
-  assert(settled_journals->entries()[2].journal_entry_id() ==
-         JournalEntryId{"td.trade-record-v2.settlement"});
+  expect_projected_entry_identity(settled_journals->entries()[2], "td.trade-v2.settlement");
   assert(settled_journals->entries()[2].phase_ordinal() == 1);
   assert(settled_journals->entries()[2].lines()[0].account_id() ==
          AccountId{"liability.trade-payable"});
@@ -586,8 +592,7 @@ void test_trade_date_projection_walkthrough() {
   const auto reversal_journals =
       project_trade_date_journals(reversed, {timestamp(june_7, 12h), reversal_economic, june_5});
   assert(reversal_journals && reversal_journals->entries().size() == 4);
-  assert(reversal_journals->entries()[3].journal_entry_id() ==
-         JournalEntryId{"td.reversal-record-v1.trade"});
+  expect_projected_entry_identity(reversal_journals->entries()[3], "td.reversal.trade");
   assert(reversal_journals->entries()[3].lines()[0].account_id() ==
          AccountId{"asset.trade-receivable"});
   assert(reversal_journals->entries()[3].lines()[1].account_id() ==
@@ -603,8 +608,8 @@ void test_trade_date_projection_walkthrough() {
   const auto reversal_settled_journals = project_trade_date_journals(
       reversal_settled, {timestamp(june_7, 12h), reversal_settled_economic, june_6});
   assert(reversal_settled_journals && reversal_settled_journals->entries().size() == 5);
-  assert(reversal_settled_journals->entries()[4].journal_entry_id() ==
-         JournalEntryId{"td.reversal-record-v1.settlement"});
+  expect_projected_entry_identity(reversal_settled_journals->entries()[4],
+                                  "td.reversal.settlement");
   assert(reversal_settled_journals->entries()[4].lines()[0].account_id() ==
          AccountId{"asset.cash"});
   assert(reversal_settled_journals->entries()[4].lines()[1].account_id() ==
@@ -679,6 +684,34 @@ void test_trade_date_projection_rounding_and_rejections() {
   assert(overflow_trade);
   expect_projection_error(project_one(*overflow_trade),
                           TradeDateProjectionDiagnosticCategory::arithmetic_overflow, "overflow");
+
+  LifecycleLedger cash_reversal_ledger;
+  accept(cash_reversal_ledger,
+         LifecycleRecordDraft::originate(
+             EconomicEventId{"cash-reversal-target-economic"}, recorded,
+             cash_event("cash-reversal-target", effective, "cash-reversal-target-source")));
+  accept(cash_reversal_ledger,
+         LifecycleRecordDraft::reverse(EconomicEventId{"cash-reversal-economic"},
+                                       EventId{"cash-reversal-target"}, recorded + 1s,
+                                       cash_event("cash-reversal", effective + 1s,
+                                                  "cash-reversal-source", "account-a", "-10")));
+  const auto cash_reversal_resolution = cash_reversal_ledger.resolve(cutoff, cutoff);
+  expect_projection_error(project_trade_date_journals(cash_reversal_resolution, context),
+                          TradeDateProjectionDiagnosticCategory::invalid_reversal_treatment,
+                          "cash-reversal");
+
+  LifecycleLedger colliding_identity_ledger;
+  accept(colliding_identity_ledger,
+         LifecycleRecordDraft::originate(
+             EconomicEventId{"opening-cash-record-economic"}, recorded,
+             cash_event("opening-cash-record", effective, "opening-cash-record-source")));
+  accept(colliding_identity_ledger,
+         LifecycleRecordDraft::originate(
+             EconomicEventId{"opening-cash-economic"}, recorded + 1s,
+             cash_event("opening-cash", effective + 1s, "opening-cash-source")));
+  const auto colliding_identity_resolution = colliding_identity_ledger.resolve(cutoff, cutoff);
+  expect_projection_error(project_trade_date_journals(colliding_identity_resolution, context),
+                          TradeDateProjectionDiagnosticCategory::journal_invariant, "opening-cash");
 
   LifecycleLedger partial_reversal_ledger;
   accept(partial_reversal_ledger,

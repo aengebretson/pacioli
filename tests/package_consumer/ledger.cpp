@@ -46,6 +46,8 @@ int main() {
                                            std::chrono::day{1}});
   if (!projected_journal || projected_journal->entries().size() != 1 ||
       projected_journal->entries().front().debit_total() != *amount ||
+      projected_journal->entries().front().journal_entry_id() !=
+          luca::JournalEntryId{"td.ledger-deposit-1.immediate"} ||
       projected_journal->policy().id() != luca::AccountingPolicyId{"fixture.trade-date.v1"} ||
       projected_journal->active_record_ids().size() != 1 ||
       projected_journal->source_record_ids().size() != 1)

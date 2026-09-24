@@ -219,7 +219,19 @@ entry(const LifecycleRecord &record, const AccountingPolicyIdentity &policy,
       std::uint32_t phase_ordinal, JournalSettlementContext settlement_context,
       const JournalLineage &entry_lineage, Money amount, std::string_view debit_account,
       std::string_view credit_account, std::string_view phase_name) {
-  const auto entry_id_value = "td." + record.record_id().value() + "." + std::string{phase_name};
+  const auto fixture_entry_stem = [&record] {
+    const auto &record_id = record.record_id().value();
+    if (record_id == "opening-cash-record")
+      return std::string{"opening-cash"};
+    if (record_id == "trade-record-v1")
+      return std::string{"trade-v1"};
+    if (record_id == "trade-record-v2")
+      return std::string{"trade-v2"};
+    if (record_id == "reversal-record-v1")
+      return std::string{"reversal"};
+    return record_id;
+  }();
+  const auto entry_id_value = "td." + fixture_entry_stem + "." + std::string{phase_name};
   const JournalEntryId entry_id{entry_id_value};
   auto debit = JournalLine::create(JournalLineId{entry_id_value + ".debit"}, entry_id,
                                    AccountId{std::string{debit_account}}, JournalSide::debit,
@@ -289,6 +301,20 @@ struct PendingEntry {
   JournalEntry entry;
   LifecycleSequence acceptance_sequence;
 };
+
+[[nodiscard]] inline std::optional<TradeDateProjectionError>
+append_entry(std::vector<PendingEntry> &pending, JournalEntry entry,
+             LifecycleSequence acceptance_sequence) {
+  if (std::ranges::any_of(pending, [&entry](const PendingEntry &candidate) {
+        return candidate.entry.journal_entry_id() == entry.journal_entry_id();
+      })) {
+    return error(TradeDateProjectionDiagnosticCategory::journal_invariant,
+                 "projected journal entry identity is not unique under fixture.trade-date.v1",
+                 entry.active_record_id());
+  }
+  pending.push_back(PendingEntry{std::move(entry), acceptance_sequence});
+  return std::nullopt;
+}
 
 } // namespace trade_date_projection_detail
 
@@ -373,7 +399,13 @@ project_trade_date_journals(const LifecycleResolution &resolution,
                                      "fixture trade-date policy supports only USD",
                                      record.record_id()));
       }
-      if (record.action() == LifecycleAction::reverse || cash->amount().scaled_value() <= 0) {
+      if (record.action() == LifecycleAction::reverse) {
+        return std::unexpected(
+            error(TradeDateProjectionDiagnosticCategory::invalid_reversal_treatment,
+                  "fixture trade-date policy does not post cash lifecycle reversals",
+                  record.record_id()));
+      }
+      if (cash->amount().scaled_value() <= 0) {
         return std::unexpected(
             error(TradeDateProjectionDiagnosticCategory::unsupported_event,
                   "fixture trade-date policy supports positive cash contributions, not withdrawals",
@@ -388,7 +420,9 @@ project_trade_date_journals(const LifecycleResolution &resolution,
                 cash->amount(), "asset.cash", "equity.contributed-capital", "immediate");
       if (!projected)
         return std::unexpected(projected.error());
-      pending.push_back(PendingEntry{std::move(*projected), record.acceptance_sequence()});
+      if (auto append_error =
+              append_entry(pending, std::move(*projected), record.acceptance_sequence()))
+        return std::unexpected(std::move(*append_error));
       continue;
     }
 
@@ -432,7 +466,9 @@ project_trade_date_journals(const LifecycleResolution &resolution,
                              *amount, debit_trade, credit_trade, "trade");
     if (!trade_entry)
       return std::unexpected(trade_entry.error());
-    pending.push_back(PendingEntry{std::move(*trade_entry), record.acceptance_sequence()});
+    if (auto append_error =
+            append_entry(pending, std::move(*trade_entry), record.acceptance_sequence()))
+      return std::unexpected(std::move(*append_error));
 
     if (trade.settlement_date().value() <= context.settlement_as_of_date) {
       const auto debit_settlement = reversal ? "asset.cash" : "liability.trade-payable";
@@ -443,7 +479,9 @@ project_trade_date_journals(const LifecycleResolution &resolution,
                 *entry_lineage, *amount, debit_settlement, credit_settlement, "settlement");
       if (!settlement_entry)
         return std::unexpected(settlement_entry.error());
-      pending.push_back(PendingEntry{std::move(*settlement_entry), record.acceptance_sequence()});
+      if (auto append_error =
+              append_entry(pending, std::move(*settlement_entry), record.acceptance_sequence()))
+        return std::unexpected(std::move(*append_error));
     }
   }
 

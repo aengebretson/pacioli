@@ -160,21 +160,30 @@ identities in first-seen order, and the journal entries. Each entry repeats its
 full event lineage. Results own their values and do not retain pointers into the
 lifecycle ledger.
 
-Entry IDs use `td.<active-record-id>.<phase>` and line IDs append `.debit` or
-`.credit`. Active record identity plus the fixed phase makes the IDs stable and
-unique for a valid lifecycle resolution. Entries are presented by recognized
-date, selected record acceptance sequence, phase ordinal and entry ID. A trade
-phase uses ordinal zero and a settlement phase uses ordinal one.
+Entry IDs use the versioned fixture identities already fixed by the portable
+walkthrough: `td.opening-cash`, `td.trade-v1`, `td.trade-v2`, and
+`td.reversal`, followed by the phase. Line IDs append `.debit` or `.credit`.
+Those stems alias the corresponding `opening-cash-record`, `trade-record-v1`,
+`trade-record-v2`, and `reversal-record-v1` lifecycle identities. Other record
+identities use `td.<active-record-id>.<phase>` so the installed-package API can
+exercise the same projection outside the walkthrough. An alias collision fails
+with `journal_invariant`; a result never contains duplicate entry or line
+identities. Entries are presented by recognized date, selected record
+acceptance sequence, phase ordinal and entry ID. A trade phase uses ordinal zero
+and a settlement phase uses ordinal one.
 
 The projection returns one complete result or a
 `TradeDateProjectionError`; it never returns partially projected entries. Its
 stable diagnostic categories are `invalid_context`, `unsupported_event`,
 `unsupported_currency`, `invalid_reversal_treatment`, `arithmetic_overflow`,
 and `journal_invariant`. The last category preserves the underlying journal
-factory category in its explanatory message. Ordinary negative trades and
-cash withdrawals are unsupported events. A negative equity record is accepted
-only when lifecycle resolution identifies an exact reversal target; lifecycle
-validation rejects partial reversals before a resolution can be produced.
+factory category in its explanatory message or identifies a duplicate projected
+identity. Ordinary negative trades and cash withdrawals are unsupported events.
+Cash lifecycle reversals fail as `invalid_reversal_treatment`; the fixture
+policy does not infer a cash posting for them. A negative equity record is
+accepted only when lifecycle resolution identifies an exact reversal target;
+lifecycle validation rejects partial reversals before a resolution can be
+produced.
 
 ### Result and portfolio cross-check
 
