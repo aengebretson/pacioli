@@ -1,0 +1,42 @@
+{
+  "analysis_id": "synthetic-spx-like-demo-v1",
+  "boundaries": {
+    "fit_start": "2024-01-02",
+    "holdout_end": "2024-09-03",
+    "holdout_start": "2024-07-09",
+    "selection_end": "2024-07-02",
+    "selection_start": "2024-05-21"
+  },
+  "input": {
+    "input_id": "synthetic-spx-like-v1",
+    "sha256": "62ca46314523b34b187b600358a4779bc1b76d2d1219aa01efc4239181311737"
+  },
+  "limits": {
+    "max_observations": 1000,
+    "max_origins": 10
+  },
+  "model": {
+    "calendar_days_per_year": 365.2425,
+    "ewma_decay": 0.94,
+    "garch_max_iterations": 500,
+    "lookback_returns": 90,
+    "mean": "zero",
+    "minimum_fit_returns": 60,
+    "optimizer_tolerance": 1e-08,
+    "random_seed": 1729
+  },
+  "schema_version": "luca.volatility-request.v1",
+  "windows": [
+    {
+      "endpoint": "2024-06-26",
+      "origin": "2024-05-28",
+      "split": "selection"
+    },
+    {
+      "endpoint": "2024-08-14",
+      "origin": "2024-07-16",
+      "split": "holdout"
+    }
+  ]
+}
+

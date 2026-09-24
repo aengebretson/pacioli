@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "luca-research"
+version = "0.1.0"
+description = "Optional offline volatility research tools for LUCA"
+readme = "README.md"
+requires-python = ">=3.11,<3.15"
+license = "Apache-2.0"
+dependencies = [
+    "arch==8.0.0",
+    "numpy==2.4.6",
+    "pandas==3.0.6",
+    "scipy==1.17.1",
+    "statsmodels==0.15.0",
+]
+
+[project.scripts]
+luca-volatility = "luca_research.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
