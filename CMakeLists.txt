@@ -205,6 +205,13 @@ if(PACIOLI_BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/exact_cash_cli_test.py
         $<TARGET_FILE:luca-exact-cash>
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/exact-cash-cli)
+    add_test(
+      NAME luca_exact_cash_python_test
+      COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/exact_cash_python_test.py
+        $<TARGET_FILE:luca-exact-cash>
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/exact-cash-cli
+        ${CMAKE_CURRENT_SOURCE_DIR}/tools/exact-cash/python)
   endif()
 
   add_executable(pacioli_settlement_projection_test tests/unit/settlement_projection_test.cpp)
