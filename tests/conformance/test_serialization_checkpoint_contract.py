@@ -117,7 +117,15 @@ def _string(value: Any, context: str) -> str:
         _fail("schema_shape", f"{context} must be a non-empty string without NUL")
     if unicodedata.normalize("NFC", value) != value:
         _fail("canonical_encoding", f"{context} must be NFC-normalized")
+    _utf8(value, context)
     return value
+
+
+def _utf8(value: str, context: str) -> bytes:
+    try:
+        return value.encode("utf-8")
+    except UnicodeEncodeError as error:
+        _fail("canonical_encoding", f"{context} is not Unicode scalar text: {error}")
 
 
 def _version(value: Any, expected: str, context: str) -> str:
@@ -189,6 +197,12 @@ def _pack_length(length: int, context: str) -> bytes:
     return struct.pack(">I", length)
 
 
+def _pack_array_count(count: int) -> bytes:
+    if count < 0 or count > U64_MAX:
+        _fail("canonical_encoding", "array exceeds the v1 64-bit item-count limit")
+    return struct.pack(">Q", count)
+
+
 def _encode_node(value: Any) -> bytes:
     if value is None:
         return b"\x00"
@@ -205,10 +219,10 @@ def _encode_node(value: Any) -> bytes:
     if isinstance(value, str):
         if unicodedata.normalize("NFC", value) != value:
             _fail("canonical_encoding", "text must be NFC-normalized")
-        encoded = value.encode("utf-8")
+        encoded = _utf8(value, "text")
         return b"\x04" + _pack_length(len(encoded), "text") + encoded
     if isinstance(value, list):
-        return b"\x05" + _pack_length(len(value), "array") + b"".join(
+        return b"\x05" + _pack_array_count(len(value)) + b"".join(
             _encode_node(item) for item in value
         )
     if isinstance(value, dict):
@@ -218,7 +232,7 @@ def _encode_node(value: Any) -> bytes:
                 _fail("canonical_encoding", "map keys must be text")
             if unicodedata.normalize("NFC", key) != key:
                 _fail("canonical_encoding", "map keys must be NFC-normalized")
-            encoded_key = key.encode("utf-8")
+            encoded_key = _utf8(key, "map key")
             encoded_items.append((encoded_key, _encode_node(item)))
         encoded_items.sort(key=lambda item: item[0])
         body = b"".join(
@@ -255,6 +269,9 @@ class _Decoder:
     def length(self) -> int:
         return struct.unpack(">I", self.take(4))[0]
 
+    def array_count(self) -> int:
+        return struct.unpack(">Q", self.take(8))[0]
+
     def node(self) -> Any:
         tag = self.take(1)
         if tag == b"\x00":
@@ -274,7 +291,10 @@ class _Decoder:
                 _fail("canonical_encoding", "decoded text is not NFC-normalized")
             return result
         if tag == b"\x05":
-            return [self.node() for _ in range(self.length())]
+            count = self.array_count()
+            if count > len(self.data) - self.offset:
+                _fail("canonical_encoding", "truncated canonical array")
+            return [self.node() for _ in range(count)]
         if tag == b"\x06":
             result: dict[str, Any] = {}
             previous: bytes | None = None
@@ -356,7 +376,7 @@ def _provenance(value: Any, context: str) -> dict[str, Any]:
             _fail("schema_shape", f"{context}.transformation_metadata must be text without NUL")
         if unicodedata.normalize("NFC", metadata) != metadata:
             _fail("canonical_encoding", f"{context}.transformation_metadata must be NFC-normalized")
-        if len(metadata.encode("utf-8")) > 1024:
+        if len(_utf8(metadata, f"{context}.transformation_metadata")) > 1024:
             _fail("schema_shape", f"{context}.transformation_metadata exceeds 1024 bytes")
     return provenance
 
@@ -699,8 +719,10 @@ def _identity(value: Any, context: str) -> dict[str, Any]:
 def _partition(value: Any, context: str) -> dict[str, Any]:
     result = _object(value, context)
     _keys(result, {"definition", "version", "keys"}, context)
-    _string(result["definition"], f"{context}.definition")
-    _string(result["version"], f"{context}.version")
+    definition = _string(result["definition"], f"{context}.definition")
+    version = _string(result["version"], f"{context}.version")
+    if definition != "account-set" or version != "1":
+        _fail("unsupported_version", f"{context} definition/version is unsupported")
     keys = result["keys"]
     if not isinstance(keys, list) or not keys:
         _fail("schema_shape", f"{context}.keys must be a non-empty array")
@@ -709,6 +731,33 @@ def _partition(value: Any, context: str) -> dict[str, Any]:
     if keys != sorted(keys) or len(keys) != len(set(keys)):
         _fail("deterministic_ordering", f"{context}.keys must be unique and sorted")
     return result
+
+
+def _bind_partition(
+    partition: dict[str, Any],
+    context: str,
+    *,
+    records: list[dict[str, Any]] | None = None,
+    state: dict[str, Any] | None = None,
+) -> None:
+    keys = set(partition["keys"])
+    for index, record in enumerate(records or []):
+        account = _string(record.get("account"), f"{context}.records[{index}].account")
+        if account not in keys:
+            _fail(
+                "incompatible_partition",
+                f"{context}.records[{index}] account {account!r} is outside the account-set",
+            )
+    if state is None:
+        return
+    for field in ("positions", "settled_cash", "open_settlement_obligations"):
+        for index, item in enumerate(state[field]):
+            account = _string(item.get("account"), f"{context}.{field}[{index}].account")
+            if account not in keys:
+                _fail(
+                    "incompatible_partition",
+                    f"{context}.{field}[{index}] account {account!r} is outside the account-set",
+                )
 
 
 def _event_prefix(value: Any, context: str) -> dict[str, Any]:
@@ -775,7 +824,8 @@ def _manifest(value: Any, context: str) -> dict[str, Any]:
     )
     _version(manifest["schema_version"], SUPPORTED["manifest"], f"{context}.schema_version")
     _version(manifest["serialization_version"], SUPPORTED["bytes"], f"{context}.serialization_version")
-    if manifest["digest_algorithm"] != "sha-256":
+    digest_algorithm = _string(manifest["digest_algorithm"], f"{context}.digest_algorithm")
+    if digest_algorithm != "sha-256":
         _fail("unsupported_version", f"{context}.digest_algorithm is unsupported")
     _identity(manifest["projection"], f"{context}.projection")
     _string(manifest["engine_version"], f"{context}.engine_version")
@@ -877,6 +927,12 @@ def _bind_manifest(
         _fail("digest_mismatch", f"{context} canonical input digest is altered")
     if manifest["canonical_state_digest"] != canonical_digest(state):
         _fail("digest_mismatch", f"{context} canonical state digest is altered")
+    _bind_partition(
+        manifest["partition"],
+        context,
+        records=records,
+        state=state,
+    )
 
     lineage = manifest["lineage"]
     active = _bind_lineage(lineage, records, manifest["evaluation_context"], context)
@@ -946,6 +1002,12 @@ def validate_resume(
         _fail("incompatible_prefix", "resume request identifies a different event prefix")
     if resume["checkpoint_state_digest"] != manifest["canonical_state_digest"]:
         _fail("digest_mismatch", "resume request identifies a different state digest")
+
+    _bind_partition(
+        manifest["partition"],
+        "resume_input",
+        records=prefix_records + suffix_records,
+    )
 
     if not suffix_records:
         _fail("prefix_continuity", "resume suffix must not be empty")
@@ -1024,6 +1086,38 @@ def _canonical_vector_values(value: Any, context: str) -> dict[str, Any]:
     return values
 
 
+def _array_count_vectors(value: Any, context: str) -> None:
+    vectors = _objects(value, context, nonempty=True)
+    ids: set[str] = set()
+    counts: list[int] = []
+    for index, vector in enumerate(vectors):
+        item = f"{context}[{index}]"
+        _keys(vector, {"id", "item_count", "encoded_hex", "sha256"}, item)
+        vector_id = _string(vector["id"], f"{item}.id")
+        if vector_id in ids:
+            _fail("duplicate_identity", f"duplicate array-count vector ID {vector_id!r}")
+        ids.add(vector_id)
+        count = _unsigned_integer(vector["item_count"], f"{item}.item_count")
+        counts.append(count)
+        encoded_hex = vector["encoded_hex"]
+        if (
+            not isinstance(encoded_hex, str)
+            or re.fullmatch(r"[0-9a-f]{16}", encoded_hex) is None
+        ):
+            _fail("schema_shape", f"{item}.encoded_hex must be eight lowercase hex octets")
+        _digest(vector["sha256"], f"{item}.sha256")
+        first = _pack_array_count(count)
+        second = _pack_array_count(count)
+        if first != second or first.hex() != encoded_hex:
+            _fail("digest_mismatch", f"{vector_id!r} array-count byte vector differs")
+        first_digest = hashlib.sha256(first).hexdigest()
+        second_digest = hashlib.sha256(second).hexdigest()
+        if first_digest != second_digest or first_digest != vector["sha256"]:
+            _fail("digest_mismatch", f"{vector_id!r} array-count digest vector differs")
+    if counts != [U64_MAX]:
+        _fail("schema_shape", "array-count vectors must pin the maximum uint64 count")
+
+
 def _vectors(value: Any, document: dict[str, Any], context: str) -> None:
     vectors = _objects(value, context, nonempty=True)
     ids: set[str] = set()
@@ -1075,8 +1169,20 @@ def validate_fixture(document: dict[str, Any]) -> None:
         "case_kind",
     )
     if kind == "canonical_vectors":
-        _keys(document, {"fixture_schema", "case_kind", "case_id", "values", "vectors"}, "fixture")
+        _keys(
+            document,
+            {
+                "fixture_schema",
+                "case_kind",
+                "case_id",
+                "array_count_vectors",
+                "values",
+                "vectors",
+            },
+            "fixture",
+        )
         _string(document["case_id"], "case_id")
+        _array_count_vectors(document["array_count_vectors"], "array_count_vectors")
         values = _canonical_vector_values(document["values"], "values")
         _vectors(document["vectors"], values, "vectors")
         vector_targets = [vector.get("target") for vector in document["vectors"]]
@@ -1118,6 +1224,12 @@ def validate_fixture(document: dict[str, Any]) -> None:
     full_state = _state(document["full_replay_state"], "full_replay_state")
     manifest = _manifest(document["checkpoint_manifest"], "checkpoint_manifest")
     _bind_manifest(manifest, prefix, checkpoint_state, "checkpoint_manifest")
+    _bind_partition(
+        manifest["partition"],
+        "full_replay",
+        records=records,
+        state=full_state,
+    )
     resume = _resume(document["resume_request"], "resume_request")
     full_lineage = _lineage(document["full_replay_lineage"], "full_replay_lineage")
     _bind_lineage(
@@ -1324,7 +1436,7 @@ class SerializationCheckpointContractTest(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "incompatible_event_relationship"):
             validate_fixture(cross_identity)
 
-    def test_lifecycle_sequence_supports_the_complete_uint64_domain(self):
+    def test_lifecycle_sequence_and_array_count_support_the_complete_uint64_domain(self):
         fixture = self._load_valid_append()
         record = copy.deepcopy(fixture["records"][0])
         record["acceptance_sequence"] = str((1 << 64) - 1)
@@ -1346,6 +1458,16 @@ class SerializationCheckpointContractTest(unittest.TestCase):
         manifest["resolved_event_watermark"]["acceptance_sequence"] = str(1 << 64)
         with self.assertRaisesRegex(ContractError, "unsigned 64-bit"):
             _manifest(manifest, "manifest")
+
+        count_vector = self._load_canonical_vectors()["array_count_vectors"][0]
+        self.assertEqual(count_vector["item_count"], str((1 << 64) - 1))
+        self.assertEqual(
+            _pack_array_count((1 << 64) - 1),
+            bytes.fromhex(count_vector["encoded_hex"]),
+        )
+        self.assertEqual(canonical_bytes([]), b"LCB1\x05" + b"\x00" * 8)
+        with self.assertRaisesRegex(ContractError, "truncated canonical array"):
+            decode_canonical(b"LCB1\x05" + b"\xff" * 8)
 
     def test_canonical_domain_vectors_validate_shape_before_matching_bytes(self):
         mutations = (
@@ -1421,6 +1543,64 @@ class SerializationCheckpointContractTest(unittest.TestCase):
             canonical_bytes({"amount": 1.5})
         with self.assertRaisesRegex(ContractError, "NFC-normalized"):
             canonical_bytes({"text": "e\u0301"})
+
+    def test_unpaired_unicode_surrogates_have_stable_canonical_diagnostics(self):
+        surrogate = json.loads(r'{"value":"\ud800"}')["value"]
+        fixture = self._load_valid_append()
+        fixture["records"][0]["record_id"] = "record-" + surrogate
+        with self.assertRaises(ContractError) as raised:
+            validate_fixture(fixture)
+        self.assertEqual(raised.exception.category, "canonical_encoding")
+
+        for value in (surrogate, {surrogate: "value"}):
+            with self.subTest(value_type=type(value).__name__):
+                with self.assertRaises(ContractError) as raised:
+                    canonical_bytes(value)
+                self.assertEqual(raised.exception.category, "canonical_encoding")
+
+    def test_digest_algorithm_type_and_version_have_stable_diagnostics(self):
+        fixture = self._load_valid_append()
+        fixture["checkpoint_manifest"]["digest_algorithm"] = []
+        with self.assertRaises(ContractError) as raised:
+            validate_fixture(fixture)
+        self.assertEqual(raised.exception.category, "schema_shape")
+
+        fixture = self._load_valid_append()
+        fixture["checkpoint_manifest"]["digest_algorithm"] = "sha-512"
+        with self.assertRaises(ContractError) as raised:
+            validate_fixture(fixture)
+        self.assertEqual(raised.exception.category, "unsupported_version")
+
+    def test_partition_is_bound_to_records_and_state(self):
+        fixture = self._load_valid_append()
+        fixture["checkpoint_manifest"]["partition"]["keys"] = ["acct-other"]
+        fixture["resume_request"]["partition"]["keys"] = ["acct-other"]
+        fixture["resume_request"]["checkpoint_manifest_digest"] = canonical_digest(
+            fixture["checkpoint_manifest"]
+        )
+        with self.assertRaises(ContractError) as raised:
+            validate_fixture(fixture)
+        self.assertEqual(raised.exception.category, "incompatible_partition")
+
+        fixture = self._load_valid_append()
+        suffix_record = fixture["records"][fixture["prefix_record_count"]]
+        suffix_record["account"] = "acct-other"
+        suffix_record["event"]["header"]["account"] = "acct-other"
+        with self.assertRaises(ContractError) as raised:
+            validate_fixture(fixture)
+        self.assertEqual(raised.exception.category, "incompatible_partition")
+
+        fixture = self._load_valid_append()
+        fixture["checkpoint_state"]["settled_cash"][0]["account"] = "acct-other"
+        state_digest = canonical_digest(fixture["checkpoint_state"])
+        fixture["checkpoint_manifest"]["canonical_state_digest"] = state_digest
+        fixture["resume_request"]["checkpoint_state_digest"] = state_digest
+        fixture["resume_request"]["checkpoint_manifest_digest"] = canonical_digest(
+            fixture["checkpoint_manifest"]
+        )
+        with self.assertRaises(ContractError) as raised:
+            validate_fixture(fixture)
+        self.assertEqual(raised.exception.category, "incompatible_partition")
 
     def test_map_insertion_order_does_not_change_canonical_bytes(self):
         self.assertEqual(

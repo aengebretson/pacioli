@@ -45,15 +45,21 @@ order. No trailing bytes are allowed.
 | `02` | true | none |
 | `03` | signed integer | eight-octet two's-complement signed integer |
 | `04` | text | unsigned 32-bit byte length, then NFC UTF-8 bytes |
-| `05` | array | unsigned 32-bit item count, then canonical child nodes in declared order |
+| `05` | array | unsigned 64-bit item count, then canonical child nodes in declared order |
 | `06` | map | unsigned 32-bit member count, then members in ascending raw UTF-8 key-byte order |
 
-A map member is an unsigned 32-bit key-byte length, its NFC UTF-8 key bytes
+A text length, map member count, or map key length is unsigned 32-bit. A map
+member is its key-byte length, its NFC UTF-8 key bytes
 without a text tag, and one canonical value node. Keys must be unique. The v1
 format rejects invalid UTF-8, non-NFC text, binary floating point, integers
-outside signed 64-bit range, a length above `2^32 - 1`, unknown tags, duplicate
-members, non-canonical map order, truncated input, and trailing input. The
-fixture decoder checks decode/encode round trips, not only digest equality.
+outside signed 64-bit range, an array item count above `2^64 - 1`, another
+length/count above `2^32 - 1`, unknown tags, duplicate members, non-canonical
+map order, truncated input, and trailing input. The distinct unsigned 64-bit
+array count is required because the public ledger may accept every lifecycle
+sequence from 1 through `18446744073709551615`; LCB1 can therefore represent
+the corresponding complete contiguous record array without narrowing the public
+domain. The fixture decoder checks decode/encode round trips, not only digest
+equality.
 
 All schema maps contain a `schema_version` text member. The field therefore
 participates in canonical bytes and digests. An implementation must reject an
@@ -134,7 +140,10 @@ rules continue to govern correction, cancellation, and reversal; serialization
 does not loosen them.
 
 A canonical input is one `luca.lifecycle-record-sequence.v1` map containing the
-ordered `records` array. The checkpoint's canonical input digest hashes this
+ordered `records` array. The array's unsigned 64-bit count and the record
+sequence's unsigned 64-bit acceptance values cover the same complete domain, so
+a record at or above sequence `4294967296` does not encounter a narrower
+collection-count limit. The checkpoint's canonical input digest hashes this
 whole value, not the concatenation of individual record hashes.
 
 ### Resolved economic events and lineage
@@ -222,7 +231,7 @@ state digest before considering compatibility.
 | `projection` | Stable projection identity and version; the fixture uses the combined portfolio-state projection. |
 | `engine_version` | Financial engine version that produced the result. |
 | `policy` | Financial policy identity and version. |
-| `partition` | Partition-definition identity, version, and non-empty sorted partition keys. |
+| `partition` | Partition-definition identity, version, and non-empty sorted partition keys. v1 supports `account-set` version `1`; every account in prefix records and checkpoint state must be one of its keys. |
 | `event_prefix` | Inclusive acceptance-sequence prefix: kind, first and last sequence, count, last record ID, record schema version, and canonical input digest. v1 begins at sequence 1. |
 | `evaluation_context` | Complete context and explicit versioned context inputs described above. |
 | `canonical_state_digest` | SHA-256 of the canonical `luca.portfolio-state.v1` value. |
@@ -256,6 +265,10 @@ A consumer performs these checks in order and stops on the first stable category
 4. Require exact equality of serialization, projection identity/version, engine
    version, policy identity/version, partition definition/version/keys, complete
    evaluation context, checkpoint event prefix, and checkpoint state digest.
+   For `account-set` version `1`, also require every account in the verified
+   prefix, checkpoint state, append-only suffix, and declared full-replay state
+   to belong to the partition keys. Keys with no non-zero sparse state remain
+   valid; data for an undeclared key does not.
 5. Require a non-empty suffix whose acceptance sequences begin at
    `prefix.last_sequence + 1` and remain contiguous. The first v1 contract keeps
    the evaluation context exact; advancing knowledge, economic, or settlement
@@ -303,7 +316,7 @@ The executable contract emits these categories:
 | `incompatible_projection` | Projection identity or version differs. |
 | `incompatible_engine` | Engine version differs. |
 | `incompatible_policy` | Policy identity or version differs. |
-| `incompatible_partition` | Partition identity, version, or keys differ. |
+| `incompatible_partition` | Partition identity, version, or keys differ, or a record/state account lies outside the declared account-set. |
 | `incompatible_context` | A cutoff or explicit reference/price/calendar/rounding/FX input differs. |
 | `incompatible_prefix` | The requested checkpoint prefix is not the verified manifest prefix. |
 | `prefix_continuity` | The inclusive prefix or append-only suffix has a gap or wrong boundary. |
@@ -317,8 +330,10 @@ contract.
 
 ## Fixture and validator responsibilities
 
-`canonical-vectors.json` pins the LCB1 grammar, representative money and
-provenance values, and the maximum public unsigned lifecycle sequence. Its
+`canonical-vectors.json` pins the LCB1 grammar (including the unsigned 64-bit
+array-count field and its maximum `ff ff ff ff ff ff ff ff` vector),
+representative money and provenance values, and the maximum public unsigned
+lifecycle sequence. Its
 named values are closed schemas: the validator applies money and provenance
 shape/version rules before accepting matching bytes and digests.
 `valid-append.json` covers canonical lifecycle input,
