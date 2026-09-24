@@ -1,7 +1,8 @@
 # Canonical serialization and replay-checkpoint contract
 
-Status: executable O3 design contract with production typed encoding, manifest,
-and conservative checkpoint-resume compatibility and application slices.
+Status: executable O3 design contract with production typed encoding and
+portfolio-checkpoint decoding, manifest, and conservative checkpoint-resume
+compatibility and application slices.
 The fixtures and dependency-free validator under
 `tests/conformance/serialization-checkpoints/` fix the first portable byte,
 digest, manifest, and checkpoint-resume semantics. This contract is grounded in
@@ -91,7 +92,7 @@ point and sequence values use canonical strings in the schema before LCB
 encoding. Binary floating point is never accepted for money, quantity, price,
 rate, sequence, or watermark values.
 
-### Typed C++ encoding API
+### Typed C++ encoding and checkpoint-decoding API
 
 `<luca/serialization/canonical.hpp>` provides the ledger production encoding
 slices, and `<luca/portfolio/serialization.hpp>` adds the portfolio-state
@@ -103,6 +104,25 @@ as an owned `CanonicalBytes` (`std::vector<std::byte>`), and the digest is
 returned as 64 lower-case hexadecimal characters. The API is header-only and
 is available to installed-package and `add_subdirectory` consumers through the
 existing Luca targets; it has no third-party dependency.
+
+`<luca/portfolio/serialization_decode.hpp>` and
+`<luca/portfolio/checkpoint_decode.hpp>` provide the bounded inverse for the two
+checkpoint artifacts through `decode_portfolio_state` and
+`decode_checkpoint_manifest`. Both take a read-only byte span and return
+`std::expected` with either the fully validated typed value or a `DecodeError`;
+no partial value is exposed and the caller's bytes are never changed. They are
+also included by `<luca/portfolio.hpp>` for installed and `add_subdirectory`
+consumers. Lifecycle records and generic LCB values are deliberately not part of
+this decoding surface.
+
+The internal streaming reader validates the `LCB1` header, every encountered
+tag and declared length/count, canonical raw-key order and uniqueness, NFC
+UTF-8, complete consumption, and the exact closed schema shapes before a typed
+result is returned. It does not construct a generic value tree. V1 decoding is
+bounded to 64 MiB of input, 16 MiB per text or key, 1,000,000 items per array,
+and 64 members per map; impossible counts are rejected before allocation or
+iteration. These limits are decoder resource limits and do not alter the LCB1
+wire grammar.
 
 Each overload emits the closed v1 map defined here. Money owns its currency,
 scale `6`, scaled value, and `luca.money.v1` schema identity. Quantity and price
@@ -311,6 +331,15 @@ replay-ordered active lineage entry.
 fixed LCB1 representation, and `canonical_digest` hashes those complete bytes
 with SHA-256.
 
+`decode_checkpoint_manifest` accepts only the exact manifest and supported
+nested v1 identities, reconstructs every component through its validating
+factory, and then invokes `CheckpointManifest::create` so prefix, watermark,
+and lineage invariants are re-established. `decode_portfolio_state` likewise
+accepts only the three sparse, canonically ordered state collections and uses
+the existing currency, date, money, quantity, and portfolio value types. A
+successful decode can therefore be encoded again to byte-for-byte identical
+LCB1 and the same SHA-256 digest.
+
 ### Typed checkpoint-resume decision
 
 `<luca/portfolio/checkpoint_resume.hpp>` exposes the closed
@@ -460,6 +489,15 @@ The executable contract emits these categories:
 Diagnostic prose is explanatory and may grow; category strings are the portable
 contract.
 
+The typed decoder reports these same portable categories through `DecodeError`.
+Malformed LCB1 or non-canonical scalar text is `canonical_encoding`; a missing,
+extra, unknown, or mistyped closed member is `schema_shape`; unknown schema,
+serialization, algorithm, scale, partition, prefix, or record identities are
+`unsupported_version`; duplicate identities and non-canonical collection or
+map order retain `duplicate_identity` and `deterministic_ordering`; and a
+manifest lineage inconsistency is `lineage_reference_missing`. The diagnostic
+also records the byte offset at which rejection occurred.
+
 ## Fixture and validator responsibilities
 
 `canonical-vectors.json` pins the LCB1 grammar (including the unsigned 64-bit
@@ -494,11 +532,12 @@ immutability.
 
 ## Deliberately deferred
 
-This increment does not select a storage medium, persistence service, decoding
-API, arbitrary-schema runtime, platform adapter, journal policy, production
-schema, migration process, compression, signature scheme, Merkle structure,
-streaming frame, or release behavior. It does not advance evaluation context,
-create a new checkpoint manifest or lineage, or repair a partition.
+This increment does not select a storage medium, persistence service,
+lifecycle-record decoder, arbitrary-schema runtime, platform adapter, journal
+policy, production schema, migration process, compression, signature scheme,
+Merkle structure, streaming frame, or release behavior. It does not advance
+evaluation context, create a new checkpoint manifest or lineage, or repair a
+partition.
 General advancing-context incremental replay, partial-partition repair, an
 empty-event checkpoint, and additional event/projection variants require later
 versioned contracts and fixtures. There is no unresolved encoding default
