@@ -156,7 +156,15 @@ inline std::string canonical_timestamp(Timestamp value) {
   const auto year = static_cast<int>(date.year());
   if (year < 1 || year > 9999)
     throw std::out_of_range("LCB1 timestamp year must be between 0001 and 9999");
-  const hh_mm_ss time{value - day};
+
+  // The midnight before Timestamp::min() is outside the nanosecond range. A
+  // remainder from the truncated day stays representable and can be normalized.
+  const auto since_epoch = value.time_since_epoch();
+  const auto truncated_day = duration_cast<days>(since_epoch);
+  auto since_midnight = since_epoch - duration_cast<Timestamp::duration>(truncated_day);
+  if (since_midnight < Timestamp::duration::zero())
+    since_midnight += duration_cast<Timestamp::duration>(days{1});
+  const hh_mm_ss time{since_midnight};
 
   std::string output;
   output.reserve(30);
