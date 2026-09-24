@@ -102,6 +102,12 @@ if(PACIOLI_BUILD_TESTS)
   add_test(NAME pacioli_canonical_serialization_test
     COMMAND pacioli_canonical_serialization_test)
 
+  add_executable(pacioli_lifecycle_serialization_test
+    tests/unit/lifecycle_serialization_test.cpp)
+  target_link_libraries(pacioli_lifecycle_serialization_test PRIVATE luca::luca)
+  add_test(NAME pacioli_lifecycle_serialization_test
+    COMMAND pacioli_lifecycle_serialization_test)
+
   add_executable(pacioli_provenance_test tests/unit/provenance_test.cpp)
   target_link_libraries(pacioli_provenance_test PRIVATE pacioli)
   add_test(NAME pacioli_provenance_test COMMAND pacioli_provenance_test)
