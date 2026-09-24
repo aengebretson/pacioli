@@ -183,7 +183,17 @@ def _finite_number(
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         errors.append(Diagnostic("invalid_number", f"{field} must be a finite number", field))
         return 0.0
-    result = float(value)
+    try:
+        result = float(value)
+    except (OverflowError, ValueError):
+        errors.append(
+            Diagnostic(
+                "number_not_representable",
+                f"{field} must be representable as a finite binary64 number",
+                field,
+            )
+        )
+        return 0.0
     if not math.isfinite(result):
         errors.append(Diagnostic("nonfinite_number", f"{field} must be finite", field))
         return 0.0

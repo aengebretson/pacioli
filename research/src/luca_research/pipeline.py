@@ -170,6 +170,18 @@ def _failure_details(exc: BaseException) -> dict[str, Any]:
     return dict(details) if isinstance(details, Mapping) else {}
 
 
+def _decimal_log_returns(closes: Sequence[float]) -> tuple[float, ...]:
+    """Compute log returns without forming a possibly underflowing ratio."""
+    log_closes = [math.log(close) for close in closes]
+    returns = tuple(
+        log_closes[index] - log_closes[index - 1]
+        for index in range(1, len(log_closes))
+    )
+    if any(not math.isfinite(value) for value in returns):
+        raise ValueError("close observations produced a nonfinite decimal log return")
+    return returns
+
+
 def _forecast_entry(
     interval_variances: Sequence[float],
     *,
@@ -251,7 +263,19 @@ def _analyze(request: AnalysisRequest, input_data: NormalizedCloseInput) -> dict
     dates = [item.date for item in observations]
     closes = [item.close for item in observations]
     date_indices = {value: index for index, value in enumerate(dates)}
-    returns = [math.log(closes[index] / closes[index - 1]) for index in range(1, len(closes))]
+    try:
+        returns = _decimal_log_returns(closes)
+    except (OverflowError, ValueError) as exc:
+        return failure_artifact(
+            [
+                Diagnostic(
+                    "invalid_derived_return",
+                    str(exc),
+                    "input.observations",
+                )
+            ],
+            analysis_id=request.analysis_id,
+        )
     fit_start_index = date_indices.get(request.boundaries.fit_start)
     errors: list[Diagnostic] = []
     if fit_start_index is None:

@@ -53,7 +53,8 @@ strictly increasing `{date, close}` observations. Dates are canonical ISO
 calendar dates. Closes must be finite and positive. The content SHA-256 is over
 the validated canonical document, and the request must name both the input ID
 and that hash. Duplicate or unordered dates, ambiguous units, and nonfinite or
-nonpositive closes are rejected.
+nonpositive closes are rejected. JSON numbers that cannot be represented as a
+finite binary64 value are also rejected with a structured diagnostic.
 
 `luca.volatility-request.v1` provides:
 
@@ -86,10 +87,12 @@ exact JSON.
 
 ## Statistical and unit conventions
 
-Close-to-close returns are decimal log returns. For `mean: zero`, historical
-variance is mean squared return (`ddof=0`). For `mean: constant`, the fitted
-sample mean is removed and sample variance uses `ddof=1`. EWMA initializes from
-the first fitted innovation squared and then applies
+Close-to-close returns are decimal log returns, calculated as the difference of
+the two log closes rather than the log of a precomputed ratio so an otherwise
+valid extreme close pair cannot overflow or underflow during division. For
+`mean: zero`, historical variance is mean squared return (`ddof=0`). With a
+constant mean, the fitted sample mean is removed and sample variance uses
+`ddof=1`. EWMA initializes from the first fitted innovation squared and applies
 `v[t] = decay*v[t-1] + (1-decay)*innovation[t]^2`; its multi-step baseline is
 flat at the origin variance.
 

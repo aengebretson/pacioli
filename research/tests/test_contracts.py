@@ -69,6 +69,18 @@ class ContractTests(unittest.TestCase):
             parse_request(request)
         self.assertIn("invalid_integer", {item.code for item in caught.exception.diagnostics})
 
+    def test_rejects_number_not_representable_as_binary64(self):
+        document = fixture("synthetic_spx_like.json")
+        document["observations"][0]["close"] = 10**400
+
+        with self.assertRaises(ContractError) as caught:
+            parse_close_input(document, max_observations=1000)
+
+        self.assertIn(
+            "number_not_representable",
+            {item.code for item in caught.exception.diagnostics},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

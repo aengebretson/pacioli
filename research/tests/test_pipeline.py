@@ -1,5 +1,6 @@
 import copy
 import json
+import math
 from pathlib import Path
 import subprocess
 import sys
@@ -138,6 +139,57 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(artifact["status"], "failed")
         self.assertIn("number_out_of_range", {error["code"] for error in artifact["errors"]})
         self.assertEqual(artifact["evaluation_records"], [])
+
+    def test_extreme_positive_finite_closes_do_not_underflow_log_return(self):
+        changed = copy.deepcopy(self.input_document)
+        changed["observations"][-2]["close"] = 1e300
+        changed["observations"][-1]["close"] = 1e-300
+        normalized = parse_close_input(changed, max_observations=1000)
+        request = copy.deepcopy(self.request)
+        request["input"]["sha256"] = normalized.sha256
+
+        artifact = run_analysis(request, changed)
+
+        self.assertEqual(artifact["status"], "complete")
+        self.assertTrue(
+            math.isfinite(
+                math.log(changed["observations"][-1]["close"])
+                - math.log(changed["observations"][-2]["close"])
+            )
+        )
+
+    def test_oversized_integer_close_is_a_structured_cli_failure(self):
+        changed = copy.deepcopy(self.input_document)
+        changed["observations"][0]["close"] = 10**400
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            input_path = Path(temporary_directory) / "input.json"
+            output_path = Path(temporary_directory) / "result.json"
+            input_path.write_text(json.dumps(changed), encoding="utf-8")
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "luca_research",
+                    "--request",
+                    str(ROOT / "fixtures" / "synthetic_request.json"),
+                    "--input",
+                    str(input_path),
+                    "--output",
+                    str(output_path),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(completed.returncode, 2, completed.stderr)
+            artifact = json.loads(output_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(artifact["status"], "failed")
+        self.assertIn(
+            "number_not_representable",
+            {error["code"] for error in artifact["errors"]},
+        )
 
     def test_overlapping_horizon_labels_are_flagged_as_dependent(self):
         request = copy.deepcopy(self.request)
