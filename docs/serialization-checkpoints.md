@@ -361,23 +361,25 @@ stable category and explanatory message are unchanged.
 
 After compatibility succeeds, the operation reconstitutes the suffix in an
 in-memory `LifecycleLedger`, resolves it with the manifest's unchanged
-`recorded_through` and `economic_as_of`, and invokes `project_lifecycle` with the
-unchanged economic and settlement context. This deliberately reuses the
-authoritative lifecycle, position, cash, and settlement engines. Corrections,
-cancellations, and reversals whose complete causal chain is inside the suffix
-therefore have ordinary lifecycle semantics. A record that targets prefix
-knowledge has already been rejected as `late_lifecycle_knowledge` and is never
-treated as an arithmetic delta.
+`recorded_through` and `economic_as_of`, and applies the resolved active payloads
+in economic order with the unchanged economic and settlement context. Each
+payload is evaluated by the authoritative position, cash, and settlement
+engines and checked-merged into the evolving copy of the checkpoint state.
+This preserves an intermediate checked-arithmetic failure even when a later
+suffix payload would offset it. Corrections, cancellations, and reversals whose
+complete causal chain is inside the suffix therefore have ordinary lifecycle
+semantics. A record that targets prefix knowledge has already been rejected as
+`late_lifecycle_knowledge` and is never treated as an arithmetic delta.
 
-The three sparse suffix projections are checked-merged into copies of the
-verified checkpoint collections by their complete existing keys: account and
-instrument for positions; account and currency for settled cash; and account,
-settlement date, currency, and direction for obligations. Position and cash
-zeros are removed. Currency, receivable, and payable keys remain distinct.
-Projection and merge overflow use the existing `PositionProjectionError`,
-`CashProjectionError`, or `SettlementProjectionError` alternatives; an
-unexpected suffix-lifecycle rejection uses `LifecycleError`. No result is
-returned unless every projection and merge completes, and no input is mutated.
+Each sparse event projection is checked-merged by the complete existing keys:
+account and instrument for positions; account and currency for settled cash;
+and account, settlement date, currency, and direction for obligations.
+Position and cash zeros are removed. Currency, receivable, and payable keys
+remain distinct. Projection and merge overflow use the existing
+`PositionProjectionError`, `CashProjectionError`, or
+`SettlementProjectionError` alternatives; an unexpected suffix-lifecycle
+rejection uses `LifecycleError`. No result is returned unless every ordered
+projection and merge completes, and no input is mutated.
 
 ## Verification and compatibility algorithm
 
@@ -406,11 +408,12 @@ A consumer performs these checks in order and stops on the first stable category
    record in the checkpoint prefix. Also reject a suffix payload whose
    `(effective_at, acceptance_sequence)` is not strictly after the resolved-event
    watermark. These are late lifecycle knowledge, not an ordinary suffix.
-7. Only after those checks does `apply_checkpoint_suffix` resolve and project
-   the ordinary suffix, then checked-merge it into the checkpoint state. The
-   resulting canonical state must equal full replay under the same manifest
-   context. Advancing lineage or creating a replacement manifest remains a
-   separate operation.
+7. Only after those checks does `apply_checkpoint_suffix` resolve the ordinary
+   suffix and apply each active payload in economic order to a copy of the
+   checkpoint state. The resulting canonical state, including the point at
+   which checked arithmetic fails, must equal full replay under the same
+   manifest context. Advancing lineage or creating a replacement manifest
+   remains a separate operation.
 
 This rule is intentionally conservative. A late correction replaces its target;
 a cancellation removes it; a reversal retains the target and introduces a new

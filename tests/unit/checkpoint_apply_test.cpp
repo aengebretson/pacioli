@@ -557,13 +557,28 @@ void arithmetic_failures_return_no_partial_state() {
              EconomicEventId{"cash-overflow-economic"}, timestamp(2026, 1, 3, 10h),
              cash_event("cash-overflow", "acct-main", timestamp(2026, 1, 3, 9h),
                         Money::from_scaled(1, currency("USD")), "cash-overflow-source")));
+  accept(cash_ledger,
+         LifecycleRecordDraft::originate(
+             EconomicEventId{"cash-offset-economic"}, timestamp(2026, 1, 4, 10h),
+             cash_event("cash-offset", "acct-main", timestamp(2026, 1, 4, 9h),
+                        Money::from_scaled(-1, currency("USD")), "cash-offset-source")));
   const auto original_cash_state = cash_state;
+  const std::vector<LifecycleRecord> original_cash_records{cash_ledger.records().begin(),
+                                                           cash_ledger.records().end()};
   const auto cash_result = apply_checkpoint_suffix(cash_request, cash_manifest, cash_state,
                                                    cash_ledger.records().first(cash_prefix_size),
                                                    cash_ledger.records().subspan(cash_prefix_size));
   check(!cash_result.has_value());
   check(std::get<CashProjectionError>(cash_result.error()) == CashProjectionError::amount_overflow);
+  const auto full_cash = project_lifecycle(
+      cash_ledger.resolve(evaluation_context.recorded_through(),
+                          evaluation_context.economic_as_of()),
+      LifecycleProjectionContext{evaluation_context.economic_as_of(),
+                                 evaluation_context.settlement_as_of_date().value()});
+  check(!full_cash.settled_cash.has_value());
+  check(full_cash.settled_cash.error() == CashProjectionError::amount_overflow);
   check(cash_state == original_cash_state);
+  check(std::ranges::equal(cash_ledger.records(), original_cash_records));
 
   LifecycleLedger position_ledger;
   append_prefix(position_ledger, require(Money::parse("1", currency("USD"))),
@@ -579,6 +594,15 @@ void arithmetic_failures_return_no_partial_state() {
              trade_event("position-overflow", "acct-main", timestamp(2026, 1, 3, 9h),
                          Quantity::from_scaled(1), Price::from_scaled(0), date(2026, 1, 4),
                          "position-overflow-source")));
+  accept(position_ledger,
+         LifecycleRecordDraft::originate(
+             EconomicEventId{"position-offset-economic"}, timestamp(2026, 1, 4, 10h),
+             trade_event("position-offset", "acct-main", timestamp(2026, 1, 4, 9h),
+                         Quantity::from_scaled(-1), Price::from_scaled(0), date(2026, 1, 4),
+                         "position-offset-source")));
+  const auto original_position_state = position_state;
+  const std::vector<LifecycleRecord> original_position_records{position_ledger.records().begin(),
+                                                               position_ledger.records().end()};
   const auto position_result =
       apply_checkpoint_suffix(position_request, position_manifest, position_state,
                               position_ledger.records().first(position_prefix_size),
@@ -586,6 +610,15 @@ void arithmetic_failures_return_no_partial_state() {
   check(!position_result.has_value());
   check(std::get<PositionProjectionError>(position_result.error()) ==
         PositionProjectionError::quantity_overflow);
+  const auto full_position = project_lifecycle(
+      position_ledger.resolve(evaluation_context.recorded_through(),
+                              evaluation_context.economic_as_of()),
+      LifecycleProjectionContext{evaluation_context.economic_as_of(),
+                                 evaluation_context.settlement_as_of_date().value()});
+  check(!full_position.positions.has_value());
+  check(full_position.positions.error() == PositionProjectionError::quantity_overflow);
+  check(position_state == original_position_state);
+  check(std::ranges::equal(position_ledger.records(), original_position_records));
 
   auto projection_fixture = ordinary_fixture();
   accept(projection_fixture.ledger,

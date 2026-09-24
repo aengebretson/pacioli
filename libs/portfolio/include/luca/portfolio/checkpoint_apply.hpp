@@ -42,6 +42,23 @@ namespace checkpoint_apply_detail {
   std::terminate();
 }
 
+[[nodiscard]] inline LifecycleProjectionResult project_event(const EconomicEvent &event,
+                                                             LifecycleProjectionContext context) {
+  Ledger ledger;
+  if (!ledger.append(event))
+    std::terminate();
+
+  return LifecycleProjectionResult{
+      .positions = project_positions(ledger.entries(), context.economic_as_of),
+      .settled_cash =
+          project_cash(ledger.entries(), CashProjectionContext{context.economic_as_of,
+                                                               context.settlement_as_of_date}),
+      .open_settlement_obligations = project_settlement_obligations(
+          ledger.entries(),
+          SettlementProjectionContext{context.economic_as_of, context.settlement_as_of_date}),
+  };
+}
+
 [[nodiscard]] inline std::expected<PortfolioState, CheckpointApplyError>
 merge_state(const PortfolioState &checkpoint_state, const LifecycleProjectionResult &suffix) {
   if (!suffix.positions)
@@ -156,10 +173,19 @@ apply_checkpoint_suffix(const CheckpointResumeRequest &request, const Checkpoint
   const auto &context = manifest.evaluation_context();
   const auto resolution =
       suffix_ledger.resolve(context.recorded_through(), context.economic_as_of());
-  const auto projected = project_lifecycle(
-      resolution, LifecycleProjectionContext{context.economic_as_of(),
-                                             context.settlement_as_of_date().value()});
-  return checkpoint_apply_detail::merge_state(checkpoint_state, projected);
+  const auto projection_context =
+      LifecycleProjectionContext{context.economic_as_of(), context.settlement_as_of_date().value()};
+
+  auto state = checkpoint_state;
+  for (const auto &resolved : resolution.active_events()) {
+    const auto projected =
+        checkpoint_apply_detail::project_event(resolved.event(), projection_context);
+    auto merged = checkpoint_apply_detail::merge_state(state, projected);
+    if (!merged)
+      return std::unexpected(std::move(merged.error()));
+    state = std::move(*merged);
+  }
+  return state;
 }
 
 } // namespace luca
