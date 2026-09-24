@@ -10,8 +10,10 @@
 #include <limits>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -43,6 +45,15 @@ using luca::serialization::CanonicalBytes;
 void check(bool condition) {
   if (!condition)
     std::abort();
+}
+
+template <class Operation> void check_invalid_argument(Operation &&operation) {
+  try {
+    std::forward<Operation>(operation)();
+  } catch (const std::invalid_argument &) {
+    return;
+  }
+  check(false);
 }
 
 Currency usd() {
@@ -371,6 +382,40 @@ void test_integrated_portable_sequence_vectors() {
         "f721b1451d65d2d315d70d210c49078d7a16a9df4bf5d6cd05a672d178547ad9");
 }
 
+void test_schema_invalid_text_and_empty_sequence_are_rejected() {
+  std::string malformed_utf8{"normalize-"};
+  malformed_utf8.push_back(static_cast<char>(0xc3));
+  malformed_utf8.push_back('(');
+  const auto malformed =
+      Provenance::create(std::vector{SourceRecordId{"source"}}, malformed_utf8, "1");
+  check(malformed.has_value());
+  check_invalid_argument([&] { (void)canonical_bytes(*malformed); });
+
+  const auto decomposed =
+      Provenance::create(std::vector{SourceRecordId{"source"}}, "normalize", "1", "Cafe\xcc\x81");
+  check(decomposed.has_value());
+  check_invalid_argument([&] { (void)canonical_digest(*decomposed); });
+
+  const auto nul_source = Provenance::create(
+      std::vector{SourceRecordId{std::string{"source\0suffix", 13}}}, "normalize", "1");
+  check(nul_source.has_value());
+  check_invalid_argument([&] { (void)canonical_bytes(*nul_source); });
+
+  const auto nul_metadata = Provenance::create(std::vector{SourceRecordId{"source"}}, "normalize",
+                                               "1", std::string{"x\0y", 3});
+  check(nul_metadata.has_value());
+  check_invalid_argument([&] { (void)canonical_bytes(*nul_metadata); });
+
+  const auto composed = Provenance::create(std::vector{SourceRecordId{"source"}}, "normalize", "1",
+                                           "Caf\xc3\xa9 q\xcc\x87");
+  check(composed.has_value());
+  check(!canonical_bytes(*composed).empty());
+
+  const LifecycleLedger empty;
+  check_invalid_argument([&] { (void)canonical_bytes(empty); });
+  check_invalid_argument([&] { (void)canonical_digest(empty); });
+}
+
 LifecycleLedger two_cash_records(bool reverse_order, std::int64_t second_amount = 2'000'000) {
   using std::chrono::March;
   using std::chrono::year;
@@ -484,5 +529,6 @@ int main() {
   test_complete_sequence_vector(ledger);
   test_unsigned_64_bit_sequence_primitives();
   test_integrated_portable_sequence_vectors();
+  test_schema_invalid_text_and_empty_sequence_are_rejected();
   test_owned_field_order_lineage_action_and_payload_mutations(ledger);
 }

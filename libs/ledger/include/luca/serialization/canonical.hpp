@@ -1,6 +1,7 @@
 #pragma once
 
 #include "luca/lifecycle.hpp"
+#include "luca/serialization/unicode_nfc.hpp"
 
 #include <array>
 #include <bit>
@@ -51,12 +52,44 @@ inline void append_ascii(CanonicalBytes &output, std::string_view value) {
     append_octet(output, static_cast<std::uint8_t>(static_cast<unsigned char>(character)));
 }
 
+inline void validate_text(std::string_view value) {
+  switch (unicode_nfc::validate(value)) {
+  case unicode_nfc::ValidationResult::valid:
+    return;
+  case unicode_nfc::ValidationResult::invalid_utf8:
+    throw std::invalid_argument("LCB1 text must be valid UTF-8");
+  case unicode_nfc::ValidationResult::not_nfc:
+    throw std::invalid_argument("LCB1 text must be NFC-normalized");
+  }
+}
+
 inline void append_text(CanonicalBytes &output, std::string_view value) {
   if (value.size() > std::numeric_limits<std::uint32_t>::max())
     throw std::length_error("LCB1 text exceeds the unsigned 32-bit length limit");
+  validate_text(value);
   append_octet(output, 0x04);
   append_u32(output, static_cast<std::uint32_t>(value.size()));
   append_ascii(output, value);
+}
+
+inline void append_nul_free_text(CanonicalBytes &output, std::string_view value) {
+  if (value.find('\0') != std::string_view::npos)
+    throw std::invalid_argument("LCB1 schema text must not contain NUL");
+  append_text(output, value);
+}
+
+inline void append_required_text(CanonicalBytes &output, std::string_view value) {
+  if (value.empty())
+    throw std::invalid_argument("LCB1 required schema text must not be empty");
+  append_nul_free_text(output, value);
+}
+
+inline void append_identifier(CanonicalBytes &output, std::string_view value) {
+  if (value.empty())
+    throw std::invalid_argument("LCB1 identifier must not be empty");
+  if (value.find('\0') != std::string_view::npos)
+    throw std::invalid_argument("LCB1 identifier must not contain NUL");
+  append_text(output, value);
 }
 
 inline void append_key(CanonicalBytes &output, std::string_view key) {
@@ -190,28 +223,28 @@ inline void append_provenance(CanonicalBytes &output, const Provenance &value) {
   append_key(output, "source_record_ids");
   append_array(output, static_cast<std::uint64_t>(sources.size()));
   for (const auto &source_record : sources)
-    append_text(output, source_record.value());
+    append_identifier(output, source_record.value());
   append_key(output, "transformation_metadata");
   if (value.transformation_metadata())
-    append_text(output, *value.transformation_metadata());
+    append_nul_free_text(output, *value.transformation_metadata());
   else
     append_octet(output, 0x00);
   append_key(output, "transformation_name");
-  append_text(output, value.transformation_name());
+  append_required_text(output, value.transformation_name());
   append_key(output, "transformation_version");
-  append_text(output, value.transformation_version());
+  append_required_text(output, value.transformation_version());
 }
 
 inline void append_event_header(CanonicalBytes &output, const EventHeader &value) {
   append_map(output, 5);
   append_key(output, "account");
-  append_text(output, value.account().value());
+  append_identifier(output, value.account().value());
   append_key(output, "effective_at");
   append_text(output, canonical_timestamp(value.effective_at()));
   append_key(output, "provenance");
   append_provenance(output, value.provenance());
   append_key(output, "record_id");
-  append_text(output, value.id().value());
+  append_identifier(output, value.id().value());
   append_key(output, "schema_version");
   append_text(output, "luca.event-header.v1");
 }
@@ -233,7 +266,7 @@ inline void append_equity_trade(CanonicalBytes &output, const EquityTrade &value
   append_key(output, "header");
   append_event_header(output, value.header());
   append_key(output, "instrument");
-  append_text(output, value.instrument().value());
+  append_identifier(output, value.instrument().value());
   append_key(output, "price");
   append_price(output, value.price());
   append_key(output, "quantity");
@@ -279,16 +312,16 @@ inline void append_lifecycle_record(CanonicalBytes &output, const LifecycleRecor
   append_key(output, "acceptance_sequence");
   append_text(output, canonical_decimal(value.acceptance_sequence().value()));
   append_key(output, "account");
-  append_text(output, value.account().value());
+  append_identifier(output, value.account().value());
   append_key(output, "action");
   append_text(output, lifecycle_action_name(value.action()));
   append_key(output, "causal_record_id");
   if (value.causal_record_id())
-    append_text(output, value.causal_record_id()->value());
+    append_identifier(output, value.causal_record_id()->value());
   else
     append_octet(output, 0x00);
   append_key(output, "economic_event_id");
-  append_text(output, value.economic_event_id().value());
+  append_identifier(output, value.economic_event_id().value());
   append_key(output, "event");
   if (value.event())
     append_economic_event(output, *value.event());
@@ -297,7 +330,7 @@ inline void append_lifecycle_record(CanonicalBytes &output, const LifecycleRecor
   append_key(output, "provenance");
   append_provenance(output, value.provenance());
   append_key(output, "record_id");
-  append_text(output, value.record_id().value());
+  append_identifier(output, value.record_id().value());
   append_key(output, "recorded_at");
   append_text(output, canonical_timestamp(value.recorded_at()));
   append_key(output, "schema_version");
@@ -489,6 +522,8 @@ inline std::string sha256_hex(std::span<const std::byte> input) {
 // A LifecycleLedger is the typed sequence boundary: successful acceptance has
 // already established contiguous uint64_t sequence values beginning at one.
 [[nodiscard]] inline CanonicalBytes canonical_bytes(const LifecycleLedger &value) {
+  if (value.empty())
+    throw std::invalid_argument("LCB1 lifecycle record sequence must not be empty");
   auto output = detail::top_level_bytes();
   detail::append_map(output, 2);
   detail::append_key(output, "records");
