@@ -144,3 +144,23 @@ above:
 cd research
 /tmp/luca-research-venv/bin/python -m unittest discover -s tests -v
 ```
+
+## Unattended verification
+
+From the repository root, the following command creates a disposable virtual
+environment, installs only the exact committed pins, runs `pip check` and all
+research tests, compares the synthetic callable and CLI artifacts exactly, and
+reports their measured wall time against a 30-second verification budget:
+
+```bash
+bash research/verify-isolated.sh
+```
+
+The command needs CPython 3.11 or another supported interpreter with `venv`,
+plus package-index access while creating the disposable environment. The
+installed CLI and callable API themselves remain offline and require neither a
+browser login nor platform, provider, database, or network access. The verifier
+exits nonzero for a missing/mismatched pin, a broken dependency, any test
+failure, differing CLI/API artifacts, a non-complete synthetic result, or a
+runtime-budget breach. Use `--max-synthetic-seconds` only to state a different
+machine-specific verification budget explicitly.
