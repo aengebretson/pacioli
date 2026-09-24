@@ -1,15 +1,21 @@
 #pragma once
 
-#include "luca/core/values.hpp"
+#include "luca/lifecycle.hpp"
 
 #include <array>
 #include <bit>
 #include <charconv>
+#include <chrono>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
+#include <variant>
 #include <vector>
 
 namespace luca::serialization {
@@ -29,20 +35,45 @@ inline void append_u32(CanonicalBytes &output, std::uint32_t value) {
   append_octet(output, static_cast<std::uint8_t>(value));
 }
 
+inline void append_u64(CanonicalBytes &output, std::uint64_t value) {
+  append_octet(output, static_cast<std::uint8_t>(value >> 56));
+  append_octet(output, static_cast<std::uint8_t>(value >> 48));
+  append_octet(output, static_cast<std::uint8_t>(value >> 40));
+  append_octet(output, static_cast<std::uint8_t>(value >> 32));
+  append_octet(output, static_cast<std::uint8_t>(value >> 24));
+  append_octet(output, static_cast<std::uint8_t>(value >> 16));
+  append_octet(output, static_cast<std::uint8_t>(value >> 8));
+  append_octet(output, static_cast<std::uint8_t>(value));
+}
+
 inline void append_ascii(CanonicalBytes &output, std::string_view value) {
   for (const char character : value)
     append_octet(output, static_cast<std::uint8_t>(static_cast<unsigned char>(character)));
 }
 
 inline void append_text(CanonicalBytes &output, std::string_view value) {
+  if (value.size() > std::numeric_limits<std::uint32_t>::max())
+    throw std::length_error("LCB1 text exceeds the unsigned 32-bit length limit");
   append_octet(output, 0x04);
   append_u32(output, static_cast<std::uint32_t>(value.size()));
   append_ascii(output, value);
 }
 
 inline void append_key(CanonicalBytes &output, std::string_view key) {
+  if (key.size() > std::numeric_limits<std::uint32_t>::max())
+    throw std::length_error("LCB1 map key exceeds the unsigned 32-bit length limit");
   append_u32(output, static_cast<std::uint32_t>(key.size()));
   append_ascii(output, key);
+}
+
+inline void append_map(CanonicalBytes &output, std::uint32_t member_count) {
+  append_octet(output, 0x06);
+  append_u32(output, member_count);
+}
+
+inline void append_array(CanonicalBytes &output, std::uint64_t item_count) {
+  append_octet(output, 0x05);
+  append_u64(output, item_count);
 }
 
 inline std::string canonical_decimal(std::int64_t value) {
@@ -52,21 +83,238 @@ inline std::string canonical_decimal(std::int64_t value) {
   return {buffer.data(), end};
 }
 
-inline CanonicalBytes fixed_point_bytes(std::string_view schema_version, std::string_view scale,
-                                        std::int64_t scaled_value) {
-  CanonicalBytes output;
-  output.reserve(128);
-  append_ascii(output, "LCB1");
-  append_octet(output, 0x06);
-  append_u32(output, 3);
+inline std::string canonical_decimal(std::uint64_t value) {
+  std::array<char, 32> buffer{};
+  const auto [end, error] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value);
+  (void)error; // A 32-byte buffer holds every unsigned 64-bit decimal representation.
+  return {buffer.data(), end};
+}
 
-  // LCB1 maps are ordered by the raw UTF-8 bytes of their keys.
+inline void append_padded_decimal(std::string &output, unsigned value, std::size_t width) {
+  std::array<char, 16> buffer{};
+  const auto [end, error] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value);
+  (void)error;
+  const auto size = static_cast<std::size_t>(end - buffer.data());
+  output.append(width - size, '0');
+  output.append(buffer.data(), size);
+}
+
+inline std::string canonical_date(SettlementDate value) {
+  const auto date = value.value();
+  const auto year = static_cast<int>(date.year());
+  if (year < 1 || year > 9999)
+    throw std::out_of_range("LCB1 settlement date year must be between 0001 and 9999");
+
+  std::string output;
+  output.reserve(10);
+  append_padded_decimal(output, static_cast<unsigned>(year), 4);
+  output.push_back('-');
+  append_padded_decimal(output, static_cast<unsigned>(date.month()), 2);
+  output.push_back('-');
+  append_padded_decimal(output, static_cast<unsigned>(date.day()), 2);
+  return output;
+}
+
+inline std::string canonical_timestamp(Timestamp value) {
+  using namespace std::chrono;
+
+  const auto day = floor<days>(value);
+  const year_month_day date{day};
+  const auto year = static_cast<int>(date.year());
+  if (year < 1 || year > 9999)
+    throw std::out_of_range("LCB1 timestamp year must be between 0001 and 9999");
+  const hh_mm_ss time{value - day};
+
+  std::string output;
+  output.reserve(30);
+  append_padded_decimal(output, static_cast<unsigned>(year), 4);
+  output.push_back('-');
+  append_padded_decimal(output, static_cast<unsigned>(date.month()), 2);
+  output.push_back('-');
+  append_padded_decimal(output, static_cast<unsigned>(date.day()), 2);
+  output.push_back('T');
+  append_padded_decimal(output, static_cast<unsigned>(time.hours().count()), 2);
+  output.push_back(':');
+  append_padded_decimal(output, static_cast<unsigned>(time.minutes().count()), 2);
+  output.push_back(':');
+  append_padded_decimal(output, static_cast<unsigned>(time.seconds().count()), 2);
+  output.push_back('.');
+  append_padded_decimal(output, static_cast<unsigned>(time.subseconds().count()), 9);
+  output.push_back('Z');
+  return output;
+}
+
+inline void append_fixed_point(CanonicalBytes &output, std::string_view schema_version,
+                               std::string_view scale, std::int64_t scaled_value) {
+  append_map(output, 3);
   append_key(output, "scale");
   append_text(output, scale);
   append_key(output, "scaled_value");
   append_text(output, canonical_decimal(scaled_value));
   append_key(output, "schema_version");
   append_text(output, schema_version);
+}
+
+inline void append_money(CanonicalBytes &output, Money value) {
+  append_map(output, 4);
+  append_key(output, "currency");
+  append_text(output, value.currency().code());
+  append_key(output, "scale");
+  append_text(output, "6");
+  append_key(output, "scaled_value");
+  append_text(output, canonical_decimal(value.scaled_value()));
+  append_key(output, "schema_version");
+  append_text(output, "luca.money.v1");
+}
+
+inline void append_quantity(CanonicalBytes &output, Quantity value) {
+  append_fixed_point(output, "luca.quantity.v1", "8", value.scaled_value());
+}
+
+inline void append_price(CanonicalBytes &output, Price value) {
+  append_fixed_point(output, "luca.price.v1", "8", value.scaled_value());
+}
+
+inline void append_provenance(CanonicalBytes &output, const Provenance &value) {
+  const auto sources = value.source_records();
+  for (std::size_t left = 0; left < sources.size(); ++left) {
+    for (std::size_t right = left + 1; right < sources.size(); ++right) {
+      if (sources[left] == sources[right])
+        throw std::invalid_argument("LCB1 provenance source record identities must be unique");
+    }
+  }
+
+  append_map(output, 5);
+  append_key(output, "schema_version");
+  append_text(output, "luca.provenance.v1");
+  append_key(output, "source_record_ids");
+  append_array(output, static_cast<std::uint64_t>(sources.size()));
+  for (const auto &source_record : sources)
+    append_text(output, source_record.value());
+  append_key(output, "transformation_metadata");
+  if (value.transformation_metadata())
+    append_text(output, *value.transformation_metadata());
+  else
+    append_octet(output, 0x00);
+  append_key(output, "transformation_name");
+  append_text(output, value.transformation_name());
+  append_key(output, "transformation_version");
+  append_text(output, value.transformation_version());
+}
+
+inline void append_event_header(CanonicalBytes &output, const EventHeader &value) {
+  append_map(output, 5);
+  append_key(output, "account");
+  append_text(output, value.account().value());
+  append_key(output, "effective_at");
+  append_text(output, canonical_timestamp(value.effective_at()));
+  append_key(output, "provenance");
+  append_provenance(output, value.provenance());
+  append_key(output, "record_id");
+  append_text(output, value.id().value());
+  append_key(output, "schema_version");
+  append_text(output, "luca.event-header.v1");
+}
+
+inline void append_cash_movement(CanonicalBytes &output, const CashMovement &value) {
+  append_map(output, 4);
+  append_key(output, "amount");
+  append_money(output, value.amount());
+  append_key(output, "header");
+  append_event_header(output, value.header());
+  append_key(output, "schema_version");
+  append_text(output, "luca.economic-event.v1");
+  append_key(output, "variant");
+  append_text(output, "cash_movement");
+}
+
+inline void append_equity_trade(CanonicalBytes &output, const EquityTrade &value) {
+  append_map(output, 8);
+  append_key(output, "header");
+  append_event_header(output, value.header());
+  append_key(output, "instrument");
+  append_text(output, value.instrument().value());
+  append_key(output, "price");
+  append_price(output, value.price());
+  append_key(output, "quantity");
+  append_quantity(output, value.quantity());
+  append_key(output, "quote_currency");
+  append_text(output, value.quote_currency().code());
+  append_key(output, "schema_version");
+  append_text(output, "luca.economic-event.v1");
+  append_key(output, "settlement_date");
+  append_text(output, canonical_date(value.settlement_date()));
+  append_key(output, "variant");
+  append_text(output, "equity_trade");
+}
+
+inline void append_economic_event(CanonicalBytes &output, const EconomicEvent &value) {
+  std::visit(
+      [&output](const auto &event) {
+        using Event = std::remove_cvref_t<decltype(event)>;
+        if constexpr (std::same_as<Event, CashMovement>)
+          append_cash_movement(output, event);
+        else
+          append_equity_trade(output, event);
+      },
+      value);
+}
+
+inline std::string_view lifecycle_action_name(LifecycleAction action) noexcept {
+  switch (action) {
+  case LifecycleAction::originate:
+    return "originate";
+  case LifecycleAction::correct:
+    return "correct";
+  case LifecycleAction::cancel:
+    return "cancel";
+  case LifecycleAction::reverse:
+    return "reverse";
+  }
+  return "";
+}
+
+inline void append_lifecycle_record(CanonicalBytes &output, const LifecycleRecord &value) {
+  append_map(output, 10);
+  append_key(output, "acceptance_sequence");
+  append_text(output, canonical_decimal(value.acceptance_sequence().value()));
+  append_key(output, "account");
+  append_text(output, value.account().value());
+  append_key(output, "action");
+  append_text(output, lifecycle_action_name(value.action()));
+  append_key(output, "causal_record_id");
+  if (value.causal_record_id())
+    append_text(output, value.causal_record_id()->value());
+  else
+    append_octet(output, 0x00);
+  append_key(output, "economic_event_id");
+  append_text(output, value.economic_event_id().value());
+  append_key(output, "event");
+  if (value.event())
+    append_economic_event(output, *value.event());
+  else
+    append_octet(output, 0x00);
+  append_key(output, "provenance");
+  append_provenance(output, value.provenance());
+  append_key(output, "record_id");
+  append_text(output, value.record_id().value());
+  append_key(output, "recorded_at");
+  append_text(output, canonical_timestamp(value.recorded_at()));
+  append_key(output, "schema_version");
+  append_text(output, "luca.lifecycle-record.v1");
+}
+
+inline CanonicalBytes top_level_bytes() {
+  CanonicalBytes output;
+  output.reserve(256);
+  append_ascii(output, "LCB1");
+  return output;
+}
+
+inline CanonicalBytes fixed_point_bytes(std::string_view schema_version, std::string_view scale,
+                                        std::int64_t scaled_value) {
+  auto output = top_level_bytes();
+  append_fixed_point(output, schema_version, scale, scaled_value);
   return output;
 }
 
@@ -189,20 +437,8 @@ inline std::string sha256_hex(std::span<const std::byte> input) {
 } // namespace detail
 
 [[nodiscard]] inline CanonicalBytes canonical_bytes(const Money &value) {
-  CanonicalBytes output;
-  output.reserve(144);
-  detail::append_ascii(output, "LCB1");
-  detail::append_octet(output, 0x06);
-  detail::append_u32(output, 4);
-
-  detail::append_key(output, "currency");
-  detail::append_text(output, value.currency().code());
-  detail::append_key(output, "scale");
-  detail::append_text(output, "6");
-  detail::append_key(output, "scaled_value");
-  detail::append_text(output, detail::canonical_decimal(value.scaled_value()));
-  detail::append_key(output, "schema_version");
-  detail::append_text(output, "luca.money.v1");
+  auto output = detail::top_level_bytes();
+  detail::append_money(output, value);
   return output;
 }
 
@@ -214,6 +450,56 @@ inline std::string sha256_hex(std::span<const std::byte> input) {
   return detail::fixed_point_bytes("luca.price.v1", "8", value.scaled_value());
 }
 
+[[nodiscard]] inline CanonicalBytes canonical_bytes(const Provenance &value) {
+  auto output = detail::top_level_bytes();
+  detail::append_provenance(output, value);
+  return output;
+}
+
+[[nodiscard]] inline CanonicalBytes canonical_bytes(const EventHeader &value) {
+  auto output = detail::top_level_bytes();
+  detail::append_event_header(output, value);
+  return output;
+}
+
+[[nodiscard]] inline CanonicalBytes canonical_bytes(const CashMovement &value) {
+  auto output = detail::top_level_bytes();
+  detail::append_cash_movement(output, value);
+  return output;
+}
+
+[[nodiscard]] inline CanonicalBytes canonical_bytes(const EquityTrade &value) {
+  auto output = detail::top_level_bytes();
+  detail::append_equity_trade(output, value);
+  return output;
+}
+
+[[nodiscard]] inline CanonicalBytes canonical_bytes(const EconomicEvent &value) {
+  auto output = detail::top_level_bytes();
+  detail::append_economic_event(output, value);
+  return output;
+}
+
+[[nodiscard]] inline CanonicalBytes canonical_bytes(const LifecycleRecord &value) {
+  auto output = detail::top_level_bytes();
+  detail::append_lifecycle_record(output, value);
+  return output;
+}
+
+// A LifecycleLedger is the typed sequence boundary: successful acceptance has
+// already established contiguous uint64_t sequence values beginning at one.
+[[nodiscard]] inline CanonicalBytes canonical_bytes(const LifecycleLedger &value) {
+  auto output = detail::top_level_bytes();
+  detail::append_map(output, 2);
+  detail::append_key(output, "records");
+  detail::append_array(output, static_cast<std::uint64_t>(value.records().size()));
+  for (const auto &record : value.records())
+    detail::append_lifecycle_record(output, record);
+  detail::append_key(output, "schema_version");
+  detail::append_text(output, "luca.lifecycle-record-sequence.v1");
+  return output;
+}
+
 [[nodiscard]] inline std::string canonical_digest(const Money &value) {
   return detail::sha256_hex(canonical_bytes(value));
 }
@@ -223,6 +509,15 @@ inline std::string sha256_hex(std::span<const std::byte> input) {
 }
 
 [[nodiscard]] inline std::string canonical_digest(const Price &value) {
+  return detail::sha256_hex(canonical_bytes(value));
+}
+
+template <class Value>
+requires std::same_as<Value, Provenance> || std::same_as<Value, EventHeader> ||
+    std::same_as<Value, CashMovement> || std::same_as<Value, EquityTrade> ||
+    std::same_as<Value, EconomicEvent> || std::same_as<Value, LifecycleRecord> ||
+    std::same_as<Value, LifecycleLedger>
+[[nodiscard]] inline std::string canonical_digest(const Value &value) {
   return detail::sha256_hex(canonical_bytes(value));
 }
 
