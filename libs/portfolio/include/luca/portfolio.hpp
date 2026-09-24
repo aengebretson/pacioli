@@ -7,6 +7,7 @@
 #include "luca/portfolio/checkpoint_decode.hpp"
 #include "luca/portfolio/checkpoint_resume.hpp"
 #include "luca/portfolio/checkpoint_serialization.hpp"
+#include "luca/portfolio/exact_cash_reduction.hpp"
 #include "luca/portfolio/lifecycle_projection.hpp"
 #include "luca/portfolio/position.hpp"
 #include "luca/portfolio/position_projection.hpp"
