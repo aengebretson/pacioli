@@ -38,13 +38,27 @@ int main() {
   if (!lifecycle.accept(luca::LifecycleRecordDraft::originate(
           luca::EconomicEventId{"ledger-economic-deposit-1"}, effective_at, event)))
     return 5;
-  if (luca::serialization::canonical_digest(lifecycle).size() != 64)
+  const auto lifecycle_resolution = lifecycle.resolve(effective_at, effective_at);
+  const auto projected_journal = luca::project_trade_date_journals(
+      lifecycle_resolution,
+      luca::TradeDateProjectionContext{effective_at, effective_at,
+                                       std::chrono::year{2026} / std::chrono::January /
+                                           std::chrono::day{1}});
+  if (!projected_journal || projected_journal->entries().size() != 1 ||
+      projected_journal->entries().front().debit_total() != *amount ||
+      projected_journal->entries().front().journal_entry_id() !=
+          luca::JournalEntryId{"td.ledger-deposit-1.immediate"} ||
+      projected_journal->policy().id() != luca::AccountingPolicyId{"fixture.trade-date.v1"} ||
+      projected_journal->active_record_ids().size() != 1 ||
+      projected_journal->source_record_ids().size() != 1)
     return 6;
+  if (luca::serialization::canonical_digest(lifecycle).size() != 64)
+    return 7;
   const auto lifecycle_bytes = luca::serialization::canonical_bytes(lifecycle);
   const auto decoded = luca::serialization::decode_lifecycle_ledger(lifecycle_bytes);
   if (!decoded || decoded->size() != 1 ||
       luca::serialization::canonical_bytes(*decoded) != lifecycle_bytes)
-    return 7;
+    return 8;
 
   const auto journal_lineage =
       luca::JournalLineage::create(std::vector{luca::EventId{"ledger-deposit-1"}},
@@ -94,6 +108,7 @@ int main() {
 
   std::cout << "ledger_entries=" << ledger.entries().size()
             << " journal_debit_scaled=" << journal_entry->debit_total().scaled_value()
+            << " projected_entries=" << projected_journal->entries().size()
             << " policy=" << journal_entry->policy().id().value()
             << " source=" << source_lineage.front().value() << '\n';
   return 0;
