@@ -1,6 +1,7 @@
 #pragma once
 
 #include "luca/accounting/journal.hpp"
+#include "luca/accounting/trade_date_projection.hpp"
 #include "luca/event.hpp"
 
 #include <algorithm>
