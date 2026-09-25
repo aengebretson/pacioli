@@ -206,6 +206,11 @@ immediate_context(const EventId &record_id) {
 
 [[nodiscard]] inline std::expected<JournalSettlementContext, TradeDateProjectionError>
 equity_context(JournalDate trade_date, JournalDate settlement_date, const EventId &record_id) {
+  if (settlement_date < trade_date) {
+    return std::unexpected(error(TradeDateProjectionDiagnosticCategory::invalid_context,
+                                 "equity settlement date must not precede its trade date",
+                                 record_id));
+  }
   auto result =
       JournalSettlementContext::create(trade_date, settlement_date, std::string{recognition_rule});
   if (!result)

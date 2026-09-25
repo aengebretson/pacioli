@@ -661,6 +661,10 @@ void test_trade_date_projection_rounding_and_rejections() {
                                                   "0", settlement_date)),
                           TradeDateProjectionDiagnosticCategory::unsupported_event, "zero-price");
   expect_projection_error(
+      project_one(trade_event("settlement-before-trade", effective,
+                              "settlement-before-trade-source", "1", "50", 2026y / June / 1d)),
+      TradeDateProjectionDiagnosticCategory::invalid_context, "settlement-before-trade");
+  expect_projection_error(
       project_one(cash_event("eur-cash", effective, "eur-source", "fund-a", "1", "EUR")),
       TradeDateProjectionDiagnosticCategory::unsupported_currency, "eur-cash");
 

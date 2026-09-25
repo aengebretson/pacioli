@@ -178,12 +178,12 @@ stable diagnostic categories are `invalid_context`, `unsupported_event`,
 `unsupported_currency`, `invalid_reversal_treatment`, `arithmetic_overflow`,
 and `journal_invariant`. The last category preserves the underlying journal
 factory category in its explanatory message or identifies a duplicate projected
-identity. Ordinary negative trades and cash withdrawals are unsupported events.
-Cash lifecycle reversals fail as `invalid_reversal_treatment`; the fixture
-policy does not infer a cash posting for them. A negative equity record is
-accepted only when lifecycle resolution identifies an exact reversal target;
-lifecycle validation rejects partial reversals before a resolution can be
-produced.
+identity. A settlement date before its trade date is invalid context. Ordinary
+negative trades and cash withdrawals are unsupported events. Cash lifecycle
+reversals fail as `invalid_reversal_treatment`; the fixture policy does not
+infer a cash posting for them. A negative equity record is accepted only when
+lifecycle resolution identifies an exact reversal target; lifecycle validation
+rejects partial reversals before a resolution can be produced.
 
 ### Result and portfolio cross-check
 
