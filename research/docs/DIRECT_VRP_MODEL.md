@@ -1,56 +1,47 @@
-# Direct two-shock HN-GARCSH research candidate
+# Direct two-shock HN-GARCSH research model
 
-This note documents `luca_research.vrp`, model version
-`hn-garcsh-direct-v1`. It is an isolated research candidate. It does not
-replace the historical, EWMA, or ordinary GARCH baselines, classify VIX
-regimes, submit orders, or turn an arbitrary volatility multiplier into a
-structural variance-risk premium.
+`luca_research.vrp` is a bounded, offline research implementation of the
+two-shock HN-GARCSH model. It estimates physical dynamics from daily index
+returns, fits one pricing-risk parameter to an exact-date VIX term cross
+section, reports horizon-aligned variance risk premium (VRP), and prices a
+European call, put, and straddle by controlled simulation of the documented
+risk-neutral dynamics. It does not submit orders, consume live data, or turn a
+theoretical value into a trade score.
 
-## Primary source and source boundary
+## Primary sources and source boundary
 
-The implemented equations are from Marcos Escobar-Anel, Lars Stentoft, and
-Xize Ye, “The Role of Variance Risk Premium in Derivative Pricing: Modeling,
-Estimation and Impact,” *Journal of Futures Markets* (2026),
-[DOI 10.1002/fut.70132](https://onlinelibrary.wiley.com/doi/10.1002/fut.70132).
-The article is the primary source for Equations (1), (3), (5)–(13), (19)–(20),
-and (30)–(32) below. It refers to the authors’ foundational preprint, “Setting
-the VIX Free: A Generalized Affine GARCH Model,” SSRN 4664927, for further
-model details.
+The dynamics and equation numbers below are from Marcos Escobar-Anel, Lars
+Stentoft, and Xize Ye, “The Role of Variance Risk Premium in Derivative
+Pricing: Modeling, Estimation and Impact,” *Journal of Futures Markets*
+(2026), [DOI 10.1002/fut.70132](https://onlinelibrary.wiley.com/doi/10.1002/fut.70132).
+The article cites the foundational preprint, “Setting the VIX Free: A
+Generalized Affine GARCH Model,” SSRN 4664927.
 
-Two exact source components remain unresolved:
+The accessible article explicitly prints the P and Q return/variance dynamics,
+the P-to-Q leverage transformation, conditional variance expectations, VIX
+term calculation, and estimation objectives. It does not print the complete
+pricing-kernel equation or a complete admissibility theorem. This package does
+not invent either one. European pricing instead simulates the explicitly
+published Q transition itself, which is sufficient to define the terminal
+payoff distribution conditional on accepted Q parameters and state.
 
-- The accessible 2026 article says that the transformation follows a pricing
-  kernel with separate risk preferences `lambda1` and `lambda2`, but it does
-  not print the pricing-kernel equation. The foundational preprint’s full text
-  was not publicly retrievable in this task environment. The package therefore
-  does not invent or expose a pricing-kernel function.
-- The accessible article defines physical and risk-neutral persistence and
-  long-run means, but it does not state a complete admissibility theorem. The
-  package’s constraints are identified below as sufficient implementation
-  constraints, not quoted as a theorem from the paper.
+Cboe’s [Selected SPX Target Expected Volatility Term Indices
+methodology](https://cdn.cboe.com/api/global/us_indices/governance/Volatility_Index_Methodology_Selected_SPX_Target_Expected_Volatility_Term_Indices.pdf)
+is the source for treating VIX9D, VIX, VIX3M, VIX6M, and VIX1Y as distinct
+constant-maturity expected-volatility terms. Cboe’s VIX documentation states
+that indicative VIX is calculated through 4:15 p.m. ET. The supplied CSVs are
+retrospective daily OHLC histories and contain dates but no publication or
+receipt timestamps. The empirical example therefore makes an explicit
+4:15 p.m. ET availability assumption and never claims intraday alignment.
 
-Those gaps do not prevent implementation of the explicitly published P and Q
-dynamics, conditional variance expectations, VIX term structure, or
-horizon-matched cumulative variance. They do prevent claiming a paper-exact
-pricing kernel or a complete option-pricing implementation.
+## Published dynamics
 
-## Published dynamics and conventions
-
-All variances are per-trading-day decimal log-return variances. The risk-free
-rate `r` is the continuously compounded rate for one model period. Under the
-physical measure P, Equation (1) is
-
-```text
-log(S_t) = log(S_{t-1}) + r + lambda1 h_t + sqrt(h_t) z_{1,t},
-```
-
-where `z_1` is iid standard normal under P. Thus the physical conditional log
-return mean is `r + lambda1*h_t`; it is not a separately fitted constant-mean
-convention.
-
-The physical HN-GARCSH variance recursion in Equation (5) is
+All `h` values are per-trading-day decimal log-return variances. Under P,
+Equation (1) and the Equation (5) variance recursion are
 
 ```text
+log(S_t/S_{t-1}) = r_t + lambda1 h_t + sqrt(h_t) z_{1,t}
+
 h_t = omega + beta h_{t-1}
       + alpha (z_{1,t-1} - gamma1 sqrt(h_{t-1}))^2
       + (rho/k) sum_i=1^k
@@ -58,22 +49,13 @@ h_t = omega + beta h_{t-1}
 ```
 
 The `epsilon_i` are iid standard normal and independent of `z_1`. `k=1` is
-the literal two-Gaussian-shock instance implemented in the example: one return
-shock and one independent variance shock. The API retains the paper’s integer
-`k` generalization, where the auxiliary sum can be viewed as non-central
-chi-squared.
+the literal two-Gaussian-shock model fitted by the empirical entry point.
 
-Under Q, Equation (3) changes the conditional log-return mean to the martingale
-correction:
+Under Q, Equations (3) and (6) are
 
 ```text
-log(S_t) = log(S_{t-1}) + r - h_t/2 + sqrt(h_t) z*_{1,t}.
-```
+log(S_t/S_{t-1}) = r_t - h_t/2 + sqrt(h_t) z*_{1,t}
 
-Equations (6) and the text immediately following it retain the variance form
-and explicitly transform the leverage parameters:
-
-```text
 gamma1* = gamma1 + lambda1 + 1/2
 gamma2* = gamma2 + lambda2
 
@@ -83,154 +65,208 @@ h_t = omega + beta h_{t-1}
           (epsilon*_{i,t-1} - gamma2* sqrt(h_{t-1}))^2.
 ```
 
-`lambda1` is fixed by the caller in this increment. It is both the physical
-conditional-return premium coefficient in Equation (1) and part of the
-published Q transformation. `lambda2` is a distinct, constant price of the
-independent variance shock and is the only calibrated parameter here. The
-physical structure and filtered state are never relabelled as pricing
-parameters.
-
-## Conditional expectations and sufficient constraints
-
-Equations (7)–(12) give
+Equations (7)–(12) imply
 
 ```text
 c   = omega + alpha + rho
 p   = beta + alpha gamma1^2  + rho gamma2^2
 p*  = beta + alpha gamma1*^2 + rho gamma2*^2
 
-E^P[h_next | h] = c + p h
-E^Q[h_next | h] = c + p* h
-
-mu  = c / (1 - p)
-mu* = c / (1 - p*).
+E^P[h_next | h] = c + p h       mu  = c / (1 - p)
+E^Q[h_next | h] = c + p* h      mu* = c / (1 - p*).
 ```
 
-The implementation applies these sufficient numerical constraints:
+The implementation requires nonnegative `omega,beta`, positive `alpha,rho`,
+positive integer `k`, positive state, and `p,p* < 1`. These are sufficient
+numerical restrictions, not a claimed primary-source theorem.
 
-- `omega >= 0`, `beta >= 0`, `alpha > 0`, `rho > 0`, and integer `k >= 1`;
-- positive filtered variance state;
-- `p < 1`; and
-- `p* < 1`, with a `1e-10` stationarity margin during calibration.
+## Physical estimation and the latent variance shock
 
-The nonnegative recursion coefficients make the pathwise variance
-nonnegative; a strictly positive state is required wherever a square root or
-VIX is calculated. `p,p* < 1` makes the long-run means above finite. These are
-deliberately described as sufficient implementation restrictions because the
-primary article does not print a complete admissibility result.
+Daily returns do not reveal `epsilon_t`. Replacing it by zero or by its
+expected squared contribution would create a deterministic variance filter
+that is not the stated two-shock model. `estimate_physical_dynamics` instead
+uses a seeded bootstrap particle likelihood:
 
-## Horizon-matched cumulative variance and sign
+1. Particles represent the predictive distribution of `h_t`.
+2. For each observed return, each particle receives its Equation (1) normal
+   density weight.
+3. Systematic resampling uses the normalized observation weights.
+4. The observed-return shock is recovered as
+   `(return-r-lambda1*h)/sqrt(h)` for the selected particle.
+5. A new independent standard-normal `epsilon` is drawn for every particle and
+   passed through the complete Equation (5) recursion.
 
-The caller supplies filtered `h_next = h_{t+1}` at a declared information
-cutoff. For a horizon of `H` trading-day intervals, the package reports the
-full expected paths and
+The seed, particle count, likelihood, optimizer status, and filtered-state
+quantiles are artifacts. Common random numbers make optimizer evaluations
+reproducible for a fixed NumPy version. The fitted state remains a simulated
+approximation. After fitting, two additional particle seeds re-evaluate the
+fixed parameters and the artifact reports the cross-seed standard deviation of
+average log likelihood. This diagnoses simulation sensitivity but is not a
+parameter standard error; parameter uncertainty is not inferred.
 
-```text
-W_P = sum_{n=1}^H E_t^P[h_{t+n}]
-W_Q = sum_{n=1}^H E_t^Q[h_{t+n}]
-VRP = W_Q - W_P.
-```
+The optimizer parameterization enforces the numerical restrictions at every
+evaluation. It sets `c=mu*(1-p)`, allocates `c` by simplex shares to
+`omega,alpha,rho`, and allocates `p` by simplex shares to
+`beta,alpha*gamma1^2,rho*gamma2^2`. The equity-leverage branch constrains
+`gamma1 >= 0`. Return-only likelihood is invariant to the sign of `gamma2`
+because the latent normal shock is symmetric, so the fit records the explicit
+identification convention `gamma2 >= 0`. `lambda1` is fitted with the physical
+return density rather than supplied and relabelled as fitted.
 
-Both sides use the same state, horizon, and decimal-return-squared units. This
-LUCA sign convention is intentionally the opposite of the paper’s one-step
-`P - Q` definition in Equation (13). The artifact records both conventions.
-Annualized volatility is `sqrt(W / (H/252))`; annualization happens only after
-the interval variances are summed.
+The empirical example fits only returns ending 2019-12-03 through 2022-12-30.
+Parameters are then frozen. The 250 returns in calendar 2023 are held out for
+physical likelihood and residual diagnostics. Filtering may continue through
+the 2024-01-03 cutoff with the frozen parameters to construct the state, but
+those returns never re-enter fitting. No overlapping forecast labels or future
+rows enter the physical objective. Because no historical daily curve was
+supplied, Equation (1) uses an explicitly recorded zero per-session risk-free
+log rate for both fitting and filtering; it is an assumption, not observed
+rate data.
 
-The model operates in trading-day intervals because the paper’s VIX equations
-use 252 trading days per year. Mapping an option’s exact calendar expiration
-and settlement timestamp to these intervals requires an upstream exchange
-calendar. The package does not silently equate every 30-calendar-day interval
-with 21 observations.
+## Exact-cutoff VIX join and pricing-risk fit
 
-## VIX term-structure objective
+`join_vix_closes_at_cutoff` requires an exact date for every named term. It
+does not carry a prior close forward. Each expected term is either included or
+emitted with a reason such as `no_exact_daily_close_on_cutoff_date` or
+`duplicate_daily_closes_on_cutoff_date`.
 
-Equations (19)–(20) define the observed daily expected variance and the model
-term value:
+The official target tenors are mapped to integer 252-day model periods as
+follows:
+
+| Index | Official target | Model periods | Mapping |
+|---|---:|---:|---|
+| VIX9D | 9 calendar days | 6 | `round(9*252/365)` |
+| VIX | 30 calendar days | 21 | `round(30*252/365)` |
+| VIX3M | 3 calendar months | 63 | `3/12*252` |
+| VIX6M | 6 calendar months | 126 | `6/12*252` |
+| VIX1Y | 1 calendar year | 252 | `252` |
+
+This mapping is explicit but approximate. It does not reproduce Cboe’s exact
+minute weighting, interpolation, or holiday handling.
+
+Equations (19)–(20) give
 
 ```text
 Hbar_market(tau) = (VIX_market(tau)/100)^2 / 252
-
-Hbar_model(tau) = (1/tau) sum_{n=1}^tau E_t^Q[h_{t+n}]
-VIX_model(tau)  = 100 sqrt(252 Hbar_model(tau)).
+Hbar_model(tau)  = (1/tau) sum_n=1^tau E_t^Q[h_{t+n}]
+VIX_model(tau)   = 100 sqrt(252 Hbar_model(tau)).
 ```
 
-For numerical stability the implementation calculates the affine expectation
-path recursively. This is algebraically the same quantity as the closed form
-in Equation (20), including `h_{t+1}` as the first interval.
+The bounded cross-sectional fit minimizes the weighted sum of squared Equation
+(30) errors `(VIX_market-VIX_model)/(100*sqrt(252))`. Physical parameters,
+`lambda1`, and cutoff state are frozen; only constant `lambda2` is fitted.
+Bounds are intersected with `p* < 1` and must select one side of
+`lambda2=-gamma2`. The term structure identifies `p*`, not the sign of
+`gamma2+lambda2`, so the symmetric observationally equivalent `lambda2` is
+reported. RMSE, MAE, maximum VIX-point error, objective, and optimizer details
+are separate from the physical fit diagnostics.
 
-Equation (30) scales each term error as
+## Horizon-aligned VRP and interpretation boundaries
+
+For `H` trading-day intervals, both measures use the same cutoff state and
+units:
 
 ```text
-xi(tau) = (VIX_market(tau) - VIX_model(tau)) / (100 sqrt(252)).
+W_P = sum_n=1^H E_t^P[h_{t+n}]
+W_Q = sum_n=1^H E_t^Q[h_{t+n}]
+VRP = W_Q - W_P.
 ```
 
-The bounded entry point minimizes `sum(weight(tau) * xi(tau)^2)`. A caller may
-provide fixed inverse residual-variance weights, which corresponds to the
-parameter-dependent squared-error part of Equation (31). This small
-cross-sectional calibration does **not** claim the complete joint likelihood
-in Equation (32): it neither estimates residual variances nor adds a return
-likelihood.
+The LUCA artifact uses `Q-P`; the article’s Equation (13) uses a one-step
+`P-Q` convention. Annualized volatility is `sqrt(W/(H/252))` after interval
+variances are summed. The artifact keeps three different quantities separate:
 
-The entry point is intentionally bounded to 32 unique maturities, 2,000 model
-periods per maturity, and at most 2,000 optimizer evaluations. Bounds are
-intersected with the `p*` stationarity region. Bounds crossing
-`lambda2 = -gamma2` are rejected because the VIX term structure depends on
-`(gamma2 + lambda2)^2`; the caller must select one identification branch.
+- aggregate VRP is `W_Q-W_P`;
+- surface-relative richness is an individual VIX close minus its fitted model
+  term value; and
+- option theoretical value is a discounted Q payoff expectation.
 
-Even with multiple maturities, this objective identifies `p*`, not the sign of
-`gamma2 + lambda2`. The artifact reports the symmetric value
-`-2*gamma2 - lambda2`, which produces the same VIX term structure when it is
-otherwise admissible. A good numerical fit is not proof that `lambda2` is
-economically identified.
+None is a trade score without an eligible print and event-time quote.
 
-## API and artifact contract
+## European option pricing under Q
 
-The public API is imported from `luca_research.vrp`:
+`price_european_options_monte_carlo` uses the complete Equation (6) state
+transition. With a caller-supplied deterministic-carry forward `F_0`, it
+simulates
 
-```python
-from luca_research.vrp import (
-    ArtifactMetadata,
-    CalibrationConfig,
-    PhysicalDynamics,
-    VixTermObservation,
-    build_calibration_artifact,
-    calibrate_vix_term_structure,
-)
+```text
+S_T = F_0 exp(sum_t[-h_t/2 + sqrt(h_t) z*_{1,t}])
+call = D E^Q[(S_T-K)+]
+put  = D E^Q[(K-S_T)+].
 ```
 
-`calibrate_vix_term_structure(...)` takes fixed physical dynamics, fixed
-`lambda1`, fixed filtered `h_next`, same-cutoff VIX term observations, an
-explicit report horizon, and optimizer bounds. It returns convergence details,
-the objective, all term residuals, transformed Q dynamics, `W_P`, `W_Q`, and
-`W_Q-W_P`.
+The same return shock drives the return and next variance, and independent
+auxiliary `epsilon*` shocks drive the second variance component. The pricer
+uses seeded PCG64 draws and adjacent antithetic pairs. It reports two or more
+path-count checkpoints, pair-aware Monte Carlo standard errors, approximate
+95% intervals, direct call/put/straddle estimates, the `D(F-K)` parity target
+and residual, and the discounted-terminal martingale residual. It is bounded
+to 500,000 paths and 756 trading-day periods.
 
-`build_calibration_artifact(...)` produces
-`luca.direct-vrp-result.v1`. Required metadata includes run and dataset
-identity, content SHA-256, dataset classification, input cutoff, availability
-time, state as-of time, and state availability time. The artifact contains no
-generated timestamp, empirical claim, or silent data fallback.
+An optional Black forward value is included only as
+`approximate_lognormal_expected_cumulative_variance_benchmark_not_model_price`.
+It uses `W_Q` and is not the GARCSH price. Cumulative variance alone does not
+uniquely determine a terminal distribution or option price.
 
-The nested `luca.hn-garcsh-option-pricing-input.v1` contract carries the model
-parameters and state to a later option pricer. It is explicitly marked
-`ready_for_option_pricing: false` until the affine joint-MGF recursion and
-inversion are implemented and checked against the exact primary source. It
-also enumerates required contract identity, exact settlement/calendar
-provenance, forward or spot timing, curve/carry inputs, Greeks, and warnings.
-It prohibits a silent Black-price substitution or arbitrary volatility
-multiplier. No option theoretical value is emitted by this increment.
+## Reproducible exploratory run
 
-## Demonstration and interpretation limits
+`research/examples/empirical_vrp.py` consumes only the supplied files, checks
+their raw SHA-256 digests, and writes generated output outside Git. Its default
+artifact uses the exact 2024-01-03 closes: SPX 4704.81; VIX9D 13.24; VIX 14.04;
+VIX3M 16.04; VIX6M 18.08; and VIX1Y 20.51.
 
-`research/examples/direct_vrp.py` constructs labelled synthetic VIX terms from
-the same equations, calibrates `lambda2` on a preselected branch, and prints a
-JSON artifact. It does not read the supplied exploratory SPX archive because
-that archive contains no qualified VIX term structure. Its fitted premium is
-therefore a numerical identity check only—not an SPX estimate, an unexamined
-evaluation, a trading signal, or evidence of profitability.
+In the pinned reference run, the 776-return physical fit converged after 768
+function evaluations. The held-out segment contains 250 returns. The selected
+cutoff `h_next` particle mean was `9.819092524374754e-05`, with p05
+`5.6865171359592794e-05` and p95 `0.00016465981974206025`. The five-term
+pricing fit converged but had RMSE 2.2845 VIX points, a material structural
+miss that must not be hidden.
 
-Remaining work before empirical or pricing use includes physical-parameter
-estimation, an explicitly documented variance-state filter, qualified
-same-cutoff VIX term observations, exact exchange-calendar horizon mapping,
-the paper-exact pricing kernel, the affine joint MGF and option inversion,
-parameter uncertainty, and genuinely held-out evaluation.
+At 21 trading days, `W_P=0.0026254354910152365`,
+`W_Q=0.002371187338478375`, and LUCA `Q-P VRP=-0.0002542481525368615`.
+This exploratory estimate is negative; the implementation does not force the
+usual positive-VRP narrative.
+
+The option illustration uses the actual archived SPX close but assumes it is
+also the forward, assumes a zero rate/unit discount factor, rounds an
+illustrative strike to 4705, assumes a 100 multiplier, and uses an unverified
+2024-02-02 PM-settlement calendar candidate. There is no option print. Those
+assumptions are machine-labelled and the result cannot support a buy/sell
+claim.
+
+Run it with the pinned environment:
+
+```bash
+python research/examples/empirical_vrp.py \
+  --reference-dir /path/to/output/reference \
+  --output /path/to/output/empirical-vrp.json
+```
+
+`research/examples/direct_vrp.py` remains a self-generated identity and
+pricing illustration. It is useful for deterministic mechanics only and is
+not empirical evidence.
+
+## Artifact contracts and unresolved limitations
+
+`luca.direct-vrp-empirical-result.v1` contains raw input hashes, retrospective
+availability, historical cutoff assumptions, nonoverlapping sample boundaries,
+physical and pricing diagnostics, state uncertainty, every VIX include/exclude
+decision, horizon-aligned P/Q variance paths, Q pricing checkpoints, input
+classification, warnings, and exclusions. It is suitable for offline app and
+theoretical-replay consumers without implying that live readiness was checked.
+
+Material limitations remain:
+
+- the particle likelihood is approximate and no parameter uncertainty is
+  estimated;
+- return-only data weakly identify `lambda1`, innovation allocation, and the
+  sign of `gamma2`;
+- one constant `lambda2` and one state cannot match the supplied VIX curve
+  closely;
+- daily closes do not prove contemporaneous historical receipt or intraday
+  alignment;
+- exact forward, discount curve, verified contract listing, print, and NBBO
+  are absent; and
+- the exact pricing-kernel equation and complete primary-source admissibility
+  theorem remain unavailable, even though the printed Q transition is enough
+  for the controlled simulation implemented here.

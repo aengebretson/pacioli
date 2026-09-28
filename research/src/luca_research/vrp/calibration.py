@@ -105,6 +105,11 @@ class FitDiagnostics:
     requested_lambda2_bounds: tuple[float, float]
     effective_lambda2_bounds: tuple[float, float]
     tolerance: float
+    rmse_vix_percentage_points: float
+    mae_vix_percentage_points: float
+    maximum_absolute_vix_error_percentage_points: float
+    observation_count: int
+    fitted_parameter_count: int
 
 
 @dataclass(frozen=True)
@@ -250,6 +255,9 @@ def calibrate_vix_term_structure(
     objective_value = math.fsum(
         item.weight * item.scaled_error**2 for item in term_fits
     )
+    raw_errors = tuple(
+        item.observed_vix_percent - item.model_vix_percent for item in term_fits
+    )
     converged = bool(optimization.success) and transformed.persistence <= 1.0 - _STATIONARITY_MARGIN
     branch = (
         "gamma2_plus_lambda2_nonnegative"
@@ -282,6 +290,17 @@ def calibrate_vix_term_structure(
             requested_lambda2_bounds=(config.lambda2_lower, config.lambda2_upper),
             effective_lambda2_bounds=(lower, upper),
             tolerance=config.tolerance,
+            rmse_vix_percentage_points=math.sqrt(
+                math.fsum(error**2 for error in raw_errors) / len(raw_errors)
+            ),
+            mae_vix_percentage_points=(
+                math.fsum(abs(error) for error in raw_errors) / len(raw_errors)
+            ),
+            maximum_absolute_vix_error_percentage_points=max(
+                abs(error) for error in raw_errors
+            ),
+            observation_count=len(term_fits),
+            fitted_parameter_count=1,
         ),
         variance_premium=cumulative_variance_premium(
             h_next,
