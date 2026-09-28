@@ -1,0 +1,7 @@
+# Optional snapshot builder; existing research pins remain unchanged.
+-r requirements.lock
+exchange-calendars==4.13.2
+pyluach==2.3.0
+toolz==1.1.0
+tzdata==2026.4
+korean_lunar_calendar==0.4.0

@@ -172,3 +172,10 @@ exits nonzero for a missing/mismatched pin, a broken dependency, any test
 failure, differing CLI/API artifacts, a non-complete synthetic result, or a
 runtime-budget breach. Use `--max-synthetic-seconds` only to state a different
 machine-specific verification budget explicitly.
+
+## Stored SPX expiration calendar
+
+Use the [reference calendar](docs/EXPIRATION_CALENDAR.md) to resolve forecast
+horizons from versioned local data. It includes cash sessions, early closes and
+separate AM/PM expiration candidates, with an offline forecast wrapper.
+Install its optional builder dependencies from `calendar-requirements.lock`.
