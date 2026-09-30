@@ -1,8 +1,8 @@
-# Pacioli LUCA
+# LUCA
 
 ## What it does
 
-Pacioli LUCA ingests financial activity from existing systems, normalizes it into a compact canonical ledger, and deterministically derives portfolio state.
+LUCA ingests financial activity from existing systems, normalizes it into a compact canonical ledger, and deterministically derives portfolio state.
 
 ```text
 FIX ─────────┐
@@ -26,9 +26,88 @@ For the deeper architecture and scaling principles, see [docs/design.md](docs/de
 - **Source records** — immutable evidence received from an external or internal system.
 - **Economic events** — normalized interpretations of economically meaningful activity.
 - **Ledger** — ordered, auditable history of economic events with provenance.
-- **Projections** — deterministic derivations of positions, cash, lots, settlement, P&L, accounting, and related state.
+- **Financial algebras** — typed domains, operations and explicit laws with stated ordering, currency, rounding and overflow preconditions.
+- **Projections for reporting** — deterministic derivations of positions, cash, lots, settlement, P&L, accounting, and related state.
 - **Observations** — external assertions of state from brokers, custodians, administrators, banks, or other systems.
 - **Reconciliation** — comparison of projections with observations at transaction, position, account, portfolio, or aggregate levels.
+
+## Build and consume LUCA
+
+LUCA is a C++23 financial library. Applications, CLI/Python tools and hosted jobs
+supply inputs, storage, scheduling and presentation; they reuse its financial
+algebras and reporting projections. Ordered replay is distinct from an unordered
+reduction. Associativity or commutativity applies only where the operation's
+contract permits it, including representable intermediate exact values.
+
+Prerequisites: CMake 3.24+, a C++23 compiler/standard library with `std::expected`,
+and signed `__int128` support. GCC 12.2 compiled the package consumers in the
+current packaging increment. Clang CI is authored but unexecuted. Native MSVC
+is currently unsupported by the exact-arithmetic implementation; see the
+[packaging evidence and limitations](docs/PACKAGING_BASELINE.md).
+
+To install the header-only libraries without tests, tools or Python discovery:
+
+```sh
+cmake -S . -B build/package -DLUCA_BUILD_TESTS=OFF -DLUCA_BUILD_TOOLS=OFF -DLUCA_BUILD_BENCHMARKS=OFF
+cmake --install build/package --prefix /absolute/path/to/luca-install
+```
+
+An external application can use:
+
+```cmake
+find_package(Luca 0.1 CONFIG REQUIRED)
+add_executable(my_report main.cpp)
+target_link_libraries(my_report PRIVATE luca::reconciliation)
+```
+
+Configure that application with
+`-DCMAKE_PREFIX_PATH=/absolute/path/to/luca-install`. Alternatively, a pinned
+source dependency uses `add_subdirectory(third_party/luca)` and the same targets:
+
+| Target | Domain | Direct dependencies |
+| --- | --- | --- |
+| `luca::ledger` | Values, events, ledger, lifecycle, serialization, existing accounting headers | None |
+| `luca::portfolio` | Position, cash, settlement and replay projections | `luca::ledger` |
+| `luca::reconciliation` | Observations and exact reconciliation | `luca::portfolio`, `luca::ledger` |
+| `luca::luca` | Compatibility umbrella | All three domain targets |
+
+The [complete external-consumer walkthrough](examples/package-consumer/README.md)
+creates a deposit and equity purchase, projects position/cash/settlement views,
+and reports a deliberate cash discrepancy against separate bank evidence.
+
+| Canonical option | Top-level default | Embedded default | Legacy alias |
+| --- | --- | --- | --- |
+| `LUCA_BUILD_TESTS` | ON | OFF | `PACIOLI_BUILD_TESTS` |
+| `LUCA_BUILD_TOOLS` | ON | OFF | `PACIOLI_BUILD_TOOLS` |
+| `LUCA_BUILD_BENCHMARKS` | OFF | OFF | `PACIOLI_BUILD_BENCHMARKS` |
+
+Explicit legacy cache entries and parent normal variables remain supported.
+When both names are defined, their boolean values must agree; a conflict stops
+configuration with instructions for removing an obsolete cache entry. A
+legacy-only configuration does not create a canonical cache entry, so changing
+that legacy option on subsequent configures remains supported. Default-created
+canonical cache entries also participate in conflict checking. To switch an
+existing build to legacy options, remove the corresponding canonical entry
+with `-ULUCA_BUILD_TESTS` (or `TOOLS`/`BENCHMARKS`); to migrate to canonical names,
+remove the corresponding legacy entry with `-UPACIOLI_BUILD_TESTS`.
+
+The source target `pacioli`, `<pacioli/ledger.hpp>` and `pacioli::Ledger` remain
+compatible. Installed consumers use `find_package(Luca)` and `luca::...` targets;
+there was no installed `pacioli` target. The repository remains
+`aengebretson/pacioli`; this change publishes no release or ABI guarantee.
+
+Developer commands, **pending while automated testing is paused**:
+
+```sh
+cmake --preset dev
+cmake --build --preset dev --parallel 2
+ctest --preset dev
+```
+
+The full developer build generates conformance fixtures. Use the library-only
+configuration above for packaging during the pause. Compiler workflow definitions
+are manual-only, default disabled, and unexecuted; they do not establish compiler
+or runtime acceptance.
 
 ## Planned capabilities
 

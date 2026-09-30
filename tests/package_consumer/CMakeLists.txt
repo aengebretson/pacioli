@@ -108,3 +108,14 @@ add_test(
 set_tests_properties(luca_package_exact_cash_comparison_consumer_run PROPERTIES
   PASS_REGULAR_EXPRESSION
     "exact_cash_break=amount_mismatch difference_scaled=-10000000 currency=USD operation=compare.cash.exact")
+
+# Compile the unchanged forwarding surface through the installed umbrella.
+add_executable(luca_package_legacy_consumer legacy.cpp)
+target_link_libraries(luca_package_legacy_consumer PRIVATE luca::luca)
+add_test(NAME luca_package_legacy_consumer_run COMMAND luca_package_legacy_consumer)
+
+add_executable(luca_package_walkthrough ../../examples/package-consumer/main.cpp)
+target_link_libraries(luca_package_walkthrough PRIVATE luca::reconciliation)
+add_test(NAME luca_package_walkthrough_run COMMAND luca_package_walkthrough)
+set_tests_properties(luca_package_walkthrough_run PROPERTIES PASS_REGULAR_EXPRESSION
+  "position_scaled=1000000000 cash_before_scaled=1000000000 payable_before_scaled=200000000 cash_scaled=800000000 open_after=0[\r\n]+cash_break=amount_mismatch difference_scaled=-10000000 currency=USD observation_source=observation.bank.1[\r\n]+event=deposit-1 source=source.deposit.1[\r\n]+event=trade-1 source=source.trade.1")

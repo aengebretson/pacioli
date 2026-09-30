@@ -1,12 +1,15 @@
 cmake_minimum_required(VERSION 3.24)
-project(pacioli VERSION 0.1.0 LANGUAGES CXX)
+project(luca VERSION 0.1.0 LANGUAGES CXX)
 
 include(CMakePackageConfigHelpers)
 include(GNUInstallDirs)
 
-set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+include(cmake/LucaOptions.cmake)
+luca_compatible_option(BUILD_TESTS "Build LUCA tests" ${PROJECT_IS_TOP_LEVEL})
+luca_compatible_option(BUILD_BENCHMARKS "Build reproducible performance benchmarks" OFF)
+luca_compatible_option(BUILD_TOOLS "Build standalone LUCA tools" ${PROJECT_IS_TOP_LEVEL})
 
 add_library(luca_ledger INTERFACE)
 add_library(luca::ledger ALIAS luca_ledger)
@@ -83,14 +86,11 @@ install(
     ${CMAKE_CURRENT_BINARY_DIR}/LucaConfigVersion.cmake
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Luca)
 
-option(PACIOLI_BUILD_TOOLS "Build standalone Luca tools" ${PROJECT_IS_TOP_LEVEL})
-if(PACIOLI_BUILD_TOOLS)
+if(LUCA_BUILD_TOOLS)
   add_subdirectory(tools/exact-cash)
 endif()
 
-option(PACIOLI_BUILD_TESTS "Build tests" ${PROJECT_IS_TOP_LEVEL})
-option(PACIOLI_BUILD_BENCHMARKS "Build reproducible performance benchmarks" OFF)
-if(PACIOLI_BUILD_TESTS)
+if(LUCA_BUILD_TESTS)
   enable_testing()
   find_package(Python3 REQUIRED COMPONENTS Interpreter)
   add_executable(pacioli_smoke_test tests/smoke.cpp)
@@ -260,6 +260,17 @@ if(PACIOLI_BUILD_TESTS)
       -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/package_consumer/run_test.cmake)
 
   add_test(
+    NAME luca_package_options_test
+    COMMAND ${CMAKE_COMMAND}
+      -DLUCA_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+      -DLUCA_OPTIONS_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/package_options
+      -DLUCA_GENERATOR=${CMAKE_GENERATOR}
+      -DLUCA_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}
+      -DLUCA_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}
+      -DLUCA_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/parent_consumer/options.cmake)
+
+  add_test(
     NAME luca_parent_consumer_test
     COMMAND ${CMAKE_COMMAND}
       -DLUCA_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
@@ -274,7 +285,7 @@ if(PACIOLI_BUILD_TESTS)
       -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/parent_consumer/run_test.cmake)
 endif()
 
-if(PACIOLI_BUILD_BENCHMARKS)
+if(LUCA_BUILD_BENCHMARKS)
   add_executable(pacioli_benchmarks
     tests/benchmarks/benchmark_main.cpp
     tests/benchmarks/ledger_benchmark.cpp

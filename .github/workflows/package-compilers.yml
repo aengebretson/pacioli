@@ -1,0 +1,75 @@
+name: LUCA package compilers (manual, paused)
+
+# Definitions only: no push/PR/scheduled trigger while testing is paused.
+# Dispatch only after the user resumes automated checks.
+on:
+  workflow_dispatch:
+    inputs:
+      resume_checks:
+        description: 'Run checks only after the testing pause is lifted'
+        type: boolean
+        required: true
+        default: false
+      probe_msvc:
+        description: 'Probe known-blocked native MSVC arithmetic support (expected compile failure)'
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    if: ${{ inputs.resume_checks }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [g++-14, clang++-18]
+        configuration: [Debug, Release]
+        include:
+          - compiler: g++-14
+            configuration: Debug
+            sanitizer: '-fsanitize=address,undefined -fno-omit-frame-pointer'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install compiler and build prerequisites
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build g++-14 clang-18 python3
+      - name: Configure
+        env:
+          CXX: ${{ matrix.compiler }}
+          LUCA_CI_SANITIZERS: ${{ matrix.sanitizer }}
+        run: >-
+          cmake -S . -B build/ci -G Ninja
+          -DCMAKE_BUILD_TYPE=${{ matrix.configuration }}
+          -DCMAKE_CXX_FLAGS="$LUCA_CI_SANITIZERS"
+          -DLUCA_BUILD_TESTS=ON -DLUCA_BUILD_TOOLS=ON -DLUCA_BUILD_BENCHMARKS=ON
+      - name: Compile (including benchmark executable, without running it)
+        run: cmake --build build/ci --parallel 2
+      - name: Tests including installed, embedded and option compatibility consumers
+        run: ctest --test-dir build/ci --output-on-failure
+      - name: Install and compile standalone walkthrough
+        run: |
+          cmake --install build/ci --prefix "$RUNNER_TEMP/luca"
+          cmake -S examples/package-consumer -B build/walkthrough -G Ninja -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DCMAKE_BUILD_TYPE=${{ matrix.configuration }} -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/luca"
+          cmake --build build/walkthrough --parallel 2
+
+  msvc-capability-probe:
+    # Native MSVC is currently rejected by core/detail/wide_integer.hpp because
+    # it lacks __int128. This opt-in job must fail until reviewed exact arithmetic
+    # portability work lands. No continue-on-error or numeric fallback.
+    if: ${{ inputs.resume_checks && inputs.probe_msvc }}
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure library-only package with MSVC
+        run: cmake -S . -B build/package -G "Visual Studio 17 2022" -A x64 -DLUCA_BUILD_TESTS=OFF -DLUCA_BUILD_TOOLS=OFF -DLUCA_BUILD_BENCHMARKS=OFF
+      - name: Install public headers and exports
+        run: cmake --install build/package --config Release --prefix "$env:RUNNER_TEMP/luca"
+      - name: Configure same public consumer
+        run: cmake -S examples/package-consumer -B build/walkthrough -G "Visual Studio 17 2022" -A x64 "-DCMAKE_PREFIX_PATH=$env:RUNNER_TEMP/luca"
+      - name: Compile same exact public API (currently unsupported)
+        run: cmake --build build/walkthrough --config Release --parallel 2
