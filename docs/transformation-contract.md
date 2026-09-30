@@ -2,8 +2,9 @@
 
 Status: executable design contract for O5-T01 plus the bounded exact-cash C++
 reduction, lineage-bearing exact comparison, and standalone execution host
-implemented by O5-T02 through O5-T04. The JSON fixtures and their
-dependency-free validators define the wider portable semantic vocabulary for
+implemented by O5-T02 through O5-T04, with additive financial algebra
+declarations and a custom report projection from O5-T06. The JSON fixtures and
+their dependency-free validators define the wider portable semantic vocabulary for
 design review. The exact-cash APIs and host are not a generic composition
 runtime, canonical wire format, checkpoint format, plugin ABI, or second
 implementation of LUCA projections.
@@ -50,25 +51,34 @@ existing function; it does not claim a new callable API exists.
 | Canonical event construction | `EventHeader::create`, `CashMovement::create`, `EquityTrade::create` | normalization output validation | The closed `EconomicEvent` variant contains cash movements and equity trades only. These constructors do not normalize an external format. |
 | Economic selection/order | `economic_entries`, `economic_entries_through`, and `economic_entries_between` | ordered-input preparation | Order is `(effective_at, LedgerSequence)`. The sequence is ledger-local and only a tie-breaker. |
 | Scalar valuation | `value(Quantity, Price, Currency, RoundingMode)` | map | Produces scale-6 `Money`; default rounding is half-even. Overflow is a `ValueError`. It does not carry event lineage by itself. |
-| Position state | `project_positions(span<LedgerEntry>, Timestamp)` | ordered fold with an embedded event-to-delta map and checked aggregation | Equity trades add scale-8 quantity by `(account, instrument)`; zeros are omitted. It returns `quantity_overflow`. It is not lifecycle-aware yet. |
+| Position state | `project_positions(span<LedgerEntry>, Timestamp)` | ordered fold with an embedded event-to-delta map and checked aggregation | Equity trades add scale-8 quantity by `(account, instrument)`; zeros are omitted. It returns `quantity_overflow`. For lifecycle inputs, use `project_lifecycle` after resolution; the low-level overload still accepts ordinary ledger entries. |
 | Settled cash | `project_cash(span<LedgerEntry>, CashProjectionContext)` | ordered fold with embedded mapping/aggregation | Cash is keyed by `(account, currency)`. Trade cash is `-(quantity × price)` only when settlement-eligible; valuation is half-even to scale 6. It returns `valuation_overflow` or `amount_overflow`. |
 | Open settlement | `project_settlement_obligations(span<LedgerEntry>, SettlementProjectionContext)` | ordered fold with embedded mapping/aggregation | Positive magnitudes are keyed by `(account, settlement_date, currency, direction)`. Payables and receivables are not netted. It returns `valuation_overflow` or `amount_overflow`. |
 | Exact addition | `Quantity::add`, `Money::add`, and `reduce_exact_cash`/`merge_exact_cash` in `luca/portfolio/exact_cash_reduction.hpp` | compatible reduction primitives | The public cash reducer is deliberately limited to one explicit `(account, currency)` key, `money` unit, and `(account, currency)` partition declaration. It delegates every sum to `Money::add`; there is no public generic reducer. |
 | Position comparison | `reconcile_positions(expected, observed, PositionReconciliationContext)` | comparison | Exact shared `as_of`; detects duplicate observations, time mismatch, overflow, and missing/unexpected/mismatched values. `Position` and `PositionBreak` do not retain projection provenance; a break retains observation provenance only when an observation exists. |
 | Settled-cash comparison | `reconcile_cash(expected, observed, CashReconciliationContext)` | comparison | Exact shared economic and settlement cutoffs; detects duplicate observations, both context mismatches, overflow, and missing/unexpected/mismatched values. `CashBalance` and `CashBreak` do not retain projection provenance; a break retains observation provenance only when an observation exists. |
 | Lineage-bearing exact cash comparison | `compare_exact_cash(ExactCashComparisonContract, projected, observed)` in `luca/reconciliation/exact_cash_comparison.hpp` | comparison | Compares `ExactCashReductionResult` values with separate `CashObservation` evidence by complete `(account, currency)` key. The result records its operation/policy/context trace; each break retains the applicable projection and observation in distinct roles. It adds no FX, tolerance, or authority-changing behavior. |
-| Lifecycle acceptance and resolution | `LifecycleRecordDraft::{originate,correct,cancel,reverse}` and `LifecycleLedger::{accept,accept_batch,resolve}` in `luca/lifecycle.hpp` | ordered fold before all affected projections | This is a public in-memory C++ API. Acceptance validates immutable causal records and assigns lifecycle sequences; `resolve(recorded_through, economic_as_of)` returns knowledge-selected chains and active payloads ordered by `(effective_at, acceptance_sequence)`. Existing position, cash, and settlement projection functions do not yet consume `LifecycleResolution`. |
-| Journals/accounting | none in the current checkout | future map and reduction boundaries | Journal types and accounting-policy interfaces belong to O4. This contract does not invent their signatures or decide accounting policy. |
+| Lifecycle acceptance and resolution | `LifecycleRecordDraft::{originate,correct,cancel,reverse}` and `LifecycleLedger::{accept,accept_batch,resolve}` in `luca/lifecycle.hpp` | ordered fold before all affected projections | This is a public in-memory C++ API. Acceptance validates immutable causal records and assigns lifecycle sequences; `resolve(recorded_through, economic_as_of)` returns knowledge-selected chains and active payloads ordered by `(effective_at, acceptance_sequence)`. `project_lifecycle` in `luca/portfolio/lifecycle_projection.hpp` consumes the resolved active set for all three portfolio projections; use the same economic cutoff as resolution. It returns the existing value/error types, not a new lineage envelope. |
+| Journals/accounting | `JournalLine`, `JournalEntry`, `AccountingPolicyIdentity`, `JournalLineage`, and `project_trade_date_journals` in `luca/accounting/journal.hpp` and `luca/accounting/trade_date_projection.hpp` | lifecycle-aware journal projection | The narrow `fixture.trade-date.v1` policy posts supported USD cash contributions and equity activity, including settlement reclassification. Results retain policy/context, active and lifecycle record IDs, economic-event IDs and source-record IDs. This is not general accounting, GAAP/IFRS, tax or NAV coverage. |
+| Portable replay | `serialization::canonical_bytes`/`canonical_digest`, `CheckpointManifest`, `check_checkpoint_resume_compatibility`, and `apply_checkpoint_suffix` in serialization/checkpoint headers | canonical representation and bounded ordered continuation | Existing canonical formats and digest checks are public. Suffix application is conservative, requires compatible context and ordinary later inputs, and rejects invalidating lifecycle changes. These APIs do not make arbitrary partitioned replay safe. |
+| Financial algebra declarations | `FinancialAlgebraDescriptor::create` in `luca/financial_algebra.hpp` | owned, validated metadata for the five operation kinds | Roles, identities, ordering, partition keys and domain-qualified laws are explicit. Validation is structural, not proof, runtime composition, or optimization authorization. |
 
-The public lifecycle increment is narrower than the fixture composition shown
-here: it implements causal acceptance and two-cutoff resolution, but not the
-downstream projection adapters or composed-result lineage vocabulary. The
-current projection functions accept entries in any input order because they
+The lifecycle API implements causal acceptance and two-cutoff resolution; its
+portfolio adapter reuses the existing projections. Plain portfolio balances
+still do not gain composed lineage automatically. The current low-level
+projection functions accept entries in any input order because they
 first request the ledger's canonical economic view. That convenience does not
 make the financial transition commutative: the evaluation order remains part of
 the contract, and lifecycle records must be resolved before that view exists.
 
 ## Typed operation declaration
+
+The additive C++ [financial algebra declarations](financial-algebras.md) describe
+a bounded subset of this vocabulary. `FinancialAlgebraDescriptor` owns its
+metadata; operation-specific contracts still carry actual typed contexts,
+dimensions, currencies and evidence. Descriptor creation is not a composition
+validator or a proof of any declared law. Unknown laws never authorize an
+optimization, and claimed laws require independent domain evidence.
 
 Every operation demonstrated in
 `tests/conformance/transformation-contract/*.json` declares the following
@@ -86,7 +96,7 @@ serialization.
 | `rounding` | Mode, output scale, and the exact arithmetic stage at which rounding occurs. `none` and `not_applicable` are explicit. |
 | `errors` | Stable semantic categories that callers can handle without parsing prose. Implementations may attach paths and identifiers. |
 | `lineage` | Required input identity fields and identities/versions that the result emits. |
-| `laws` | Separate declarations for identity, associativity, commutativity, invertibility, and distributivity, plus the domain on which a proof applies. |
+| `laws` | Separate declarations for identity, associativity, commutativity, invertibility, and distributivity, plus explicit domain preconditions; declarations alone are not proofs. |
 
 An operation returns either its declared output or a declared diagnostic. It
 must not return a partial financial result as though it were successful after an
@@ -133,7 +143,7 @@ key, exact fixed-point values, and every checked intermediate sum representable
 as `int64`. Currency mismatch and overflow remain errors, so the claim is not a
 universal algebra over arbitrary JSON decimals or all `Money` values.
 
-Within that domain the fixture proves:
+Within that domain the fixture demonstrates these bounded examples:
 
 ```text
 full:        1000.000000 + (-250.000000) + 50.000000 = 800.000000 USD
@@ -142,9 +152,13 @@ partitioned: partial(750.000000) + partial(50.000000) = 800.000000 USD
 identity:    800.000000 + 0.000000 = 800.000000 USD
 ```
 
-The partials may be calculated independently and merged because this reduction
-declares and demonstrates the compatible merge. A host partition identifier is
-operational metadata and is not part of the result. Financial merge keys and
+The partials may be calculated independently and merged only within the
+compatible, representable domain. A representable final sum alone is insufficient:
+for scaled `int64` values, `(MAX + 1) + (-1)` overflows while
+`(MAX + (-1)) + 1` succeeds. Every intermediate sum in each proposed ordering
+and grouping must fit, and event lineage must be disjoint. Metadata cannot
+prove these preconditions or authorize arbitrary repartitioning. A host partition
+identifier is operational metadata and is not part of the result. Financial merge keys and
 lineage are part of the result.
 
 The public C++ implementation exposes validated
@@ -339,9 +353,9 @@ contexts, and checked arithmetic overflow. A failure writes one stable category
 to standard error, exits nonzero, and writes no partial result to standard
 output.
 
-This JSON is a host envelope, not the portable canonical serialization deferred
-to O3. In particular, it defines no input or output hash. Its deterministic
-member order is useful for repeatable execution and tests but is not advertised
+This JSON is a host envelope, distinct from the existing O3 canonical
+serialization for ledger/lifecycle/portfolio/checkpoint values. In particular,
+it defines no input or output hash. Its deterministic member order is useful for repeatable execution and tests but is not advertised
 as a general LUCA canonical JSON format. The executable links only the public
 `luca::reconciliation` target, so installed-library and parent consumers keep
 their existing interfaces.
@@ -425,9 +439,10 @@ and compatible partial reduction plus merge. This does **not** claim that the
 other projection APIs inherit the reducer's laws or expose general incremental
 replay. Checkpoint and serialization contracts remain separate from this API.
 
-Incremental or partitioned execution is supported only when its operation
-declaration says so and all compatibility conditions hold. Otherwise full
-recomputation from immutable inputs is the baseline. In particular:
+Incremental or partitioned execution requires a concrete supported operation,
+independent evidence for its laws, and all compatibility conditions. A declaration
+alone, including one with claimed laws, grants no optimization permission.
+Otherwise full recomputation from immutable inputs is the baseline. In particular:
 
 | Change | Prior-result rule | Required response |
 | --- | --- | --- |
@@ -463,10 +478,11 @@ trace and each retained projection is its immediately preceding reduction
 trace. Observation provenance stays on the observation side of a break; it is
 never added to the projection's event or source-record lineage.
 
-Canonical bytes, input hashes, output hashes, and state/checkpoint hashes are
-intentionally absent. O3 must define their canonical serialization before a
-hash can be portable. Until then, equal fixture JSON or equal arithmetic is not
-called a canonical LUCA hash.
+Canonical bytes and input/output hashes are intentionally absent from these
+O5 fixture and report envelopes. O3 already defines canonical serialization and
+digests for its supported ledger, lifecycle, portfolio and checkpoint values;
+that does not define serialization for arbitrary custom reports or descriptors.
+Equal fixture JSON or equal arithmetic is not called a canonical LUCA hash.
 
 Host-only data such as job IDs, queue names, worker addresses, attempt counts,
 requesting principals, wall-clock start/end times, storage locations, and
@@ -479,7 +495,7 @@ portable host duplicates financial arithmetic from the public C++ operations.
 
 The fixture set contains four independently parseable documents:
 
-- `valid-exact-cash-reduction.json` proves exact arithmetic, identity,
+- `valid-exact-cash-reduction.json` demonstrates exact arithmetic, identity,
   associativity, commutativity on the bounded declared domain, full/incremental/
   partitioned equality, and complete event/source lineage;
 - `valid-equity-lifecycle-fold.json` composes fixture normalization, O2
@@ -513,14 +529,14 @@ implementations and their engine conformance tests.
 
 This increment intentionally leaves the following to their roadmap owners:
 
-- canonical wire serialization, input/output hashes, watermarks, and checkpoint
-  compatibility (O3);
-- journal types, charts of accounts, journal mapping signatures, accounting
-  policy versions, trade-date versus settlement-date posting, lots, cost basis,
-  P&L, and accounting rounding (O4);
-- public transformation interfaces beyond the bounded exact-cash reduction and
-  exact cash comparison, including general mapping, ordered-fold, tolerant
-  comparison, and policy extension contracts;
+- canonical serialization/hashes for custom reports or algebra descriptors,
+  and replay beyond the existing conservative checkpoint continuation (O3);
+- accounting beyond the existing journal values and narrow trade-date fixture
+  policy: broader charts/policy extension, settlement-date recognition, lots,
+  cost basis, P&L and additional rounding policies (O4);
+- callable generic transformation interfaces beyond existing concrete operations
+  and the additive algebra declarations, including general mapping, ordered-fold,
+  tolerant comparison and policy extension contracts;
 - native Python bindings, hosted adapters, package publication, and pinned
   platform integration (later portable-execution increments); this increment's
   source-importable Python adapter only supervises the bounded standalone host;
@@ -533,6 +549,6 @@ This increment intentionally leaves the following to their roadmap owners:
   deployments, and platform host metadata.
 
 These are not silently assigned default financial meaning by the fixtures. In
-particular, no journal policy is encoded as fact, no FX rate is inferred, no
-payable is netted with a receivable, and no custom or externally hosted result
+particular, the existing journal fixture policy is not universal accounting, no
+FX rate is inferred, no payable is netted with a receivable, and no custom or externally hosted result
 becomes authoritative merely because it conforms to this design vocabulary.
