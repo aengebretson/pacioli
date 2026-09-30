@@ -6,7 +6,7 @@ Status: proposed future wave; no implementation worker is assigned by this docum
 
 Represent loans, borrows, recalls, returns, financing charges, and collateral as immutable typed economic activity. Derive open contracts, contractual obligations, collateral, accrual, cash, and reconciliation reports through explicit financial algebras and projections. Custody movement does not imply ownership transfer.
 
-The baseline supports cash movements, equity trades, lifecycle resolution, portfolio state, exact cash/position reconciliation, portable checkpoints, and narrow trade-date journals. There are no securities-finance event families, contracts, collateral allocations, borrow-fee rules, or margin models. 
+The baseline supports cash movements, equity trades, lifecycle resolution, portfolio state, exact cash/position reconciliation, portable checkpoints, and narrow trade-date journals. There are no securities-finance event families, contracts, collateral allocations, borrow-fee rules, or margin models.
 
 ## Phased increments
 

@@ -53,8 +53,7 @@ side effects. No produced binary was run. `git diff --check` also passed.
 The standing user pause on automated software-test execution remains in effect.
 No CTest, unit executable, conformance script, example executable, benchmark or
 CI workflow was run. The compiler workflow is manual-only and defaults disabled.
-The PR remains a draft pending runtime validation; this is not release or merge
-approval.
+Runtime validation remains pending. Compilation alone is not release approval.
 
 After testing resumes, run the five new focused suites, existing replay/lifecycle/
 journal/exact-cash checks, package option matrix, installed/embedded consumers,
@@ -72,3 +71,15 @@ production accounting-standard coverage or deployment is claimed.
 
 Clang remains unverified. Native MSVC remains blocked by baseline exact
 arithmetic's `__int128` requirement; no weakened numeric substitute was introduced.
+
+
+## Merge review — 2026-09-30
+
+The user explicitly requested review and merge while the existing test-execution
+pause remained in force. The PR head and base were unchanged from the reviewed
+code, and GitHub had no submitted reviews, inline threads, discussion comments,
+commit statuses or workflow runs. No merge conflicts were reported. A final
+whole-branch whitespace review found and removed two trailing spaces in design
+documents; financial source and build configuration were unchanged. The full
+branch whitespace check then passed. Runtime test acceptance remains pending;
+merge authorization does not convert compilation evidence into executed tests.

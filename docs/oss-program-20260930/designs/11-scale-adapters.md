@@ -10,7 +10,7 @@ The baseline already includes optional reproducible benchmarks for ledger operat
 
 ## Phased increments
 
-1. **Measure current execution.** Expand existing workloads to lifecycle resolution, correction invalidation, checkpoint loading/application, and journal projection. Record correctness, hardware, compiler, flags, dataset, repetitions, memory method, and revision. 
+1. **Measure current execution.** Expand existing workloads to lifecycle resolution, correction invalidation, checkpoint loading/application, and journal projection. Record correctness, hardware, compiler, flags, dataset, repetitions, memory method, and revision.
 2. **Independent partition execution.** Introduce explicit projection-specific partition plans, complete keys, overlap detection, deterministic result ordering, and compatible merge operations. Start with disjoint account partitions for supported cash/equity workloads. Preserve ordered replay inside each partition and route cross-partition dependencies explicitly.
 3. **Incremental/batch optimization.** Profile before changing algorithms. Improve selection, reuse, and memory layout behind existing financial contracts; extend checkpoint support only where full replay equivalence is proven. Add columnar batch representations without redefining arithmetic or lifecycle order.
 4. **Adapters by actual workflow.** Reuse item 7 CSV normalization first. Add Arrow/Parquet interchange if measured workloads justify it; then select one FIX, CDM, ISO 20022, or broker/custodian mapping from real authorized sample requirements. Each adapter owns source parsing and normalization provenance, never core financial calculations.
