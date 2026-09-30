@@ -1,0 +1,205 @@
+{
+  "fixture_format": "checkpoint-result-case.v1",
+  "name": "multiple-continuations",
+  "base_case": "full-replay.json",
+  "records_to_append": [
+    {
+      "acceptance_sequence": 13,
+      "record_id": "second",
+      "economic_event_id": "second-economic",
+      "action": "originate",
+      "account": "acct-main",
+      "recorded_at": "2026-01-13T10:00:00Z",
+      "effective_at": "2026-01-10T09:00:00Z",
+      "provenance": {
+        "source_record_ids": [
+          "prefix-cash-source"
+        ],
+        "transformation_name": "checkpoint-result-test",
+        "transformation_version": "1"
+      },
+      "payload": {
+        "type": "cash_movement",
+        "amount": "-160",
+        "currency": "USD"
+      }
+    },
+    {
+      "acceptance_sequence": 14,
+      "record_id": "third",
+      "economic_event_id": "third-economic",
+      "action": "originate",
+      "account": "acct-main",
+      "recorded_at": "2026-01-14T10:00:00Z",
+      "effective_at": "2026-01-11T09:00:00Z",
+      "provenance": {
+        "source_record_ids": [
+          "third-source"
+        ],
+        "transformation_name": "checkpoint-result-test",
+        "transformation_version": "1"
+      },
+      "payload": {
+        "type": "cash_movement",
+        "amount": "-7",
+        "currency": "EUR"
+      }
+    }
+  ],
+  "continuations": [
+    {
+      "accepted_prefix_count": 12,
+      "suffix_sequences": [
+        13
+      ],
+      "expected": {
+        "positions": [
+          {
+            "account": "acct-main",
+            "instrument": "instrument-a",
+            "quantity": "7.000000"
+          }
+        ],
+        "settled_cash": [
+          {
+            "account": "acct-main",
+            "currency": "EUR",
+            "amount": "7.000000"
+          },
+          {
+            "account": "acct-main",
+            "currency": "USD",
+            "amount": "1000.000000"
+          }
+        ],
+        "open_settlement_obligations": [
+          {
+            "account": "acct-main",
+            "settlement_date": "2026-01-10",
+            "currency": "USD",
+            "direction": "receivable",
+            "amount": "24.000000"
+          },
+          {
+            "account": "acct-main",
+            "settlement_date": "2026-01-10",
+            "currency": "USD",
+            "direction": "payable",
+            "amount": "50.000000"
+          }
+        ],
+        "record_count": 13,
+        "last_record_id": "second",
+        "watermark": {
+          "effective_at": "2026-01-10T09:00:00Z",
+          "acceptance_sequence": 13,
+          "record_id": "second"
+        },
+        "active_record_ids": [
+          "prefix-cash",
+          "prefix-trade",
+          "suffix-correction",
+          "suffix-reversed",
+          "suffix-reversal",
+          "suffix-trade-correction",
+          "suffix-sale",
+          "suffix-eur",
+          "second"
+        ],
+        "source_record_ids": [
+          "prefix-cash-source",
+          "prefix-trade-source",
+          "suffix-origin-source",
+          "suffix-correction-source",
+          "suffix-reversed-source",
+          "suffix-reversal-source",
+          "suffix-trade-source",
+          "suffix-trade-correction-source",
+          "suffix-sale-source",
+          "suffix-cancelled-source",
+          "suffix-cancellation-source",
+          "suffix-eur-source"
+        ]
+      }
+    },
+    {
+      "accepted_prefix_count": 13,
+      "suffix_sequences": [
+        14
+      ],
+      "expected": {
+        "positions": [
+          {
+            "account": "acct-main",
+            "instrument": "instrument-a",
+            "quantity": "7.000000"
+          }
+        ],
+        "settled_cash": [
+          {
+            "account": "acct-main",
+            "currency": "USD",
+            "amount": "1000.000000"
+          }
+        ],
+        "open_settlement_obligations": [
+          {
+            "account": "acct-main",
+            "settlement_date": "2026-01-10",
+            "currency": "USD",
+            "direction": "receivable",
+            "amount": "24.000000"
+          },
+          {
+            "account": "acct-main",
+            "settlement_date": "2026-01-10",
+            "currency": "USD",
+            "direction": "payable",
+            "amount": "50.000000"
+          }
+        ],
+        "record_count": 14,
+        "last_record_id": "third",
+        "watermark": {
+          "effective_at": "2026-01-11T09:00:00Z",
+          "acceptance_sequence": 14,
+          "record_id": "third"
+        },
+        "active_record_ids": [
+          "prefix-cash",
+          "prefix-trade",
+          "suffix-correction",
+          "suffix-reversed",
+          "suffix-reversal",
+          "suffix-trade-correction",
+          "suffix-sale",
+          "suffix-eur",
+          "second",
+          "third"
+        ],
+        "source_record_ids": [
+          "prefix-cash-source",
+          "prefix-trade-source",
+          "suffix-origin-source",
+          "suffix-correction-source",
+          "suffix-reversed-source",
+          "suffix-reversal-source",
+          "suffix-trade-source",
+          "suffix-trade-correction-source",
+          "suffix-sale-source",
+          "suffix-cancelled-source",
+          "suffix-cancellation-source",
+          "suffix-eur-source",
+          "third-source"
+        ]
+      }
+    }
+  ],
+  "assertions": [
+    "create each next request from previous returned manifest",
+    "full replay equals each continuation under identical context",
+    "canonical input digest covers all records through each boundary",
+    "shared prefix source retains its original position and appears only once",
+    "zero EUR cash is absent from final sparse state"
+  ]
+}
