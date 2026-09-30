@@ -16,6 +16,7 @@ foreach(luca_target IN ITEMS
     luca::ledger
     luca::portfolio
     luca::reconciliation
+    luca::adapters
     luca::luca)
   if(NOT TARGET ${luca_target})
     message(FATAL_ERROR "Installed package did not expose ${luca_target}")
@@ -49,6 +50,10 @@ get_target_property(
 if(NOT reconciliation_links STREQUAL "luca::portfolio;luca::ledger")
   message(FATAL_ERROR
     "luca::reconciliation has unexpected dependencies: ${reconciliation_links}")
+endif()
+get_target_property(adapters_links luca::adapters INTERFACE_LINK_LIBRARIES)
+if(NOT adapters_links STREQUAL "luca::reconciliation")
+  message(FATAL_ERROR "luca::adapters has unexpected dependencies: ${adapters_links}")
 endif()
 get_target_property(umbrella_links luca::luca INTERFACE_LINK_LIBRARIES)
 if(NOT umbrella_links STREQUAL
@@ -108,3 +113,21 @@ add_test(
 set_tests_properties(luca_package_exact_cash_comparison_consumer_run PROPERTIES
   PASS_REGULAR_EXPRESSION
     "exact_cash_break=amount_mismatch difference_scaled=-10000000 currency=USD operation=compare.cash.exact")
+
+# Compile the unchanged forwarding surface through the installed umbrella.
+add_executable(luca_package_legacy_consumer legacy.cpp)
+target_link_libraries(luca_package_legacy_consumer PRIVATE luca::luca)
+add_test(NAME luca_package_legacy_consumer_run COMMAND luca_package_legacy_consumer)
+
+add_executable(luca_package_walkthrough ../../examples/package-consumer/main.cpp)
+target_link_libraries(luca_package_walkthrough PRIVATE luca::reconciliation)
+add_test(NAME luca_package_walkthrough_run COMMAND luca_package_walkthrough)
+set_tests_properties(luca_package_walkthrough_run PROPERTIES PASS_REGULAR_EXPRESSION
+  "position_scaled=1000000000 cash_before_scaled=1000000000 payable_before_scaled=200000000 cash_scaled=800000000 open_after=0[\r\n]+cash_break=amount_mismatch difference_scaled=-10000000 currency=USD observation_source=observation.bank.1[\r\n]+event=deposit-1 source=source.deposit.1[\r\n]+event=trade-1 source=source.trade.1")
+
+# CSV adapters are an explicit opt-in and do not widen the compatible umbrella.
+add_executable(luca_package_adapters_consumer adapters.cpp)
+target_link_libraries(luca_package_adapters_consumer PRIVATE luca::adapters)
+add_test(NAME luca_package_adapters_consumer_run COMMAND luca_package_adapters_consumer)
+set_tests_properties(luca_package_adapters_consumer_run PROPERTIES
+  PASS_REGULAR_EXPRESSION "trade_observations=1 unexpected_observations=1")

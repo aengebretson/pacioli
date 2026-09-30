@@ -1,145 +1,163 @@
 # LUCA packaging baseline
 
-This audit records the O1-T03 package surface on source base
-`b0e025f6e37722688315a59d193ad5d671a5e265`. It extends the install/export and
-parent-consumer baselines from O1-T01 and O1-T02 without changing public
-headers or financial behavior.
+## Source and identity
 
-## Canonical identity inspected
+O1-T04 builds on source `20e46a6a0c0744f9591968709adb0eb66aa5a411`, with
+batch designs pinned by `08cbc3797b4ab34dc3adbb8a7c2fd30ea29b11ad`.
+The package design digest is
+`1959abc8df8df733560a2ace0e5f27320f3a8cda633b4994c6e931f917616592`.
+The previous O1-T03 audit recorded successful historical tests on
+`b0e025f6e37722688315a59d193ad5d671a5e265`; those historical results are not
+verification of this working-tree change or the larger current API.
 
-- The checked-out Git remote is `https://github.com/aengebretson/pacioli.git`.
-- The repository README identifies the product as Pacioli LUCA, while the
-  canonical C++ headers and types use the `luca` namespace.
-- The root CMake project remains `pacioli` at version `0.1.0`. This increment
-  does not rename the repository or project and does not publish a release.
+The product is LUCA, the CMake project is `luca` version `0.1.0`, the C++
+namespace is `luca`, and the CMake package is `Luca`. The repository remains
+`aengebretson/pacioli`. There is no tag, release, repository rename, new ABI
+promise, dependency or financial calculation change in this increment.
 
-## Implemented target surface
+## Preserved package surface
 
-The same canonical names are available when the source is nested with
-`add_subdirectory` and when an installation is loaded with
-`find_package(Luca CONFIG REQUIRED)`:
+The four established target names remain available through `add_subdirectory`
+and `find_package(Luca 0.1 CONFIG REQUIRED)`. Integration adds the separately
+linked `luca::adapters` target without widening the existing umbrella:
 
 | Public target | Public domain | Direct interface dependencies |
 | --- | --- | --- |
-| `luca::ledger` | Canonical values, events, lifecycle, ledger, serialization | None |
-| `luca::portfolio` | Position, cash, lifecycle, and settlement projections | `luca::ledger` |
-| `luca::reconciliation` | Position and cash observations and reconciliation | `luca::portfolio`, `luca::ledger` |
-| `luca::luca` | Compatible umbrella, including the legacy forwarding header | All three domain targets |
+| `luca::ledger` | Values, events, lifecycle, ledger, serialization; existing accounting headers | None |
+| `luca::portfolio` | Position, cash, settlement, lifecycle and replay projections | `luca::ledger` |
+| `luca::reconciliation` | Observations and reconciliation | `luca::portfolio`, `luca::ledger` |
+| `luca::luca` | Compatible umbrella | Ledger, portfolio and reconciliation |
+| `luca::adapters` | Optional external-format adapters, including trade CSV | `luca::reconciliation` |
 
-Each target requires the `cxx_std_23` compile feature. In a source build, each
-domain target exposes only its own `libs/<domain>/include` root and receives
-other domains transitively through its interface dependencies. The umbrella
-exposes only the compatibility `include` root directly. In an installation,
-all four targets expose only the installation's public include directory.
+Each target requires `cxx_std_23`. Source domain targets expose their own include
+root and receive other domains transitively. The umbrella's direct source include
+root is `include/`. Installed targets expose the install include directory.
+Existing accounting headers are still delivered by `luca::ledger`; splitting
+accounting into a target is deferred.
 
-The source target `pacioli` and its `luca::luca` alias remain available to
-existing source and parent-project consumers. The export names produce
-`luca::ledger`, `luca::portfolio`, `luca::reconciliation`, and `luca::luca` as
-installed imported targets. There is deliberately no installed `pacioli`
-target; that target name was source-compatible behavior rather than an earlier
-installed-package contract.
+The real source target `pacioli`, its `luca::luca` alias, the forwarding include
+`<pacioli/ledger.hpp>` and `pacioli::Ledger` remain unchanged. Export names remain
+`luca::...`; there is no installed unnamespaced `pacioli` target. Test and benchmark
+executable names retain their historical `pacioli_` names so existing automation
+can still address them.
 
-Installation continues to include the canonical `luca/...` headers and the
-existing `pacioli/ledger.hpp` compatibility header. Package metadata is under
-`lib/cmake/Luca` (or the platform-specific GNU install library directory).
-Only install-interface paths are written to the exported targets, so the
-metadata is relocatable and contains no checkout source or build paths.
+Installation uses relative GNUInstallDirs destinations, with metadata under
+`${CMAKE_INSTALL_LIBDIR}/cmake/Luca`. Existing header directory install rules are preserved. The integrated adapter
+header tree is also installed; consumers opt into its source include root with
+`luca::adapters`. Accounting and financial-algebra headers remain on
+`luca::ledger`; checkpoint continuation remains on `luca::portfolio`.
 
-## Independent installed-package consumer
+## Canonical options and compatibility
 
-`tests/package_consumer` is a separate CMake project. Its regression driver
-installs LUCA to a newly cleaned isolated prefix, scans every installed CMake
-metadata file for source- or build-tree paths, and configures the consumer with
-that prefix through `CMAKE_PREFIX_PATH`.
+| Canonical name | Legacy alias | Top-level default | Parent default |
+| --- | --- | --- | --- |
+| `LUCA_BUILD_TESTS` | `PACIOLI_BUILD_TESTS` | ON | OFF |
+| `LUCA_BUILD_TOOLS` | `PACIOLI_BUILD_TOOLS` | ON | OFF |
+| `LUCA_BUILD_BENCHMARKS` | `PACIOLI_BUILD_BENCHMARKS` | OFF | OFF |
 
-At configure time the consumer proves that all four canonical names are
-installed `IMPORTED` targets, checks their C++23 feature, include directory,
-and exact domain dependency links, then builds and runs:
+`cmake/LucaOptions.cmake` accepts both cache entries and parent normal variables.
+An explicit legacy-only value supplies the effective canonical value without
+creating a canonical cache entry; repeated legacy-only configuration can change
+that value. Otherwise, the canonical name is a standard CMake option. A readable
+legacy normal variable reflects the resolved value without inserting an alias
+cache entry. If both names are defined, their CMake boolean meanings must agree
+(`TRUE` and `ON` agree). Conflicts fail before Python discovery or target setup
+and identify both names plus the `-U` cache-removal remedy. Existing canonical
+cache defaults count as defined values; clear that entry before switching to a
+legacy-only configuration. Parent normal variables must be reconciled in the
+parent, not by clearing a cache entry they shadow.
 
-- a ledger append linked only to `luca::ledger`;
-- the deterministic cash projection linked only to `luca::portfolio`;
-- matching position reconciliation linked only to `luca::reconciliation`;
-- the existing deterministic cash projection linked to `luca::luca`.
+No default parent Python discovery, tools, benchmarks or LUCA tests are added.
+C++23 comes from target compile features; the source directory's extension policy
+does not change the parent's standard/required/extensions settings. The standalone
+example is a separate project and is never injected into an embedded build.
+Presets use canonical test options; schema version 5 matches the declared CMake
+3.24 minimum (the former schema 6 required a newer CMake).
 
-The representative output remains:
+## Authored acceptance cases — unexecuted
 
-```text
-ledger_entries=1
-cash_scaled=125000000 currency=USD
-position_breaks=0
+- Existing per-domain installed/embedded consumers preserve the exact dependency
+  graph and compile features, plus ledger, cash, reconciliation and replay cases.
+- Installed legacy consumer includes the forwarding header via `luca::luca`;
+  embedded legacy consumer uses the real `pacioli` source target.
+- The parent consumer checks project identity, language-policy isolation, both
+  option names and requested test/tool/benchmark targets. Its default configuration
+  disables Python discovery; its eight consumer tests are parent-owned. The new
+  adapter consumer reads a synthetic trade observation and preserves it as an
+  unexpected observation against an empty ledger. Public-header compilation
+  covers financial algebras, settlement-date journals, refreshed checkpoint
+  results and exact trade reconciliation through their owning domain targets.
+- `tests/parent_consumer/options.cmake` covers defaults, canonical and legacy
+  ON/OFF options, equivalent boolean spellings, contradictions in both directions,
+  parent normal variables, legacy-only cache reconfiguration and top-level defaults.
+- Installed regression driver scans exported metadata for source/build paths and
+  moves the installation before configuring the consumer against the new prefix.
+- The package walkthrough uses deposit and equity-trade inputs, projects cash,
+  positions and settlements, then reconciles an independent USD 790 observation
+  against USD 800 projected cash. Expected difference: USD -10; input and observation
+  source identities remain available. Output expectations are authored, not observed.
+
+## Actual configure/compile/package evidence
+
+Environment: Linux x86_64, CMake 3.25.1, Ninja 1.11.1, GCC/G++ 12.2.0.
+Clang is not installed; native Windows/MSVC is unavailable. The worker reported that all commands below completed successfully before
+integration. The following counts describe that worker snapshot, not the
+additional integration consumer coverage. `OUT` denotes the assigned O1-T04 runtime output directory
+`/home/andrew/luca-development/state/maintenance/oss-20260930/oss-package-20260930/output`.
+Build products are outside the checkout.
+
+```sh
+cmake -S . -B "$OUT/build/package" -G Ninja -DLUCA_BUILD_TESTS=OFF -DLUCA_BUILD_TOOLS=OFF -DLUCA_BUILD_BENCHMARKS=OFF -DCMAKE_BUILD_TYPE=Release
+cmake --install "$OUT/build/package" --prefix "$OUT/prefix"
+mv "$OUT/prefix" "$OUT/prefix-relocated"
+cmake -S examples/package-consumer -B "$OUT/build/example" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$OUT/prefix-relocated"
+cmake -S tests/package_consumer -B "$OUT/build/installed" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$OUT/prefix-relocated" -DLUCA_EXPECTED_INSTALL_PREFIX="$OUT/prefix-relocated"
+cmake -S tests/parent_consumer -B "$OUT/build/parent" -G Ninja -DCMAKE_BUILD_TYPE=Release -DLUCA_SOURCE_DIR="$PWD"
+cmake --build "$OUT/build/example" --parallel 2
+cmake --build "$OUT/build/installed" --parallel 2
+cmake --build "$OUT/build/parent" --parallel 2
 ```
 
-Because this project calls only `find_package`, asserts that the targets are
-imported, and has no `add_subdirectory` path to LUCA, the domain target names
-are proven to come from the installed package rather than in-tree aliases.
+One external walkthrough, eight installed consumer targets and seven embedded
+consumer targets compiled and linked. The public target checks performed during
+consumer configuration succeeded. Installed configuration/build used the relocated
+prefix; embedded configuration succeeded with Python discovery disabled. No
+program was executed. This is compilation/package evidence, not financial runtime
+or deterministic replay acceptance. `git diff --check` also passed.
 
-## Parent-project behavior
+The root test-enabled build contains a custom conformance fixture generator;
+it was not invoked. The inspected consumer projects have no build-time test
+execution. No CTest, automated test script, consumer executable, CI, benchmark,
+staging or deployment was executed.
 
-`tests/parent_consumer` remains a separate CMake project. It adds LUCA in a
-separate binary directory and verifies that the four canonical names are
-non-imported aliases with the same C++23 features, include boundaries, and
-dependency graph as the installed targets. It builds and runs the same ledger,
-portfolio, reconciliation, and umbrella examples.
+## Compiler workflow and outstanding verification
 
-`PACIOLI_BUILD_TESTS` still defaults from CMake's `PROJECT_IS_TOP_LEVEL` state.
-The parent's default configuration disables Python package discovery and
-registers only its four parent-owned consumer tests; no LUCA unit,
-conformance, benchmark, or nested consumer test is registered. A separate
-configuration with `-DPACIOLI_BUILD_TESTS=ON` and Python enabled confirms the
-existing explicit opt-in behavior still exposes the LUCA suite.
+`.github/workflows/package-compilers.yml` is authored only, with no push, PR or
+scheduled triggers. Manual dispatch defaults `resume_checks` to false. After the
+pause is explicitly lifted it defines GCC 14 and Clang 18 Debug/Release jobs,
+root GCC Debug ASan/UBSan flags, root tests, option/consumer checks, a benchmark
+compile (not execution), and standalone example compilation. Runner package
+availability and these compiler/standard-library combinations are unverified.
 
-## Remaining package and platform gaps
+The Windows 2022/MSVC job is a separate opt-in capability probe, expected to fail:
+`libs/ledger/include/luca/core/detail/wide_integer.hpp` requires signed `__int128`
+and rejects native MSVC. No numeric fallback or weakened check is appropriate.
+A separate reviewed core-numeric portability change with equivalent exact
+arithmetic/overflow/rounding coverage is required before claiming MSVC support.
 
-- The CMake project and option names retain the historical `pacioli` /
-  `PACIOLI_*` identity, and the legacy forwarding header remains present.
-- The source project still sets directory-wide C++ standard variables in its
-  own CMake directory in addition to the target compile features.
-- No package-manager recipe, binary artifact, ABI guarantee, repository rename,
-  tag, CI change, or public release is part of this increment.
-- GCC is the only C++ compiler installed in this worker. The Clang C++ compiler
-  is unavailable, and MSVC/Windows cannot be exercised from this Linux
-  environment. No result is inferred for those missing toolchains.
+Pending commands **only after testing resumes**:
 
-## Verification environment and evidence
-
-- Linux 6.8.0-139-generic x86_64
-- CMake 3.25.1
-- Ninja 1.11.1
-- GCC/G++ 12.2.0
-- Python 3.11.2
-- Clang C++ compiler: unavailable
-- MSVC/Windows: unavailable
-
-Evidence collected in this environment:
-
-```text
+```sh
 cmake --preset dev
 cmake --build --preset dev --parallel 2
 ctest --preset dev --output-on-failure
-                                      passed; 17/17 tests
-
 cmake --preset release
 cmake --build --preset release --parallel 2
 ctest --preset release --output-on-failure
-                                      passed; 17/17 tests
-
-ctest --preset dev
-      -R 'luca_(package|parent)_consumer_test'
-      --output-on-failure -V
-                                      passed; 2/2 outer checks
-                                      package consumer 4/4
-                                      parent default 4/4
-                                      explicit Luca test opt-in present
-
-clang-format-14 --dry-run --Werror <new consumer C++ sources>
-git diff --check
-rg -n '[[:blank:]]+$' <allowed changed paths>
-                                      passed; no formatting or whitespace errors
+ctest --preset dev -R 'luca_(package_consumer|parent_consumer|package_options)_test' --output-on-failure -V
 ```
 
-The package-consumer check performs the clean isolated install, relocation
-scan, imported-target property inspection, build, and executions. The parent
-check performs the default and explicit-opt-in configurations, source-target
-property inspection, inventory checks, build, and executions. Compiler and
-platform coverage not installed in this environment remains explicit rather
-than inferred.
+These include the authored relocation, alias/conflict/reconfiguration checks and
+walkthrough runtime case. Cross-compiler CI and native MSVC support remain separate
+pending items; authoring a job does not prove it works. No package-manager recipe,
+release publication or repository rename was attempted.

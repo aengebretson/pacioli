@@ -11,7 +11,9 @@ foreach(required_variable IN ITEMS
   endif()
 endforeach()
 
-file(REMOVE_RECURSE "${LUCA_CONSUMER_BINARY_DIR}" "${LUCA_INSTALL_PREFIX}")
+set(relocated_prefix "${LUCA_INSTALL_PREFIX}_relocated")
+file(REMOVE_RECURSE "${LUCA_CONSUMER_BINARY_DIR}" "${LUCA_INSTALL_PREFIX}"
+  "${relocated_prefix}")
 
 execute_process(
   COMMAND "${CMAKE_COMMAND}" --install "${LUCA_SOURCE_BINARY_DIR}"
@@ -44,13 +46,16 @@ foreach(metadata_file IN LISTS package_metadata)
   endforeach()
 endforeach()
 
+# Remove the original location before configuration to catch hidden prefix ties.
+file(RENAME "${LUCA_INSTALL_PREFIX}" "${relocated_prefix}")
+
 set(configure_command
   "${CMAKE_COMMAND}"
   -S "${LUCA_CONSUMER_SOURCE_DIR}"
   -B "${LUCA_CONSUMER_BINARY_DIR}"
   -G "${LUCA_GENERATOR}"
-  "-DCMAKE_PREFIX_PATH=${LUCA_INSTALL_PREFIX}"
-  "-DLUCA_EXPECTED_INSTALL_PREFIX=${LUCA_INSTALL_PREFIX}"
+  "-DCMAKE_PREFIX_PATH=${relocated_prefix}"
+  "-DLUCA_EXPECTED_INSTALL_PREFIX=${relocated_prefix}"
   "-DCMAKE_CXX_COMPILER=${LUCA_CXX_COMPILER}")
 if(DEFINED LUCA_GENERATOR_PLATFORM AND NOT "${LUCA_GENERATOR_PLATFORM}" STREQUAL "")
   list(APPEND configure_command -A "${LUCA_GENERATOR_PLATFORM}")

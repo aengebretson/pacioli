@@ -1,0 +1,418 @@
+{
+  "fixture_format": "checkpoint-result-case.v1",
+  "name": "full-replay",
+  "note": "Fixture envelope only; existing canonical financial schemas remain unchanged.",
+  "identities": {
+    "projection": {
+      "id": "luca.portfolio-state",
+      "version": "1"
+    },
+    "engine_version": "luca-engine-1",
+    "policy": {
+      "id": "luca.portfolio-default",
+      "version": "1"
+    },
+    "partition": {
+      "definition": "account-set",
+      "version": "1",
+      "keys": [
+        "acct-main"
+      ]
+    }
+  },
+  "evaluation_context": {
+    "recorded_through": "2026-01-31T23:00:00Z",
+    "economic_as_of": "2026-01-31T23:00:00Z",
+    "settlement_as_of_date": "2026-01-05",
+    "reference_data_inputs": [],
+    "price_inputs": [],
+    "calendar_inputs": [],
+    "rounding_inputs": [],
+    "fx_inputs": []
+  },
+  "records": [
+    {
+      "acceptance_sequence": 1,
+      "record_id": "prefix-cash",
+      "economic_event_id": "prefix-cash-economic",
+      "action": "originate",
+      "account": "acct-main",
+      "recorded_at": "2026-01-01T10:00:00Z",
+      "effective_at": "2026-01-01T09:00:00Z",
+      "provenance": {
+        "source_record_ids": [
+          "prefix-cash-source"
+        ],
+        "transformation_name": "checkpoint-result-test",
+        "transformation_version": "1"
+      },
+      "payload": {
+        "type": "cash_movement",
+        "amount": "1000",
+        "currency": "USD"
+      }
+    },
+    {
+      "acceptance_sequence": 2,
+      "record_id": "prefix-trade",
+      "economic_event_id": "prefix-trade-economic",
+      "action": "originate",
+      "account": "acct-main",
+      "recorded_at": "2026-01-02T10:00:00Z",
+      "effective_at": "2026-01-02T09:00:00Z",
+      "provenance": {
+        "source_record_ids": [
+          "prefix-trade-source"
+        ],
+        "transformation_name": "checkpoint-result-test",
+        "transformation_version": "1"
+      },
+      "payload": {
+        "type": "equity_trade",
+        "instrument": "instrument-a",
+        "quantity": "5",
+        "price": "10",
+        "quote_currency": "USD",
+        "settlement_date": "2026-01-10"
+      }
+    },
+    {
+      "acceptance_sequence": 3,
+      "record_id": "suffix-origin",
+      "economic_event_id": "suffix-cash-economic",
+      "action": "originate",
+      "account": "acct-main",
+      "recorded_at": "2026-01-03T10:00:00Z",
+      "effective_at": "2026-01-03T09:00:00Z",
+      "provenance": {
+        "source_record_ids": [
+          "suffix-origin-source"
+        ],
+        "transformation_name": "checkpoint-result-test",
+        "transformation_version": "1"
+      },
+      "payload": {
+        "type": "cash_movement",
+        "amount": "100",
+        "currency": "USD"
+      }
+    },
+    {
+      "acceptance_sequence": 4,
+      "record_id": "suffix-correction",
+      "economic_event_id": "suffix-cash-economic",
+      "action": "correct",
+      "account": "acct-main",
+      "recorded_at": "2026-01-04T10:00:00Z",
+      "effective_at": "2026-01-03T11:00:00Z",
+      "provenance": {
+        "source_record_ids": [
+          "suffix-correction-source"
+        ],
+        "transformation_name": "checkpoint-result-test",
+        "transformation_version": "1"
+      },
+      "payload": {
+        "type": "cash_movement",
+        "amount": "200",
+        "currency": "USD"
+      },
+      "supersedes_record_id": "suffix-origin"
+    },
+    {
+      "acceptance_sequence": 5,
+      "record_id": "suffix-reversed",
+      "economic_event_id": "suffix-reversed-economic",
+      "action": "originate",
+      "account": "acct-main",
+      "recorded_at": "2026-01-05T10:00:00Z",
+      "effective_at": "2026-01-04T09:00:00Z",
+      "provenance": {
+        "source_record_ids": [
+          "suffix-reversed-source"
+        ],
+        "transformation_name": "checkpoint-result-test",
+        "transformation_version": "1"
+      },
+      "payload": {
+        "type": "cash_movement",
+        "amount": "50",
+        "currency": "USD"
+      }
+    },
+    {
+      "acceptance_sequence": 6,
+      "record_id": "suffix-reversal",
+      "economic_event_id": "suffix-reversal-economic",
+      "action": "reverse",
+      "account": "acct-main",
+      "recorded_at": "2026-01-06T10:00:00Z",
+      "effective_at": "2026-01-05T09:00:00Z",
+      "provenance": {
+        "source_record_ids": [
+          "suffix-reversal-source"
+        ],
+        "transformation_name": "checkpoint-result-test",
+        "transformation_version": "1"
+      },
+      "payload": {
+        "type": "cash_movement",
+        "amount": "-50",
+        "currency": "USD"
+      },
+      "reverses_record_id": "suffix-reversed"
+    },
+    {
+      "acceptance_sequence": 7,
+      "record_id": "suffix-trade",
+      "economic_event_id": "suffix-trade-economic",
+      "action": "originate",
+      "account": "acct-main",
+      "recorded_at": "2026-01-07T10:00:00Z",
+      "effective_at": "2026-01-06T09:00:00Z",
+      "provenance": {
+        "source_record_ids": [
+          "suffix-trade-source"
+        ],
+        "transformation_name": "checkpoint-result-test",
+        "transformation_version": "1"
+      },
+      "payload": {
+        "type": "equity_trade",
+        "instrument": "instrument-a",
+        "quantity": "3",
+        "price": "10",
+        "quote_currency": "USD",
+        "settlement_date": "2026-01-04"
+      }
+    },
+    {
+      "acceptance_sequence": 8,
+      "record_id": "suffix-trade-correction",
+      "economic_event_id": "suffix-trade-economic",
+      "action": "correct",
+      "account": "acct-main",
+      "recorded_at": "2026-01-08T10:00:00Z",
+      "effective_at": "2026-01-06T10:00:00Z",
+      "provenance": {
+        "source_record_ids": [
+          "suffix-trade-correction-source"
+        ],
+        "transformation_name": "checkpoint-result-test",
+        "transformation_version": "1"
+      },
+      "payload": {
+        "type": "equity_trade",
+        "instrument": "instrument-a",
+        "quantity": "4",
+        "price": "10",
+        "quote_currency": "USD",
+        "settlement_date": "2026-01-04"
+      },
+      "supersedes_record_id": "suffix-trade"
+    },
+    {
+      "acceptance_sequence": 9,
+      "record_id": "suffix-sale",
+      "economic_event_id": "suffix-sale-economic",
+      "action": "originate",
+      "account": "acct-main",
+      "recorded_at": "2026-01-09T10:00:00Z",
+      "effective_at": "2026-01-07T09:00:00Z",
+      "provenance": {
+        "source_record_ids": [
+          "suffix-sale-source"
+        ],
+        "transformation_name": "checkpoint-result-test",
+        "transformation_version": "1"
+      },
+      "payload": {
+        "type": "equity_trade",
+        "instrument": "instrument-a",
+        "quantity": "-2",
+        "price": "12",
+        "quote_currency": "USD",
+        "settlement_date": "2026-01-10"
+      }
+    },
+    {
+      "acceptance_sequence": 10,
+      "record_id": "suffix-cancelled",
+      "economic_event_id": "suffix-cancelled-economic",
+      "action": "originate",
+      "account": "acct-main",
+      "recorded_at": "2026-01-10T10:00:00Z",
+      "effective_at": "2026-01-08T09:00:00Z",
+      "provenance": {
+        "source_record_ids": [
+          "suffix-cancelled-source"
+        ],
+        "transformation_name": "checkpoint-result-test",
+        "transformation_version": "1"
+      },
+      "payload": {
+        "type": "cash_movement",
+        "amount": "10",
+        "currency": "USD"
+      }
+    },
+    {
+      "acceptance_sequence": 11,
+      "record_id": "suffix-cancellation",
+      "economic_event_id": "suffix-cancelled-economic",
+      "action": "cancel",
+      "account": "acct-main",
+      "recorded_at": "2026-01-11T10:00:00Z",
+      "supersedes_record_id": "suffix-cancelled",
+      "provenance": {
+        "source_record_ids": [
+          "suffix-cancellation-source"
+        ],
+        "transformation_name": "checkpoint-result-test",
+        "transformation_version": "1"
+      }
+    },
+    {
+      "acceptance_sequence": 12,
+      "record_id": "suffix-eur",
+      "economic_event_id": "suffix-eur-economic",
+      "action": "originate",
+      "account": "acct-main",
+      "recorded_at": "2026-01-12T10:00:00Z",
+      "effective_at": "2026-01-09T09:00:00Z",
+      "provenance": {
+        "source_record_ids": [
+          "suffix-eur-source"
+        ],
+        "transformation_name": "checkpoint-result-test",
+        "transformation_version": "1"
+      },
+      "payload": {
+        "type": "cash_movement",
+        "amount": "7",
+        "currency": "EUR"
+      }
+    }
+  ],
+  "checkpoint_record_count": 2,
+  "checkpoint_state": {
+    "positions": [
+      {
+        "account": "acct-main",
+        "instrument": "instrument-a",
+        "quantity": "5.000000"
+      }
+    ],
+    "settled_cash": [
+      {
+        "account": "acct-main",
+        "currency": "USD",
+        "amount": "1000.000000"
+      }
+    ],
+    "open_settlement_obligations": [
+      {
+        "account": "acct-main",
+        "settlement_date": "2026-01-10",
+        "currency": "USD",
+        "direction": "payable",
+        "amount": "50.000000"
+      }
+    ]
+  },
+  "expected": {
+    "state": {
+      "positions": [
+        {
+          "account": "acct-main",
+          "instrument": "instrument-a",
+          "quantity": "7.000000"
+        }
+      ],
+      "settled_cash": [
+        {
+          "account": "acct-main",
+          "currency": "EUR",
+          "amount": "7.000000"
+        },
+        {
+          "account": "acct-main",
+          "currency": "USD",
+          "amount": "1160.000000"
+        }
+      ],
+      "open_settlement_obligations": [
+        {
+          "account": "acct-main",
+          "settlement_date": "2026-01-10",
+          "currency": "USD",
+          "direction": "receivable",
+          "amount": "24.000000"
+        },
+        {
+          "account": "acct-main",
+          "settlement_date": "2026-01-10",
+          "currency": "USD",
+          "direction": "payable",
+          "amount": "50.000000"
+        }
+      ]
+    },
+    "event_prefix": {
+      "first_sequence": 1,
+      "last_sequence": 12,
+      "record_count": 12,
+      "last_record_id": "suffix-eur"
+    },
+    "lifecycle_record_ids": [
+      "prefix-cash",
+      "prefix-trade",
+      "suffix-origin",
+      "suffix-correction",
+      "suffix-reversed",
+      "suffix-reversal",
+      "suffix-trade",
+      "suffix-trade-correction",
+      "suffix-sale",
+      "suffix-cancelled",
+      "suffix-cancellation",
+      "suffix-eur"
+    ],
+    "active_record_ids": [
+      "prefix-cash",
+      "prefix-trade",
+      "suffix-correction",
+      "suffix-reversed",
+      "suffix-reversal",
+      "suffix-trade-correction",
+      "suffix-sale",
+      "suffix-eur"
+    ],
+    "source_record_ids": [
+      "prefix-cash-source",
+      "prefix-trade-source",
+      "suffix-origin-source",
+      "suffix-correction-source",
+      "suffix-reversed-source",
+      "suffix-reversal-source",
+      "suffix-trade-source",
+      "suffix-trade-correction-source",
+      "suffix-sale-source",
+      "suffix-cancelled-source",
+      "suffix-cancellation-source",
+      "suffix-eur-source"
+    ],
+    "watermark": {
+      "effective_at": "2026-01-09T09:00:00Z",
+      "acceptance_sequence": 12,
+      "record_id": "suffix-eur"
+    },
+    "canonical_assertions": [
+      "state equals full replay and existing state-only suffix application",
+      "input digest equals SHA-256 of canonical full lifecycle ledger bytes",
+      "state digest equals SHA-256 of canonical returned state bytes",
+      "manifest decode/encode preserves bytes and digest",
+      "repeated invocation produces identical state and manifest bytes"
+    ]
+  }
+}

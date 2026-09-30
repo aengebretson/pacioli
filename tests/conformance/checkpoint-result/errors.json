@@ -1,0 +1,282 @@
+{
+  "fixture_format": "checkpoint-result-case.v1",
+  "name": "errors",
+  "base_case": "full-replay.json",
+  "base_record_sequences": [
+    1,
+    2,
+    3
+  ],
+  "checkpoint_record_count": 2,
+  "cases": [
+    {
+      "name": "empty-suffix",
+      "suffix_sequences": [],
+      "expected_error": {
+        "type": "CheckpointResumeError",
+        "category": "prefix_continuity"
+      }
+    },
+    {
+      "name": "policy-change",
+      "request_override": {
+        "policy": {
+          "id": "different-policy",
+          "version": "1"
+        }
+      },
+      "expected_error": {
+        "type": "CheckpointResumeError",
+        "category": "incompatible_policy"
+      }
+    },
+    {
+      "name": "context-change",
+      "request_override": {
+        "recorded_through": "2026-02-01T23:00:00Z"
+      },
+      "expected_error": {
+        "type": "CheckpointResumeError",
+        "category": "incompatible_context"
+      }
+    },
+    {
+      "name": "hash-change",
+      "request_override": {
+        "checkpoint_manifest_digest": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expected_error": {
+        "type": "CheckpointResumeError",
+        "category": "digest_mismatch"
+      }
+    },
+    {
+      "name": "prefix-correction",
+      "append_record": {
+        "acceptance_sequence": 4,
+        "record_id": "late",
+        "economic_event_id": "prefix-cash-economic",
+        "action": "correct",
+        "account": "acct-main",
+        "recorded_at": "2026-01-04T10:00:00Z",
+        "effective_at": "2026-01-04T09:00:00Z",
+        "provenance": {
+          "source_record_ids": [
+            "late-source"
+          ],
+          "transformation_name": "checkpoint-result-test",
+          "transformation_version": "1"
+        },
+        "payload": {
+          "type": "cash_movement",
+          "amount": "1200",
+          "currency": "USD"
+        },
+        "supersedes_record_id": "prefix-cash"
+      },
+      "expected_error": {
+        "type": "CheckpointResumeError",
+        "category": "late_lifecycle_knowledge"
+      }
+    },
+    {
+      "name": "prefix-cancellation",
+      "append_record": {
+        "acceptance_sequence": 4,
+        "record_id": "late",
+        "economic_event_id": "prefix-cash-economic",
+        "account": "acct-main",
+        "action": "cancel",
+        "recorded_at": "2026-01-04T10:00:00Z",
+        "supersedes_record_id": "prefix-cash",
+        "provenance": {
+          "source_record_ids": [
+            "late-source"
+          ],
+          "transformation_name": "checkpoint-result-test",
+          "transformation_version": "1"
+        }
+      },
+      "expected_error": {
+        "type": "CheckpointResumeError",
+        "category": "late_lifecycle_knowledge"
+      }
+    },
+    {
+      "name": "prefix-reversal",
+      "append_record": {
+        "acceptance_sequence": 4,
+        "record_id": "late",
+        "economic_event_id": "late-economic",
+        "action": "reverse",
+        "account": "acct-main",
+        "recorded_at": "2026-01-04T10:00:00Z",
+        "effective_at": "2026-01-04T09:00:00Z",
+        "provenance": {
+          "source_record_ids": [
+            "late-source"
+          ],
+          "transformation_name": "checkpoint-result-test",
+          "transformation_version": "1"
+        },
+        "payload": {
+          "type": "cash_movement",
+          "amount": "-1000",
+          "currency": "USD"
+        },
+        "reverses_record_id": "prefix-cash"
+      },
+      "expected_error": {
+        "type": "CheckpointResumeError",
+        "category": "late_lifecycle_knowledge"
+      }
+    },
+    {
+      "name": "economically-earlier",
+      "append_record": {
+        "acceptance_sequence": 4,
+        "record_id": "early",
+        "economic_event_id": "early-economic",
+        "action": "originate",
+        "account": "acct-main",
+        "recorded_at": "2026-01-04T10:00:00Z",
+        "effective_at": "2026-01-01T09:00:00Z",
+        "provenance": {
+          "source_record_ids": [
+            "early-source"
+          ],
+          "transformation_name": "checkpoint-result-test",
+          "transformation_version": "1"
+        },
+        "payload": {
+          "type": "cash_movement",
+          "amount": "1",
+          "currency": "USD"
+        }
+      },
+      "expected_error": {
+        "type": "CheckpointResumeError",
+        "category": "late_lifecycle_knowledge"
+      }
+    },
+    {
+      "name": "intermediate-overflow",
+      "base_record_sequences": [
+        1,
+        2
+      ],
+      "prefix_cash_amount": "9223372036854.775807",
+      "append_records": [
+        {
+          "acceptance_sequence": 3,
+          "record_id": "plus",
+          "economic_event_id": "plus-economic",
+          "action": "originate",
+          "account": "acct-main",
+          "recorded_at": "2026-01-03T10:00:00Z",
+          "effective_at": "2026-01-03T09:00:00Z",
+          "provenance": {
+            "source_record_ids": [
+              "plus-source"
+            ],
+            "transformation_name": "checkpoint-result-test",
+            "transformation_version": "1"
+          },
+          "payload": {
+            "type": "cash_movement",
+            "amount": "0.000001",
+            "currency": "USD"
+          }
+        },
+        {
+          "acceptance_sequence": 4,
+          "record_id": "minus",
+          "economic_event_id": "minus-economic",
+          "action": "originate",
+          "account": "acct-main",
+          "recorded_at": "2026-01-04T10:00:00Z",
+          "effective_at": "2026-01-04T09:00:00Z",
+          "provenance": {
+            "source_record_ids": [
+              "minus-source"
+            ],
+            "transformation_name": "checkpoint-result-test",
+            "transformation_version": "1"
+          },
+          "payload": {
+            "type": "cash_movement",
+            "amount": "-0.000001",
+            "currency": "USD"
+          }
+        }
+      ],
+      "expected_error": {
+        "type": "CashProjectionError",
+        "category": "amount_overflow"
+      },
+      "full_replay_error": "amount_overflow"
+    },
+    {
+      "name": "canonical-construction-failure",
+      "append_record": {
+        "acceptance_sequence": 4,
+        "record_id": "unencodable",
+        "economic_event_id": "unencodable-economic",
+        "action": "originate",
+        "account": "acct-main",
+        "recorded_at": "2026-01-04T10:00:00Z",
+        "effective_at": "2026-01-04T09:00:00Z",
+        "provenance": {
+          "source_record_ids": [
+            "duplicate",
+            "duplicate"
+          ],
+          "transformation_name": "synthetic",
+          "transformation_version": "1"
+        },
+        "payload": {
+          "type": "cash_movement",
+          "amount": "1",
+          "currency": "USD"
+        }
+      },
+      "expected_error": {
+        "type": "CheckpointResultConstructionError",
+        "category": "canonical_encoding"
+      }
+    },
+    {
+      "name": "factory-failure",
+      "append_record": {
+        "acceptance_sequence": 4,
+        "record_id": "record-e\u0301",
+        "economic_event_id": "non-nfc-economic",
+        "action": "originate",
+        "account": "acct-main",
+        "recorded_at": "2026-01-04T10:00:00Z",
+        "effective_at": "2026-01-04T09:00:00Z",
+        "provenance": {
+          "source_record_ids": [
+            "nfc-source"
+          ],
+          "transformation_name": "checkpoint-result-test",
+          "transformation_version": "1"
+        },
+        "payload": {
+          "type": "cash_movement",
+          "amount": "1",
+          "currency": "USD"
+        }
+      },
+      "expected_error": {
+        "type": "CheckpointError",
+        "category": "invalid_text"
+      }
+    }
+  ],
+  "assertions": [
+    "error yields no state-plus-manifest result",
+    "all input records, request, manifest and checkpoint state remain unchanged",
+    "original application diagnostics retain category and exact message"
+  ]
+}

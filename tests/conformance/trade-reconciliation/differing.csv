@@ -1,0 +1,2 @@
+external_trade_id,account,instrument,quantity,price,currency,trade_date,settlement_date
+custodian-42,fund-a,AAPL,-80,55,EUR,2026-09-29,2026-09-30

@@ -1,12 +1,15 @@
 cmake_minimum_required(VERSION 3.24)
-project(pacioli VERSION 0.1.0 LANGUAGES CXX)
+project(luca VERSION 0.1.0 LANGUAGES CXX)
 
 include(CMakePackageConfigHelpers)
 include(GNUInstallDirs)
 
-set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+include(cmake/LucaOptions.cmake)
+luca_compatible_option(BUILD_TESTS "Build LUCA tests" ${PROJECT_IS_TOP_LEVEL})
+luca_compatible_option(BUILD_BENCHMARKS "Build reproducible performance benchmarks" OFF)
+luca_compatible_option(BUILD_TOOLS "Build standalone LUCA tools" ${PROJECT_IS_TOP_LEVEL})
 
 add_library(luca_ledger INTERFACE)
 add_library(luca::ledger ALIAS luca_ledger)
@@ -36,6 +39,16 @@ target_link_libraries(luca_reconciliation INTERFACE
   luca::portfolio
   luca::ledger)
 
+# Adapters are an explicit opt-in surface; the existing core target graph is unchanged.
+add_library(luca_adapters INTERFACE)
+add_library(luca::adapters ALIAS luca_adapters)
+set_target_properties(luca_adapters PROPERTIES EXPORT_NAME adapters)
+target_compile_features(luca_adapters INTERFACE cxx_std_23)
+target_include_directories(luca_adapters INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/libs/adapters/include>
+  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+target_link_libraries(luca_adapters INTERFACE luca::reconciliation)
+
 add_library(pacioli INTERFACE)
 add_library(luca::luca ALIAS pacioli)
 set_target_properties(pacioli PROPERTIES EXPORT_NAME luca)
@@ -53,6 +66,7 @@ install(
     luca_ledger
     luca_portfolio
     luca_reconciliation
+    luca_adapters
     pacioli
   EXPORT LucaTargets)
 install(
@@ -60,6 +74,7 @@ install(
     libs/ledger/include/
     libs/portfolio/include/
     libs/reconciliation/include/
+    libs/adapters/include/
     include/
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
   FILES_MATCHING PATTERN "*.hpp")
@@ -83,14 +98,11 @@ install(
     ${CMAKE_CURRENT_BINARY_DIR}/LucaConfigVersion.cmake
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Luca)
 
-option(PACIOLI_BUILD_TOOLS "Build standalone Luca tools" ${PROJECT_IS_TOP_LEVEL})
-if(PACIOLI_BUILD_TOOLS)
+if(LUCA_BUILD_TOOLS)
   add_subdirectory(tools/exact-cash)
 endif()
 
-option(PACIOLI_BUILD_TESTS "Build tests" ${PROJECT_IS_TOP_LEVEL})
-option(PACIOLI_BUILD_BENCHMARKS "Build reproducible performance benchmarks" OFF)
-if(PACIOLI_BUILD_TESTS)
+if(LUCA_BUILD_TESTS)
   enable_testing()
   find_package(Python3 REQUIRED COMPONENTS Interpreter)
   add_executable(pacioli_smoke_test tests/smoke.cpp)
@@ -148,6 +160,39 @@ if(PACIOLI_BUILD_TESTS)
   target_link_libraries(pacioli_checkpoint_apply_test PRIVATE luca::portfolio)
   add_test(NAME pacioli_checkpoint_apply_test
     COMMAND pacioli_checkpoint_apply_test)
+
+  add_executable(pacioli_checkpoint_result_test tests/unit/checkpoint_result_test.cpp)
+  target_link_libraries(pacioli_checkpoint_result_test PRIVATE luca::portfolio)
+  add_test(NAME pacioli_checkpoint_result_test COMMAND pacioli_checkpoint_result_test)
+
+  add_executable(pacioli_settlement_date_projection_test
+    tests/unit/settlement_date_projection_test.cpp)
+  target_link_libraries(pacioli_settlement_date_projection_test PRIVATE luca::portfolio)
+  add_test(NAME pacioli_settlement_date_projection_test
+    COMMAND pacioli_settlement_date_projection_test)
+
+  add_executable(luca_financial_algebra_test tests/unit/financial_algebra_test.cpp)
+  target_link_libraries(luca_financial_algebra_test PRIVATE luca::reconciliation)
+  add_test(NAME luca_financial_algebra_test COMMAND luca_financial_algebra_test)
+
+  add_executable(luca_trade_reconciliation_test tests/unit/trade_reconciliation_test.cpp)
+  target_link_libraries(luca_trade_reconciliation_test PRIVATE luca::reconciliation)
+  add_test(NAME luca_trade_reconciliation_test COMMAND luca_trade_reconciliation_test)
+
+  add_executable(luca_trade_csv_test tests/unit/trade_csv_test.cpp)
+  target_link_libraries(luca_trade_csv_test PRIVATE luca::adapters)
+  target_compile_definitions(luca_trade_csv_test PRIVATE
+    LUCA_TRADE_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/conformance/trade-reconciliation")
+  add_test(NAME luca_trade_csv_test COMMAND luca_trade_csv_test)
+
+  # These semantic checks use assertions; keep them active in Release builds too.
+  foreach(luca_semantic_test IN ITEMS
+      pacioli_checkpoint_result_test pacioli_settlement_date_projection_test
+      luca_financial_algebra_test luca_trade_reconciliation_test luca_trade_csv_test)
+    target_compile_options(${luca_semantic_test} PRIVATE
+      "$<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>"
+      "$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG>")
+  endforeach()
 
   add_executable(pacioli_provenance_test tests/unit/provenance_test.cpp)
   target_link_libraries(pacioli_provenance_test PRIVATE pacioli)
@@ -260,6 +305,17 @@ if(PACIOLI_BUILD_TESTS)
       -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/package_consumer/run_test.cmake)
 
   add_test(
+    NAME luca_package_options_test
+    COMMAND ${CMAKE_COMMAND}
+      -DLUCA_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+      -DLUCA_OPTIONS_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/package_options
+      -DLUCA_GENERATOR=${CMAKE_GENERATOR}
+      -DLUCA_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}
+      -DLUCA_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}
+      -DLUCA_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/parent_consumer/options.cmake)
+
+  add_test(
     NAME luca_parent_consumer_test
     COMMAND ${CMAKE_COMMAND}
       -DLUCA_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
@@ -274,7 +330,7 @@ if(PACIOLI_BUILD_TESTS)
       -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/parent_consumer/run_test.cmake)
 endif()
 
-if(PACIOLI_BUILD_BENCHMARKS)
+if(LUCA_BUILD_BENCHMARKS)
   add_executable(pacioli_benchmarks
     tests/benchmarks/benchmark_main.cpp
     tests/benchmarks/ledger_benchmark.cpp

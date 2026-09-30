@@ -321,10 +321,21 @@ The long-term performance objective is simple:
 > **financial semantics rigorous enough for accounting, implemented like a modern compute engine.**
 
 
-## Planned transformation contract (O5)
+## Financial algebras and reporting projections (O5)
 
-This is a design direction for review, not an implemented public API. Build a small typed contract around existing projections and accounting policy: explicit immutable inputs, evaluation context, named/versioned transform, typed result or diagnostic and provenance. Distinguish stateless mappings from ordered state transitions and reducible summaries; composition requires compatible domain types, units and context.
+LUCA uses financial algebras to describe typed operations and their valid laws, and named, versioned projections to derive financial and reporting views from immutable evidence. The public `FinancialAlgebraDescriptor` records operation kind, ports, ordering, partitions, policy/version and qualified law declarations. It validates declaration structure; it does not prove laws, run arbitrary computations, or grant optimization permission.
 
-Document each transform's actual algebraic properties. Associative reduction may permit partition merging, but commutativity and invertibility are independent claims. Lot allocation and causal corrections retain ordering. Reversing an economic event does not imply every derived computation has an inverse. Conformance fixtures must prove supported full, incremental and partitioned execution agree and demonstrate cases where reordering is invalid.
+Concrete implementations include lifecycle resolution, portfolio projections, exact-cash reductions/comparisons, trade-date and settlement-date fixture journals, and exact trade comparison. The [custom reporting example](../examples/financial-algebra-report/README.md) reuses the existing financial operations while retaining projected and observed evidence separately. Typed generic composition and runtime policy loading remain future work. Distinguish stateless mappings from ordered state transitions and reducible summaries; composition requires compatible domain types, units and context. See [the public algebra contract](financial-algebras.md).
+
+Document each transform's actual algebraic properties. Associative reduction may permit partition merging on its declared domain, but commutativity and invertibility are independent claims. Checked finite-width arithmetic also requires representable intermediate results for every permitted grouping; arbitrary regrouping may otherwise change whether overflow occurs. Lot allocation and causal corrections retain ordering. Reversing an economic event does not imply every derived computation has an inverse. Conformance fixtures must prove supported full, incremental and partitioned execution agree and demonstrate cases where reordering is invalid.
 
 Engine, policy, context and input identities accompany canonical results; operational job IDs/timestamps are separate. Hosting layers supply storage, network access, authorization and scheduling. An external tool or hosted app uses the same OSS arithmetic. Custom financial output is not accepted into authoritative platform state solely because an agent or external program supplied it. See [roadmap clarification](roadmap.md#backlog-clarification--transformations-and-portable-accounting-2026-09-23) for scope and sequencing.
+
+
+## Additive public interfaces
+
+- [Checkpoint continuation](checkpoint-result.md) returns state plus a refreshed canonical manifest under the existing conservative compatibility rules. Changed cutoffs or corrections targeting the old prefix still require full replay.
+- [Settlement-date journals](settlement-date-projection.md) implement the narrow USD fixture policy alongside the existing trade-date projection. These are financial projection foundations, not production GAAP/IFRS/tax coverage.
+- [Trade reconciliation](trade-reconciliation.md) compares explicitly mapped trade identities with separate immutable observations. The bounded CSV adapter is available through opt-in `luca::adapters`; core targets keep their existing dependency graph.
+
+The library's core functions have no hidden database or network access. Configuring or compiling these interfaces does not establish runtime financial correctness; executed conformance and integration evidence must be recorded separately.
