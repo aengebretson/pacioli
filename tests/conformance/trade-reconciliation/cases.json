@@ -1,0 +1,52 @@
+{
+  "schema": "luca.trade-reconciliation.fixture.v1",
+  "description": "Synthetic reporting projection; hand-authored expected semantics, execution paused. Decimal strings are exact. Source hashes are synthetic labels, not authenticity claims.",
+  "context": {
+    "economic_as_of": "2026-09-30T00:00:00Z",
+    "recorded_through": "2026-09-30T00:00:00Z",
+    "trade_date_from": "2026-09-28",
+    "trade_date_through": "2026-09-30",
+    "accounts": ["fund-a"],
+    "policy": "luca.trade-comparison.exact",
+    "version": "1"
+  },
+  "source_records": [
+    {"id": "execution-1", "source": "synthetic-execution", "payload_hash": {"algorithm": "synthetic", "value": "original-execution"}},
+    {"id": "execution-2", "source": "synthetic-execution", "payload_hash": {"algorithm": "synthetic", "value": "corrected-execution"}},
+    {"id": "mapping-1", "source": "synthetic-mapping", "payload_hash": {"algorithm": "synthetic", "value": "original-mapping"}},
+    {"id": "mapping-2", "source": "synthetic-mapping", "payload_hash": {"algorithm": "synthetic", "value": "corrected-mapping"}}
+  ],
+  "lifecycle_records": [
+    {
+      "record_id": "record-1", "economic_event_id": "economic-1", "action": "originate",
+      "recorded_at": "2026-09-28T00:00:00Z", "effective_at": "2026-09-28T00:00:00Z",
+      "account": "fund-a", "instrument": "MSFT", "quantity": "100", "price": "50",
+      "currency": "USD", "settlement_date": "2026-09-29",
+      "provenance": {"source_records": ["execution-1"], "transformation_name": "fixture", "transformation_version": "1"}
+    },
+    {
+      "record_id": "record-2", "economic_event_id": "economic-1", "action": "correct",
+      "supersedes_record_id": "record-1",
+      "recorded_at": "2026-09-30T00:00:00Z", "effective_at": "2026-09-28T00:00:00Z",
+      "account": "fund-a", "instrument": "MSFT", "quantity": "80", "price": "55",
+      "currency": "USD", "settlement_date": "2026-09-29",
+      "provenance": {"source_records": ["execution-2"], "transformation_name": "fixture", "transformation_version": "1"}
+    }
+  ],
+  "mappings": {
+    "original": {"economic_event_id": "economic-1", "active_record_id": "record-1", "account": "fund-a", "external_trade_id": "custodian-42", "trade_date": "2026-09-28", "provenance": {"source_records": ["mapping-1"], "transformation_name": "fixture.trade-map", "transformation_version": "1"}},
+    "corrected": {"economic_event_id": "economic-1", "active_record_id": "record-2", "account": "fund-a", "external_trade_id": "custodian-42", "trade_date": "2026-09-28", "provenance": {"source_records": ["mapping-2"], "transformation_name": "fixture.trade-map", "transformation_version": "1"}}
+  },
+  "statement_source_defaults": {"source": "synthetic-custodian", "observed_at": "2026-09-30T00:00:00Z", "payload_hash_algorithm": "synthetic", "row_identity": "trade-csv-v1:19:synthetic-custodian:<statement_id UTF-8 byte length>:<statement_id>:<physical row>", "transformation_name": "luca.trade-csv", "transformation_version": "1"},
+  "cases": [
+    {"name": "exact", "records": ["record-1"], "mapping": "original", "csv": "exact.csv", "statement_id": "statement-original", "payload_hash_value": "original-statement", "expected": [{"account": "fund-a", "external_trade_id": "custodian-42", "kind": "exact_match", "differing_fields": [], "projected_lineage": ["record-1"], "observed_physical_row": 2}]},
+    {"name": "all-fields-differ", "records": ["record-1"], "mapping": "original", "csv": "differing.csv", "statement_id": "statement-different", "payload_hash_value": "different-statement", "expected": [{"account": "fund-a", "external_trade_id": "custodian-42", "kind": "field_mismatch", "differing_fields": ["instrument", "quantity", "price", "currency", "trade_date", "settlement_date"], "projected_lineage": ["record-1"], "observed_physical_row": 2}]},
+    {"name": "missing", "records": ["record-1"], "mapping": "original", "csv": "missing.csv", "statement_id": "statement-empty", "payload_hash_value": "empty-statement", "expected": [{"account": "fund-a", "external_trade_id": "custodian-42", "kind": "missing_observation", "differing_fields": [], "projected_lineage": ["record-1"], "observed_physical_row": null}]},
+    {"name": "no-inferred-match", "records": ["record-1"], "mapping": "original", "csv": "unexpected.csv", "statement_id": "statement-extra", "payload_hash_value": "extra-statement", "expected": [{"account": "fund-a", "external_trade_id": "custodian-42", "kind": "missing_observation", "differing_fields": [], "projected_lineage": ["record-1"], "observed_physical_row": null}, {"account": "fund-a", "external_trade_id": "custodian-extra", "kind": "unexpected_observation", "differing_fields": [], "projected_lineage": [], "observed_physical_row": 2}]},
+    {"name": "corrected-authoritative-original-statement", "records": ["record-1", "record-2"], "mapping": "corrected", "csv": "exact.csv", "statement_id": "statement-original", "payload_hash_value": "original-statement", "expected": [{"account": "fund-a", "external_trade_id": "custodian-42", "kind": "field_mismatch", "differing_fields": ["quantity", "price"], "projected_lineage": ["record-1", "record-2"], "observed_physical_row": 2}]},
+    {"name": "corrected-independent-statement", "records": ["record-1", "record-2"], "mapping": "corrected", "csv": "corrected.csv", "statement_id": "statement-corrected", "payload_hash_value": "corrected-statement", "expected": [{"account": "fund-a", "external_trade_id": "custodian-42", "kind": "exact_match", "differing_fields": [], "projected_lineage": ["record-1", "record-2"], "observed_physical_row": 2}]},
+    {"name": "duplicate", "csv": "duplicate.csv", "statement_id": "statement-duplicate", "payload_hash_value": "duplicate-statement", "expected_error": {"code": "duplicate_key", "row": 3, "column": 0, "no_partial_output": true}},
+    {"name": "ambiguous", "csv": "ambiguous.csv", "statement_id": "statement-ambiguous", "payload_hash_value": "ambiguous-statement", "expected_error": {"code": "duplicate_key", "row": 3, "column": 0, "no_partial_output": true}},
+    {"name": "malformed", "csv": "malformed.csv", "statement_id": "statement-malformed", "payload_hash_value": "malformed-statement", "expected_error": {"code": "invalid_decimal", "row": 3, "column": 5, "no_partial_output": true}}
+  ]
+}

@@ -1,0 +1,2 @@
+external_trade_id,account,instrument,quantity,price,currency,trade_date,settlement_date
+custodian-extra,fund-a,MSFT,100,50,USD,2026-09-28,2026-09-29
