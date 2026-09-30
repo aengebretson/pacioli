@@ -1,0 +1,941 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:luca:curve-premium:schemas:v1",
+  "title": "Q2-I18 research interfaces v1",
+  "$defs": {
+    "predeclaration": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "luca.curve-premium-predeclaration.v1"
+        },
+        "study": {
+          "const": "vix_strip_proxy_exploratory"
+        },
+        "partitions": {
+          "type": "object"
+        },
+        "terms": {
+          "type": "object"
+        },
+        "physical_models": {
+          "type": "object"
+        },
+        "premium_models": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "timing": {
+          "type": "object"
+        },
+        "prediction_interval": {
+          "type": "object"
+        },
+        "declared_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "schema_version",
+        "study",
+        "partitions",
+        "terms",
+        "physical_models",
+        "premium_models",
+        "timing",
+        "prediction_interval",
+        "declared_at"
+      ],
+      "additionalProperties": true
+    },
+    "forecast": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "luca.curve-premium-forecast.v1"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "study": {
+          "const": "vix_strip_proxy_exploratory"
+        },
+        "origin": {
+          "type": "string",
+          "format": "date"
+        },
+        "decision_time_local": {
+          "type": "string",
+          "minLength": 1
+        },
+        "decision_timezone": {
+          "const": "America/New_York"
+        },
+        "horizon_end": {
+          "type": "string",
+          "format": "date"
+        },
+        "horizon_calendar_days": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "forecast_intervals": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tau_act365": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "term": {
+          "enum": [
+            "VIX9D",
+            "VIX",
+            "VIX3M",
+            "VIX6M",
+            "VIX1Y"
+          ]
+        },
+        "physical_model": {
+          "enum": [
+            "rolling",
+            "ewma",
+            "garch_1_1"
+          ]
+        },
+        "premium_model": {
+          "enum": [
+            "trailing_mean",
+            "trailing_median",
+            "linear_physical_variance"
+          ]
+        },
+        "fit_partition_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "W_P": {
+          "type": "number",
+          "minimum": 0
+        },
+        "predicted_normal_excess": {
+          "type": "number"
+        },
+        "predicted_W_market_proxy": {
+          "type": "number"
+        },
+        "excess_prediction_band": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "prediction_band_error_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "partition": {
+          "enum": [
+            "interval_warmup",
+            "exploratory_evaluation"
+          ]
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "schema_version",
+        "id",
+        "study",
+        "origin",
+        "decision_time_local",
+        "decision_timezone",
+        "horizon_end",
+        "horizon_calendar_days",
+        "forecast_intervals",
+        "tau_act365",
+        "term",
+        "physical_model",
+        "premium_model",
+        "fit_partition_id",
+        "W_P",
+        "predicted_normal_excess",
+        "predicted_W_market_proxy",
+        "excess_prediction_band",
+        "prediction_band_error_count",
+        "partition",
+        "created_at"
+      ],
+      "additionalProperties": true
+    },
+    "fit": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "luca.curve-premium-fit.v1"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "origin": {
+          "type": "string",
+          "format": "date"
+        },
+        "physical_fit_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "training_observation_ids": {
+          "type": "array",
+          "minItems": 126,
+          "maxItems": 252,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "training_first_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "training_last_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "training_sha256": {
+          "type": "string",
+          "minLength": 1
+        },
+        "interval_error_forecast_ids": {
+          "type": "array",
+          "maxItems": 126,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "coefficients": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "items": {
+            "type": "number"
+          }
+        },
+        "predictor_train_center": {
+          "type": "number"
+        },
+        "predictor_train_scale": {
+          "type": "number"
+        },
+        "training_rmse_annualized_descriptive_only": {
+          "type": "number"
+        },
+        "training_bias_annualized_descriptive_only": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "schema_version",
+        "id",
+        "origin",
+        "physical_fit_id",
+        "training_observation_ids",
+        "training_first_date",
+        "training_last_date",
+        "training_sha256",
+        "interval_error_forecast_ids",
+        "coefficients",
+        "predictor_train_center",
+        "predictor_train_scale",
+        "training_rmse_annualized_descriptive_only",
+        "training_bias_annualized_descriptive_only"
+      ],
+      "additionalProperties": true
+    },
+    "result": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "luca.curve-premium-result.v1"
+        },
+        "study": {
+          "const": "vix_strip_proxy_exploratory"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "forecast_seal_sha256": {
+          "type": "string",
+          "minLength": 1
+        },
+        "predeclaration_sha256": {
+          "type": "string",
+          "minLength": 1
+        },
+        "no_untouched_holdout": {
+          "const": true
+        },
+        "scored_records": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "candidate_groups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "term",
+              "physical_model",
+              "premium_model",
+              "horizon_days",
+              "daily_overlapping_descriptive",
+              "nonoverlapping_primary"
+            ]
+          }
+        },
+        "nonoverlap_schedules": {
+          "type": "object"
+        },
+        "exclusions": {
+          "type": "object"
+        },
+        "atm_study": {
+          "type": "object"
+        },
+        "claims": {
+          "type": "object"
+        },
+        "prediction_band_scope": {
+          "type": "object"
+        },
+        "timing": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "schema_version",
+        "study",
+        "created_at",
+        "forecast_seal_sha256",
+        "predeclaration_sha256",
+        "no_untouched_holdout",
+        "scored_records",
+        "candidate_groups",
+        "nonoverlap_schedules",
+        "exclusions",
+        "atm_study",
+        "claims",
+        "prediction_band_scope",
+        "timing"
+      ],
+      "additionalProperties": true
+    },
+    "atm_input": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "luca.curve-premium-atm-input.v1"
+        },
+        "instrument_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "contract_evidence": {
+          "type": "string",
+          "minLength": 1
+        },
+        "availability_evidence": {
+          "type": "string",
+          "minLength": 1
+        },
+        "settlement_evidence": {
+          "type": "string",
+          "minLength": 1
+        },
+        "iv_method": {
+          "type": "string",
+          "minLength": 1
+        },
+        "iv_side": {
+          "type": "string",
+          "minLength": 1
+        },
+        "atm_selection_rule": {
+          "type": "string",
+          "minLength": 1
+        },
+        "atm_selection_evidence": {
+          "type": "string",
+          "minLength": 1
+        },
+        "forward_evidence": {
+          "type": "string",
+          "minLength": 1
+        },
+        "discount_evidence": {
+          "type": "string",
+          "minLength": 1
+        },
+        "physical_forecast_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "information_cutoff": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "available_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payoff_fixing_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payment_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "physical_information_cutoff": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "physical_horizon_start": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "physical_horizon_end": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "strike_points": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "forward_points": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "discount_factor": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "study": {
+          "const": "atm_option_iv_proxy"
+        },
+        "underlying_id": {
+          "const": "SPX"
+        },
+        "option_right": {
+          "enum": [
+            "C",
+            "P"
+          ]
+        },
+        "settlement_style": {
+          "enum": [
+            "AM",
+            "PM"
+          ]
+        },
+        "day_count": {
+          "const": "ACT/365F"
+        },
+        "iv_units": {
+          "const": "annual_decimal"
+        },
+        "tau_years": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "iv": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "W_P": {
+          "type": "number",
+          "minimum": 0
+        },
+        "forward_available_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "discount_available_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "schema_version",
+        "instrument_id",
+        "contract_evidence",
+        "availability_evidence",
+        "settlement_evidence",
+        "iv_method",
+        "iv_side",
+        "atm_selection_rule",
+        "atm_selection_evidence",
+        "forward_evidence",
+        "discount_evidence",
+        "physical_forecast_id",
+        "source_sha256",
+        "information_cutoff",
+        "observed_at",
+        "available_at",
+        "payoff_fixing_at",
+        "payment_at",
+        "physical_information_cutoff",
+        "physical_horizon_start",
+        "physical_horizon_end",
+        "strike_points",
+        "forward_points",
+        "discount_factor",
+        "study",
+        "underlying_id",
+        "option_right",
+        "settlement_style",
+        "day_count",
+        "iv_units",
+        "tau_years",
+        "iv",
+        "W_P",
+        "forward_available_at",
+        "discount_available_at"
+      ],
+      "additionalProperties": true
+    },
+    "atm_observation": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "luca.curve-premium-atm-observation.v1"
+        },
+        "study": {
+          "const": "atm_option_iv_proxy"
+        },
+        "instrument_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "information_cutoff": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payoff_fixing_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "tau_act365": {
+          "type": "number"
+        },
+        "W_market": {
+          "type": "number"
+        },
+        "W_P": {
+          "type": "number"
+        },
+        "observed_excess": {
+          "type": "number"
+        },
+        "strike_over_forward": {
+          "type": "string",
+          "minLength": 1
+        },
+        "interpretation": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "schema_version",
+        "study",
+        "instrument_id",
+        "information_cutoff",
+        "payoff_fixing_at",
+        "tau_act365",
+        "W_market",
+        "W_P",
+        "observed_excess",
+        "strike_over_forward",
+        "interpretation"
+      ],
+      "additionalProperties": true
+    },
+    "dollar_leg": {
+      "type": "object",
+      "required": [
+        "instrument_id",
+        "quote_id",
+        "underlying_id",
+        "contract_evidence",
+        "observed_at",
+        "available_at",
+        "payoff_fixing_at",
+        "payment_at",
+        "strike_points",
+        "bid_points",
+        "ask_points",
+        "bid_size",
+        "ask_size",
+        "multiplier",
+        "quantity",
+        "right",
+        "settlement_style"
+      ],
+      "properties": {
+        "instrument_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "quote_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "underlying_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "contract_evidence": {
+          "type": "string",
+          "minLength": 1
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "available_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payoff_fixing_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payment_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "strike_points": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "bid_points": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "ask_points": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "bid_size": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "ask_size": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "multiplier": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "quantity": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "right": {
+          "enum": [
+            "C",
+            "P"
+          ]
+        },
+        "settlement_style": {
+          "enum": [
+            "AM",
+            "PM"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "dollar_input": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "luca.curve-premium-dollar-input.v1"
+        },
+        "valuation_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "valuation_method": {
+          "type": "string",
+          "minLength": 1
+        },
+        "valuation_uncertainty_scope": {
+          "type": "string",
+          "minLength": 1
+        },
+        "omitted_uncertainty": {
+          "type": "string",
+          "minLength": 1
+        },
+        "simultaneous_quote_evidence": {
+          "type": "string",
+          "minLength": 1
+        },
+        "eligibility_evidence": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cost_assumptions": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hedge_policy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hedge_instrument": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hedge_rounding": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hedge_basis_risk": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exit_policy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exit_horizon": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exit_liquidity_assumption": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tail_risk_limit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "information_cutoff": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "valuation_available_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "total_position_fair_value_lower_usd": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "total_position_fair_value_upper_usd": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "fees_usd": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "entry_slippage_usd": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "hedge_cost_budget_usd": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "exit_cost_budget_usd": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "additional_uncertainty_reserve_usd": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "currency": {
+          "const": "USD"
+        },
+        "max_quote_age_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_leg_skew_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "legs": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/$defs/dollar_leg"
+          }
+        },
+        "valuation_information_cutoff": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "valuation_payoff_fixing_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "valuation_payment_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "valuation_leg_ids": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "valuation_quantity": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "financing_cost_budget_usd": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "margin_feasibility_evidence": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "schema_version",
+        "valuation_id",
+        "valuation_method",
+        "valuation_uncertainty_scope",
+        "omitted_uncertainty",
+        "simultaneous_quote_evidence",
+        "eligibility_evidence",
+        "cost_assumptions",
+        "hedge_policy",
+        "hedge_instrument",
+        "hedge_rounding",
+        "hedge_basis_risk",
+        "exit_policy",
+        "exit_horizon",
+        "exit_liquidity_assumption",
+        "tail_risk_limit",
+        "information_cutoff",
+        "valuation_available_at",
+        "total_position_fair_value_lower_usd",
+        "total_position_fair_value_upper_usd",
+        "fees_usd",
+        "entry_slippage_usd",
+        "hedge_cost_budget_usd",
+        "exit_cost_budget_usd",
+        "additional_uncertainty_reserve_usd",
+        "currency",
+        "max_quote_age_seconds",
+        "max_leg_skew_seconds",
+        "legs",
+        "valuation_information_cutoff",
+        "valuation_payoff_fixing_at",
+        "valuation_payment_at",
+        "valuation_leg_ids",
+        "valuation_quantity",
+        "financing_cost_budget_usd",
+        "margin_feasibility_evidence"
+      ],
+      "additionalProperties": true
+    },
+    "dollar_result": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "luca.curve-premium-dollar-result.v1"
+        },
+        "currency": {
+          "const": "USD"
+        },
+        "both_asks_usd": {
+          "type": "string",
+          "minLength": 1
+        },
+        "both_bids_usd": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cost_and_reserve_usd": {
+          "type": "string",
+          "minLength": 1
+        },
+        "indicative_buy_margin_usd": {
+          "type": "string",
+          "minLength": 1
+        },
+        "indicative_sell_margin_usd": {
+          "type": "string",
+          "minLength": 1
+        },
+        "interpretation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "execution_edge_established": {
+          "const": false
+        },
+        "fills_established": {
+          "const": false
+        },
+        "profitability_established": {
+          "const": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "currency",
+        "both_asks_usd",
+        "both_bids_usd",
+        "cost_and_reserve_usd",
+        "indicative_buy_margin_usd",
+        "indicative_sell_margin_usd",
+        "interpretation",
+        "execution_edge_established",
+        "fills_established",
+        "profitability_established"
+      ],
+      "additionalProperties": true
+    }
+  },
+  "description": "These are local research contracts, not a shared production interface. ATM/dollar semantic chronology and units are additionally enforced by contracts.py. Generated data belongs outside Git."
+}
