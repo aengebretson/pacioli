@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "task": "Q2-T17",
+  "scope": "Retrospective source-time feasibility; never evidence of contemporaneous receipt, exact fills or P&L",
+  "evaluation": ["2026-09-25T14:00:00Z", "2026-09-25T14:30:00Z"],
+  "context": ["2026-09-25T13:55:00Z", "2026-09-25T14:35:00Z"],
+  "known_before_declaration": "Q2-T16 strict 0/1800 and component exclusions have been inspected. This is a predeclaration of new sensitivity calculations, not an untouched evaluation.",
+  "state_identity": "Within each feed and second, quote identity is bid, ask, bid size, ask size, bidPastLow and askPastHigh; index identity is price. Also count full tick duplicates separately. Identical rows are redundant observations, not proven duplicate events.",
+  "selection": "Greatest source second strictly before decision minus lag. Keep every state in that second. Never select by file/callback order or skip a bad/ambiguous latest second for an older clean one.",
+  "strict": {"quote_spx_max_age_seconds": 5, "vix_max_age_seconds": 60, "core_max_skew_seconds": 1, "lag_seconds": 0},
+  "envelope": "Keep strict validity, freshness and synchronization. Replace quote point-price uniqueness only with min/max over all states in the selected second. Index uniqueness remains required. Bounds are Cartesian outer bounds conditional on observed states; they do not prove simultaneous or executable markets.",
+  "bounds": {"straddle_bid": "[min Cbid + min Pbid, max Cbid + max Pbid]", "straddle_ask": "[min Cask + min Pask, max Cask + max Pask]", "parity_spread": "[min Cbid - max Pask, max Cask - min Pbid]", "pessimistic_displayed_roundtrip": "max Cask + max Pask - min Cbid - min Pbid; descriptive points only, no fill or cost assumption"},
+  "sensitivity": {"quote_spx_max_age_seconds": [1, 2, 5], "vix_max_age_seconds": [15, 30, 60], "core_max_skew_seconds": [0, 1], "grid_seconds": [1, 5, 30, 60], "grid_phases": "all integer phases; report min/max and totals, never select a favorable phase"},
+  "delayed_candidate": {"lag_seconds": 2, "grid_seconds": 5, "grid_phases": "all", "age_policy": "Age measured from actual decision, not lagged cutoff; same 5/60 second caps", "adoption": "Not adopted as causal replay: no receipt timestamp or proven latency bound. Score only as retrospective sensitivity; additional delay cannot recover same-second ordering."},
+  "trade_policy": "Preserve original trade classifications, independently reconcile flags and causal quote exclusions. CBOE f complex trades never standalone fills; empty condition is not standalone proof.",
+  "missing_receipt_pessimistic_bound": "Zero certified causal decisions in every candidate, irrespective of descriptive source-time coverage.",
+  "stopping_rule": "Run this fixed candidate family once; implementation corrections are recorded. Do not tune thresholds to obtain a desired eligible count.",
+  "seed": null,
+  "randomness": "None; deterministic aggregation and exact decimal quote arithmetic"
+}
