@@ -1,3 +1,4 @@
+#include <luca/portfolio/checkpoint_result.hpp>
 #include <luca/portfolio.hpp>
 
 #include <chrono>

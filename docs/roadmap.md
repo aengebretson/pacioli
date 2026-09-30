@@ -271,3 +271,18 @@ From a contribution, equity purchase, settlement and correction/reversal fixture
 Preserve slices 1–4. Review O5's minimal contracts alongside the accounting policy boundary, without blocking narrow accounting on a generic framework. Follow with portable hosts and a platform adapter pinned to a reviewed OSS revision. General plugin loading/ABI, expression languages and expanded accounting remain separately justified work. User-defined transformations do not make external results authoritative without validation. Precise extension signatures and supported algebraic laws require a reviewed design and conformance evidence.
 
 Feature detail: [O4](https://github.com/aengebretson/luca-platform/blob/main/planning/features/O4.md), [O5](https://github.com/aengebretson/luca-platform/blob/main/planning/features/O5.md), [F1](https://github.com/aengebretson/luca-platform/blob/main/planning/features/F1.md). Developer API, editor, app packaging/publication and external Git live in platform D1–D4; they are not dependencies of standalone OSS use.
+
+
+## Implementation increment: financial algebras and reporting projections
+
+The September 2026 integration adds O1 package naming with legacy compatibility,
+O3 state-plus-manifest continuation, O4 settlement-date fixture accounting,
+O5 public financial algebra declarations and a custom reporting projection, and
+F1 exact trade comparison with a bounded CSV observation adapter. Public API
+and restrictions are linked from [the architecture](design.md#additive-public-interfaces).
+
+These are bounded implementations, not completion of O1–O5/F1 or a public release.
+General composition, portable accounting hosts, broader policies, corporate
+actions, lots/P&L, securities finance and scaling remain sequenced follow-ups.
+See [the eleven feature designs](oss-program-20260930/README.md). Runtime acceptance
+for this increment is pending while automated test execution is paused.

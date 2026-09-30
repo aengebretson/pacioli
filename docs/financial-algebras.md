@@ -134,4 +134,6 @@ report evidence, exact comparison, context/currency/partition incompatibility,
 duplicate lineage, deterministic repetition, bounded identity/partition equality,
 and intermediate-overflow counterexamples. Compilation does not establish these
 assertions: their execution is pending while automated testing remains paused.
-Root test registration is an integration step owned by the package lane.
+The integrated root build registers this test. Installed and embedded package
+consumers also compile the public header through `luca::ledger`. Runtime
+acceptance remains pending until testing resumes.

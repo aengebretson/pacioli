@@ -1,9 +1,10 @@
 # Narrow accounting-foundations contract
 
 Status: executable design contract with public C++ journal value types and the
-first bounded trade-date journal projection. This document and the portable
-fixtures define the initial O4 journal semantics. The implementation covers
-only `fixture.trade-date.v1`; it does not claim that LUCA implements all of O4,
+bounded trade-date and settlement-date journal projections. This document and
+the portable fixtures define the initial O4 journal semantics. The implementations
+cover `fixture.trade-date.v1` and `fixture.settlement-date.v1`; they do not claim
+that LUCA implements all of O4,
 or that either fixture policy is suitable for production, GAAP, IFRS, tax, NAV,
 regulatory, or client reporting.
 
@@ -184,6 +185,18 @@ reversals fail as `invalid_reversal_treatment`; the fixture policy does not
 infer a cash posting for them. A negative equity record is accepted only when
 lifecycle resolution identifies an exact reversal target; lifecycle validation
 rejects partial reversals before a resolution can be produced.
+
+### Public settlement-date projection
+
+`<luca/accounting/settlement_date_projection.hpp>` exposes
+`project_settlement_date_journals` through the installed `luca::ledger` target.
+It consumes the same resolved lifecycle inputs and explicit three-cutoff context,
+but recognizes supported equity activity only at the supplied settlement date.
+Contributions remain immediate. The owned result preserves selected identities,
+versions and lineage; it does not modify the trade-date implementation.
+See [the settlement-date API and restrictions](settlement-date-projection.md).
+Both projections remain bounded fixture policies with runtime acceptance tracked
+separately from compilation evidence.
 
 ### Result and portfolio cross-check
 

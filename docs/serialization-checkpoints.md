@@ -10,6 +10,12 @@ the immutable lifecycle resolution and the position, settled-cash, and open-
 settlement projections already implemented. It does not add a persistence
 format.
 
+The additive [checkpoint result API](checkpoint-result.md) wraps a compatible
+suffix application with a refreshed manifest, including the new full-prefix hash,
+state hash, active watermark and lineage. It preserves the v1 wire format and
+conservative compatibility rules; changed cutoffs and prefix-targeting lifecycle
+changes remain outside incremental continuation.
+
 ## Boundary and purpose
 
 The contract permits an authorized process to receive canonical lifecycle input,

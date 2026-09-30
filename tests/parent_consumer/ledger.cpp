@@ -1,3 +1,5 @@
+#include <luca/financial_algebra.hpp>
+#include <luca/accounting/settlement_date_projection.hpp>
 #include <luca/ledger.hpp>
 #include <luca/lifecycle.hpp>
 #include <luca/serialization/canonical.hpp>

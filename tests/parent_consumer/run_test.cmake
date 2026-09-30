@@ -67,16 +67,17 @@ foreach(parent_test IN ITEMS
     luca_parent_reconciliation_consumer_run
     luca_parent_exact_cash_consumer_run
     luca_parent_exact_cash_comparison_consumer_run
-    luca_parent_legacy_consumer_run)
+    luca_parent_legacy_consumer_run
+    luca_parent_adapters_consumer_run)
   if(NOT inventory_output MATCHES "${parent_test}")
     message(FATAL_ERROR
       "Parent default test inventory is missing ${parent_test}\n"
       "${inventory_output}\n${inventory_error}")
   endif()
 endforeach()
-if(NOT inventory_output MATCHES "Total Tests: 7")
+if(NOT inventory_output MATCHES "Total Tests: 8")
   message(FATAL_ERROR
-    "Parent default test inventory was not limited to its seven consumer tests\n"
+    "Parent default test inventory was not limited to its eight consumer tests\n"
     "${inventory_output}\n${inventory_error}")
 endif()
 if(inventory_output MATCHES "pacioli_|luca_package_consumer|benchmark")

@@ -17,15 +17,17 @@ promise, dependency or financial calculation change in this increment.
 
 ## Preserved package surface
 
-The same four names are available through `add_subdirectory` and
-`find_package(Luca 0.1 CONFIG REQUIRED)`:
+The four established target names remain available through `add_subdirectory`
+and `find_package(Luca 0.1 CONFIG REQUIRED)`. Integration adds the separately
+linked `luca::adapters` target without widening the existing umbrella:
 
 | Public target | Public domain | Direct interface dependencies |
 | --- | --- | --- |
 | `luca::ledger` | Values, events, lifecycle, ledger, serialization; existing accounting headers | None |
 | `luca::portfolio` | Position, cash, settlement, lifecycle and replay projections | `luca::ledger` |
 | `luca::reconciliation` | Observations and reconciliation | `luca::portfolio`, `luca::ledger` |
-| `luca::luca` | Compatible umbrella | All three domain targets |
+| `luca::luca` | Compatible umbrella | Ledger, portfolio and reconciliation |
+| `luca::adapters` | Optional external-format adapters, including trade CSV | `luca::reconciliation` |
 
 Each target requires `cxx_std_23`. Source domain targets expose their own include
 root and receive other domains transitively. The umbrella's direct source include
@@ -40,8 +42,10 @@ executable names retain their historical `pacioli_` names so existing automation
 can still address them.
 
 Installation uses relative GNUInstallDirs destinations, with metadata under
-`${CMAKE_INSTALL_LIBDIR}/cmake/Luca`. Existing header directory install rules are
-unchanged. No additional worker's headers or target registrations are included.
+`${CMAKE_INSTALL_LIBDIR}/cmake/Luca`. Existing header directory install rules are preserved. The integrated adapter
+header tree is also installed; consumers opt into its source include root with
+`luca::adapters`. Accounting and financial-algebra headers remain on
+`luca::ledger`; checkpoint continuation remains on `luca::portfolio`.
 
 ## Canonical options and compatibility
 
@@ -78,7 +82,11 @@ Presets use canonical test options; schema version 5 matches the declared CMake
   embedded legacy consumer uses the real `pacioli` source target.
 - The parent consumer checks project identity, language-policy isolation, both
   option names and requested test/tool/benchmark targets. Its default configuration
-  disables Python discovery; its seven consumer tests are parent-owned.
+  disables Python discovery; its eight consumer tests are parent-owned. The new
+  adapter consumer reads a synthetic trade observation and preserves it as an
+  unexpected observation against an empty ledger. Public-header compilation
+  covers financial algebras, settlement-date journals, refreshed checkpoint
+  results and exact trade reconciliation through their owning domain targets.
 - `tests/parent_consumer/options.cmake` covers defaults, canonical and legacy
   ON/OFF options, equivalent boolean spellings, contradictions in both directions,
   parent normal variables, legacy-only cache reconfiguration and top-level defaults.
@@ -92,8 +100,9 @@ Presets use canonical test options; schema version 5 matches the declared CMake
 ## Actual configure/compile/package evidence
 
 Environment: Linux x86_64, CMake 3.25.1, Ninja 1.11.1, GCC/G++ 12.2.0.
-Clang is not installed; native Windows/MSVC is unavailable. All commands below
-completed successfully. `OUT` denotes the assigned O1-T04 runtime output directory
+Clang is not installed; native Windows/MSVC is unavailable. The worker reported that all commands below completed successfully before
+integration. The following counts describe that worker snapshot, not the
+additional integration consumer coverage. `OUT` denotes the assigned O1-T04 runtime output directory
 `/home/andrew/luca-development/state/maintenance/oss-20260930/oss-package-20260930/output`.
 Build products are outside the checkout.
 

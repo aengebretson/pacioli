@@ -405,6 +405,51 @@ void explicit_context_inputs_are_preserved() {
   check(result.manifest.policy() == manifest.policy());
 }
 
+void tied_economic_time_continues_in_acceptance_order() {
+  auto fixture = ordinary_fixture();
+  // The ordering watermark is (effective time, acceptance sequence): a new
+  // payload at the prefix's last effective time still follows that prefix.
+  accept(fixture.ledger, LifecycleRecordDraft::originate(
+      EconomicEventId{"same-time-economic"}, timestamp(2026, 1, 4, 10h),
+      cash_event("same-time", "acct-main", timestamp(2026, 1, 2, 9h), "7", "same-time-source")));
+  const auto result = require(apply_checkpoint_suffix_with_manifest(
+      fixture.request, fixture.manifest, fixture.checkpoint_state,
+      fixture.ledger.records().first(2), fixture.ledger.records().subspan(2)));
+  verify_evidence(result, fixture.ledger, fixture.manifest);
+  check(result.state.settled_cash().front().amount() ==
+        require(Money::parse("1107", currency("USD"))));
+  check(result.manifest.lineage().active_record_ids()[2] == EventId{"same-time"});
+  check(result.manifest.resolved_event_watermark().record_id() == EventId{"suffix-origin"});
+}
+
+void multiple_account_partition_is_preserved() {
+  auto fixture = ordinary_fixture(true);
+  accept(fixture.ledger, LifecycleRecordDraft::originate(
+      EconomicEventId{"other-account-economic"}, timestamp(2026, 1, 4, 10h),
+      cash_event("other-account", "acct-other", timestamp(2026, 1, 4, 9h), "19",
+                 "other-account-source", currency("EUR"))));
+  const auto result = require(apply_checkpoint_suffix_with_manifest(
+      fixture.request, fixture.manifest, fixture.checkpoint_state,
+      fixture.ledger.records().first(2), fixture.ledger.records().subspan(2)));
+  const auto full = project_state(fixture.ledger, context());
+  check(result.state == full);
+  check(result.manifest == make_manifest(fixture.ledger, full, context(),
+      {AccountId{"acct-main"}, AccountId{"acct-other"}}));
+  check(result.manifest.partition() == fixture.manifest.partition());
+  // A second continuation must accept the exact refreshed partition and
+  // preserve currency/account separation through the returned evidence.
+  const auto boundary = fixture.ledger.size();
+  accept(fixture.ledger, LifecycleRecordDraft::originate(
+      EconomicEventId{"other-account-second-economic"}, timestamp(2026, 1, 5, 10h),
+      cash_event("other-account-second", "acct-other", timestamp(2026, 1, 5, 9h), "3",
+                 "other-account-second-source", currency("EUR"))));
+  const auto second = require(apply_checkpoint_suffix_with_manifest(
+      make_request(result.manifest), result.manifest, result.state,
+      fixture.ledger.records().first(boundary), fixture.ledger.records().subspan(boundary)));
+  check(second.state == project_state(fixture.ledger, context()));
+  check(second.manifest.partition() == fixture.manifest.partition());
+}
+
 void expect_forwarded_resume_error(const Fixture &fixture, const CheckpointResumeRequest &request,
                                   std::span<const LifecycleRecord> suffix,
                                   CheckpointResumeDiagnosticCategory category) {
@@ -574,6 +619,8 @@ int main() {
   full_replay_and_multiple_continuations();
   context_selection_and_watermark_are_not_last_acceptance();
   explicit_context_inputs_are_preserved();
+  tied_economic_time_continues_in_acceptance_order();
+  multiple_account_partition_is_preserved();
   economic_order_and_source_order_are_explicit();
   factory_failure_retains_its_diagnostic();
   errors_are_forwarded_without_mutation();

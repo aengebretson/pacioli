@@ -34,7 +34,9 @@ an ordinary compatible suffix `S`, the intended continuation law is:
 This law requires the identical evaluation context `C`, projection, engine,
 policy and account partition; a nonempty contiguous suffix; no lifecycle edge
 targeting prefix knowledge; and every suffix payload strictly after the prefix
-resolved economic watermark. Arithmetic must remain representable at every
+resolved `(effective_at, acceptance_sequence)` watermark in that order. Equal
+economic times are supported when the suffix has a later acceptance sequence.
+Arithmetic must remain representable at every
 ordered step. Checked intermediate overflow is an error even if a later payload
 would offset it. The wrapper delegates all financial calculation to the existing
 suffix application, with exact quantities, prices and currency-tagged money.
@@ -109,7 +111,8 @@ history in memory and hashes it again; no performance improvement is claimed.
 [Unit cases](../tests/unit/checkpoint_result_test.cpp) cover full replay,
 repeatable bytes/digests, manifest encode/decode, multiple continuations,
 suffix-local lifecycle changes, explicit context identities, source ordering,
-economic watermark ordering, cutoff-selected heads, conservative rejection,
+economic watermark ordering (including equal-time ties), multi-account
+partition preservation, cutoff-selected heads, conservative rejection,
 intermediate overflow, construction errors and input immutability.
 [Portable cases](../tests/conformance/checkpoint-result/README.md) declare
 synthetic inputs and expected state/lineage independently of storage and hosts.

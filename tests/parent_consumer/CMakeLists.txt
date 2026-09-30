@@ -103,6 +103,8 @@ assert_luca_source_target(
 assert_luca_source_target(
   luca::reconciliation luca_reconciliation
   "${LUCA_SOURCE_DIR}/libs/reconciliation/include")
+assert_luca_source_target(
+  luca::adapters luca_adapters "${LUCA_SOURCE_DIR}/libs/adapters/include")
 assert_luca_source_target(luca::luca pacioli "${LUCA_SOURCE_DIR}/include")
 
 get_target_property(portfolio_links luca::portfolio INTERFACE_LINK_LIBRARIES)
@@ -115,6 +117,10 @@ get_target_property(
 if(NOT reconciliation_links STREQUAL "luca::portfolio;luca::ledger")
   message(FATAL_ERROR
     "luca::reconciliation has unexpected dependencies: ${reconciliation_links}")
+endif()
+get_target_property(adapters_links luca::adapters INTERFACE_LINK_LIBRARIES)
+if(NOT adapters_links STREQUAL "luca::reconciliation")
+  message(FATAL_ERROR "luca::adapters has unexpected dependencies: ${adapters_links}")
 endif()
 get_target_property(umbrella_links luca::luca INTERFACE_LINK_LIBRARIES)
 if(NOT umbrella_links STREQUAL
@@ -178,3 +184,10 @@ set_tests_properties(luca_parent_exact_cash_comparison_consumer_run PROPERTIES
 add_executable(luca_parent_legacy_consumer ../package_consumer/legacy.cpp)
 target_link_libraries(luca_parent_legacy_consumer PRIVATE pacioli)
 add_test(NAME luca_parent_legacy_consumer_run COMMAND luca_parent_legacy_consumer)
+
+# CSV adapters are an explicit opt-in and do not widen the compatible umbrella.
+add_executable(luca_parent_adapters_consumer ../package_consumer/adapters.cpp)
+target_link_libraries(luca_parent_adapters_consumer PRIVATE luca::adapters)
+add_test(NAME luca_parent_adapters_consumer_run COMMAND luca_parent_adapters_consumer)
+set_tests_properties(luca_parent_adapters_consumer_run PROPERTIES
+  PASS_REGULAR_EXPRESSION "trade_observations=1 unexpected_observations=1")
